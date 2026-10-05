@@ -1,0 +1,40 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mojo-strategy-liquidation
+  labels:
+    app: mojo-strategy-liquidation
+spec:
+  replicas: ${REPLICA_BOT}
+  selector:
+    matchLabels:
+      app: mojo-strategy-liquidation
+  template:
+    metadata:
+      labels:
+        app: mojo-strategy-liquidation
+    spec:
+      nodeSelector:
+        alibabacloud.com/nodepool-id: ${NODEGROUP_BOT}
+      containers:
+      - name: mojo-strategy-liquidation
+        image: ${ECR_BOT}:${IMAGE_TAG}
+        env:
+          - name: MACHINE_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+        envFrom:
+        - configMapRef:
+            name: mojo-strategy-liquidation-config
+        - secretRef:
+            name: mojo-strategy-liquidation-secrets
+        resources:
+          requests:
+            cpu: "${REQUEST_CPU_BOT}"
+            memory: "${REQUEST_MEMORY_BOT}"
+          limits:
+            cpu: "${LIMIT_CPU_BOT}"
+            memory: "${LIMIT_MEMORY_BOT}"
+      imagePullSecrets:
+      - name: acr-secret

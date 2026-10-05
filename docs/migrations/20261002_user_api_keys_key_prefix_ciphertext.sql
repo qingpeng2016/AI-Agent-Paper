@@ -1,0 +1,6 @@
+-- 已废弃：平台 Key 仅保留 key_hash 鉴权，不再使用 prefix/ciphertext。
+-- 若你曾执行过「ADD key_prefix / key_ciphertext」的旧版脚本，请执行下面 DROP（未加过这两列则跳过本文件）：
+--
+-- ALTER TABLE `user_api_keys`
+--   DROP COLUMN `key_ciphertext`,
+--   DROP COLUMN `key_prefix`;

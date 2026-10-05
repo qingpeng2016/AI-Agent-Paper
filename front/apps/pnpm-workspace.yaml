@@ -1,0 +1,5 @@
+# Web monorepo 根（与 front/client 同级隔离）
+packages:
+  - "shared"
+  - "web-pc"
+  - "web-h5"

@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mojo-strategy-liquidation-app
+  labels:
+    app: mojo-strategy-liquidation-app
+spec:
+  replicas: ${REPLICA_APP}
+  selector:
+    matchLabels:
+      app: mojo-strategy-liquidation-app
+  template:
+    metadata:
+      labels:
+        app: mojo-strategy-liquidation-app
+    spec:
+      nodeSelector:
+        alibabacloud.com/nodepool-id: ${NODEGROUP_APP}
+      containers:
+      - name: mojo-strategy-liquidation-app
+        image: ${ECR_APP}:${IMAGE_TAG}
+        ports:
+        - containerPort: 9994
+        envFrom:
+        - configMapRef:
+            name: mojo-strategy-liquidation-config
+        - secretRef:
+            name: mojo-strategy-liquidation-secrets
+        resources:
+          requests:
+            cpu: "${REQUEST_CPU_APP}"
+            memory: "${REQUEST_MEMORY_APP}"
+          limits:
+            cpu: "${LIMIT_CPU_APP}"
+            memory: "${LIMIT_MEMORY_APP}"
+      imagePullSecrets:
+      - name: acr-secret

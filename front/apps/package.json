@@ -1,0 +1,14 @@
+{
+  "name": "ai-token-mall-web",
+  "private": true,
+  "scripts": {
+    "dev:pc": "pnpm --filter @ai-token-mall/web-pc dev",
+    "dev:h5": "pnpm --filter @ai-token-mall/web-h5 dev",
+    "build:pc": "pnpm --filter @ai-token-mall/web-pc build",
+    "build:h5": "pnpm --filter @ai-token-mall/web-h5 build",
+    "typecheck": "pnpm -r run typecheck"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

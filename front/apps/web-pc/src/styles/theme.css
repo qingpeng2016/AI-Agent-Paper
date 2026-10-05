@@ -1,0 +1,102 @@
+:root {
+  --el-color-primary: #7c3aed;
+  --atm-primary: #7c3aed;
+  --atm-primary-dark: #6d28d9;
+  --atm-primary-light: #ede9fe;
+  --atm-gradient: linear-gradient(135deg, #7c3aed 0%, #6366f1 100%);
+  --atm-bg: #f5f3ff;
+  --atm-text: #1e1b4b;
+  --atm-text-muted: #64748b;
+  --atm-card: #ffffff;
+  --atm-radius: 16px;
+  --atm-radius-sm: 12px;
+  --atm-shadow: 0 4px 24px rgba(124, 58, 237, 0.08);
+  --atm-shadow-lg: 0 12px 40px rgba(30, 27, 75, 0.1);
+  --atm-border: rgba(124, 58, 237, 0.12);
+}
+
+body {
+  background: var(--atm-bg);
+  color: var(--atm-text);
+}
+
+.atm-container {
+  /* 1134px 再 −2% */
+  max-width: 1111px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
+
+.atm-section-title {
+  margin: 0 0 8px;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--atm-text);
+}
+
+.atm-section-desc {
+  margin: 0 0 32px;
+  font-size: 15px;
+  color: var(--atm-text-muted);
+  line-height: 1.6;
+}
+
+.atm-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 28px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff !important;
+  background: var(--atm-gradient);
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  text-decoration: none;
+  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.35);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+
+.atm-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(124, 58, 237, 0.45);
+}
+
+.atm-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--atm-text);
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.atm-btn-dark {
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff !important;
+  background: #1e1b4b;
+  border-radius: 999px;
+  text-decoration: none;
+}
+
+/* ElMessage 默认在顶部；全站改为屏幕正中 */
+.el-message {
+  top: 50% !important;
+  left: 50% !important;
+  right: auto !important;
+  bottom: auto !important;
+  z-index: 10001 !important;
+  transform: translate(-50%, -50%) !important;
+}

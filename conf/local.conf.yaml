@@ -1,0 +1,47 @@
+server:
+  service_name: "ai-token-mall"
+  run_mode: ""
+  port: "0.0.0.0:8886"
+  product_name: "ai-token-mall"
+  env: "local"
+  machine_name: "ai-token-mall-01"
+  http_timeout_sec: 30
+
+db:
+  user: "ai_token_mall"
+  password: "36zMdr5EZ8rYshFD"
+  host: "216.236.43.135"
+  db_name: "ai_token_mall"
+  max_idle_conn: 20
+  max_open_conn: 200
+  log_mode: false
+
+redis:
+  mode: standalone
+  username: ""
+  password: ""
+  host: "216.236.43.135"
+  port: 6379
+  db: 2
+  tls: false
+  pool_size: 200
+  min_idle: 50
+
+alipay:
+  app_id: ""
+  private_key: ""
+  gateway: "https://openapi.alipay.com/gateway.do"
+
+# 企业抬头自动补全：诚数 key 支持名称/税号；未配置时走 mgtv 发票抬头库（按名称）
+invoice_lookup:
+  chengshu_api_key: ""
+  mgtv_base_url: "https://tools.mgtv100.com/external/v1/invoiceInfo"
+  insecure_skip_tls_verify: true
+
+notification:
+  lark:
+    alert_webhook_url: "https://open.larksuite.com/open-apis/bot/v2/hook/63cb5b8a-86f9-4fc0-9a2a-978676ab2be2"
+    notify_webhook_url: "https://open.larksuite.com/open-apis/bot/v2/hook/91bd3ed6-cb14-4b9a-b58f-2834ed276da8"
+    error_webhook_url: "https://open.larksuite.com/open-apis/bot/v2/hook/63cb5b8a-86f9-4fc0-9a2a-978676ab2be2"
+    service_name: "ai-token-mall"
+    timeout: 10

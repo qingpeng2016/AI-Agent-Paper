@@ -1,0 +1,17 @@
+{
+  "name": "@ai-token-mall/web-h5",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "echo \"web-h5: scaffold pending — use web-pc first\" && exit 1",
+    "build": "echo \"web-h5: scaffold pending\" && exit 1",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ai-token-mall/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "~5.7.2"
+  }
+}

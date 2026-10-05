@@ -1,0 +1,2 @@
+-- 站内已读：不新增列。in_app 消息在用户阅读后将 status 从 sent 更新为 read。
+-- 若曾执行过含 read_at 的 ALTER，可手动 DROP COLUMN read_at（可选，代码已不再使用）。
