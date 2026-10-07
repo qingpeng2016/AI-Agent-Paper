@@ -764,8 +764,8 @@ async function onPrimaryAction() {
       <div class="paper-sidebar-brand">
         <span class="paper-sidebar-logo" aria-hidden="true">◆</span>
         <div>
-          <div class="paper-sidebar-title">Research Desktop</div>
-          <div class="paper-sidebar-sub">Research workflows</div>
+          <div class="paper-sidebar-title">AIRS</div>
+          <div class="paper-sidebar-sub">AI Research Studio</div>
         </div>
       </div>
 

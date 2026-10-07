@@ -81,7 +81,7 @@ async function onSubmit() {
 </script>
 
 <template>
-  <AuthShell title="创建账号" subtitle="注册后即可登录 Research Desktop 工作台。">
+  <AuthShell title="创建账号" subtitle="注册后即可登录 AI Research Studio（AIRS）。">
     <div class="auth-mode-pills">
       <button
         type="button"

@@ -77,7 +77,7 @@ const iconMode = computed(() => (props.variant === 'auth' ? 'auth' : 'header'))
       </svg>
     </span>
     <span class="site-logo-word">
-      <span class="site-logo-ai">AI</span><span class="site-logo-plan">Plan</span>
+      <span class="site-logo-ai">AI</span><span class="site-logo-rs">RS</span>
     </span>
   </component>
 </template>
@@ -119,7 +119,7 @@ const iconMode = computed(() => (props.variant === 'auth' ? 'auth' : 'header'))
   font-weight: 800;
 }
 
-.site-logo-plan {
+.site-logo-rs {
   font-size: 1em;
   font-weight: 700;
 }
@@ -153,7 +153,7 @@ const iconMode = computed(() => (props.variant === 'auth' ? 'auth' : 'header'))
   -webkit-background-clip: unset;
 }
 
-.site-logo--auth .site-logo-plan {
+.site-logo--auth .site-logo-rs {
   font-weight: 600;
   color: rgba(255, 255, 255, 0.92);
 }
@@ -179,7 +179,7 @@ const iconMode = computed(() => (props.variant === 'auth' ? 'auth' : 'header'))
   color: transparent;
 }
 
-.site-logo--footer .site-logo-plan {
+.site-logo--footer .site-logo-rs {
   color: #e2e8f0;
 }
 </style>

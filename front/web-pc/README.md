@@ -1,4 +1,4 @@
-# ARIS Research Desktop（主前端）
+# AI Research Studio / AIRS（主前端）
 
 本目录是 **唯一 Web 入口**：科研工作台 + 登录 / 注册。
 

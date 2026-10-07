@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { RouterLink } from 'vue-router'
 import SiteLogo from '@/components/brand/SiteLogo.vue'
-import { SITE_NAME } from '@/constants/brand'
+import { SITE_ABBR, SITE_NAME } from '@/constants/brand'
 
 defineProps<{
   title: string
@@ -20,8 +20,8 @@ defineProps<{
       <div class="auth-brand-inner">
         <SiteLogo variant="auth" class="auth-brand-logo" />
 
-        <p class="auth-brand-eyebrow">Research workflows</p>
-        <h2 class="auth-brand-headline">ARIS<br />Research Desktop</h2>
+        <p class="auth-brand-eyebrow">{{ SITE_ABBR }}</p>
+        <h2 class="auth-brand-headline">AI Research Studio</h2>
         <p class="auth-brand-lead">科研工作台：选题、综述、实验、写作与审查一体化</p>
 
         <ul class="auth-brand-list">
