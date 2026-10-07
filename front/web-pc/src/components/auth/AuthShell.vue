@@ -22,24 +22,22 @@ defineProps<{
 
         <p class="auth-brand-eyebrow">Research workflows</p>
         <h2 class="auth-brand-headline">ARIS<br />Research Desktop</h2>
-        <p class="auth-brand-lead">登录后进入科研工作台：选题、综述、实验、写作与审查一体化流程。</p>
+        <p class="auth-brand-lead">科研工作台：选题、综述、实验、写作与审查一体化</p>
 
         <ul class="auth-brand-list">
           <li>
             <span class="check" aria-hidden="true">✓</span>
-            与账号体系共用，邀请返利与钱包 API 一致
+            独家 AI 论文模型，多阶段协同，高效产出可投稿稿件
           </li>
           <li>
             <span class="check" aria-hidden="true">✓</span>
-            论文项目与模块产出按篇隔离
+            选题发现与文献综述联动，多源检索、新颖性检查后再写作
           </li>
           <li>
             <span class="check" aria-hidden="true">✓</span>
-            参考文献门禁与默认配置可保存
+            实验规划、论文写作与投稿前审查闭环，产出按篇沉淀
           </li>
         </ul>
-
-        <RouterLink to="/workbench" class="auth-brand-back">← 进入工作台（需登录）</RouterLink>
       </div>
     </aside>
 
@@ -152,8 +150,7 @@ defineProps<{
     font-size: 26px !important;
   }
 
-  .auth-brand-list,
-  .auth-brand-back {
+  .auth-brand-list {
     display: none;
   }
 }
@@ -223,19 +220,6 @@ defineProps<{
   color: #4c1d95;
   background: rgba(255, 255, 255, 0.95);
   border-radius: 50%;
-}
-
-.auth-brand-back {
-  margin-top: auto;
-  font-size: 14px;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.85);
-  text-decoration: none;
-  transition: color 0.15s;
-}
-
-.auth-brand-back:hover {
-  color: #fff;
 }
 
 /* —— Form panel —— */
