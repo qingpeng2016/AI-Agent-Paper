@@ -17,8 +17,15 @@
     "noFallthroughCasesInSwitch": true,
     "paths": {
       "@/*": ["./src/*"],
-      "@paper/*": ["../../../agent/paper/*"]
+      "@paper/*": ["../../../agent/paper/*"],
+      "@ai-token-mall/shared": ["../shared/src/index.ts"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue", "../../../agent/paper/**/*.ts"]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/**/*.vue",
+    "../../../agent/paper/**/*.ts",
+    "../../../agent/paper/**/*.vue"
+  ]
 }

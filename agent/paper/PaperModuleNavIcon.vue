@@ -59,10 +59,11 @@ defineProps<{
       <path d="M16 6v4h4M12 11h4M12 15h4" opacity="0.5" />
       <path d="M6 9H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h1" />
     </template>
-    <!-- 上传文献：文献叠页 -->
-    <template v-else-if="moduleId === 'reference-library'">
-      <path d="M6 4h8l4 4v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" />
-      <path d="M14 4v4h4" />
+    <!-- 邀请返利：礼物 -->
+    <template v-else-if="moduleId === 'invite-rebate'">
+      <rect x="4" y="8" width="16" height="12" rx="2" />
+      <path d="M12 8V20M4 12h16" />
+      <path d="M12 8c-2-3-5-3-5 0s3 3 5 0 5-3 5 0-3-3-5 0" />
     </template>
     <!-- 个人中心：用户 -->
     <template v-else-if="moduleId === 'personal-center'">

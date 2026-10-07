@@ -6,8 +6,8 @@ export type PaperModuleId =
   | 'paper-writing'
   | 'figure-generation'
   | 'manuscript-analysis'
-  | 'reference-library'
   | 'my-manuscripts'
+  | 'invite-rebate'
   | 'personal-center'
   /** 仅用于操作日志条目，侧栏无独立入口（默认配置在个人中心 Tab） */
   | 'environment'
@@ -55,19 +55,19 @@ export const PAPER_MODULES: PaperModuleMeta[] = [
     description: '写作完成后：对全文做投稿前全面审查（贡献、实验、引用、venue fit、kill argument）',
   },
   {
-    id: 'reference-library',
-    label: '上传文献',
-    description: '上传并管理本篇论文的 PDF、BibTeX 等文献文件',
-  },
-  {
     id: 'my-manuscripts',
     label: '我的论文',
     description: '切换、编辑与归档工作台下的论文项目（paper_manuscript）',
   },
   {
+    id: 'invite-rebate',
+    label: '邀请返利',
+    description: '推广域名、返佣等级、邀请成员与佣金提现（与会员中心一致）',
+  },
+  {
     id: 'personal-center',
     label: '个人中心',
-    description: '我的信息、Token 操作日志与默认配置',
+    description: '我的信息、默认配置、资金记录与操作日志',
   },
   {
     id: 'environment',
@@ -99,12 +99,12 @@ export const PAPER_MODULE_GROUPS: PaperModuleGroup[] = [
   {
     id: 'writing',
     label: '撰写与审查',
-    moduleIds: ['paper-writing', 'manuscript-analysis', 'figure-generation'],
+    moduleIds: ['paper-writing', 'manuscript-analysis', 'my-manuscripts', 'figure-generation'],
   },
   {
     id: 'resources',
-    label: '资料与设置',
-    moduleIds: ['my-manuscripts', 'reference-library', 'personal-center'],
+    label: '账户与设置',
+    moduleIds: ['invite-rebate', 'personal-center'],
   },
 ]
 
@@ -137,12 +137,12 @@ export const REFERENCE_UPLOAD_STORAGE_KEY = 'atm:paper:reference-uploads:v1'
 
 export const REFERENCE_UPLOAD_ACCEPT = '.pdf,.bib,.txt,.md,.json'
 
-/** 选题发现：用户在本篇「上传文献」中上传的文件，作为模型分析语料（非第三方 API 检索） */
+/** 选题发现可选语料源（后端 / DDL 保留；桌面端暂不提供上传文献入口） */
 export const USER_LIBRARY_SOURCE_CODE = 'user_library' as const
 
 export const TOPIC_USER_LIBRARY_SOURCE = {
   code: USER_LIBRARY_SOURCE_CODE,
-  label: '上传文献',
+  label: '自备文献',
 } as const
 
 export function getUserReferenceUploads(manuscriptId: string): UploadedReferenceItem[] {

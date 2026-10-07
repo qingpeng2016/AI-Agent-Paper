@@ -8,6 +8,10 @@ export default defineConfig({
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
       '@paper': fileURLToPath(new URL('../../../agent/paper', import.meta.url)),
+      // agent/paper 在 web-pc 外，需显式指向 workspace shared（否则无法解析 node 包名）
+      '@ai-token-mall/shared': fileURLToPath(
+        new URL('../shared/src/index.ts', import.meta.url),
+      ),
     },
   },
   server: {

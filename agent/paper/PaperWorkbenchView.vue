@@ -9,10 +9,7 @@ import {
   DISCIPLINE_OPTIONS,
   LITERATURE_SOURCE_OPTIONS,
   PAPER_MODULE_GROUPS,
-  TOPIC_USER_LIBRARY_SOURCE,
-  USER_LIBRARY_SOURCE_CODE,
   getLiteratureSourceLabel,
-  getUserReferenceUploads,
   appendOperationLog,
   TOPIC_DISCOVERY_FLOW_STEPS,
   getPaperModuleMeta,
@@ -28,8 +25,8 @@ import { DEMO_EXPERIMENT_PLAN } from './demoModuleOutputs'
 import { DEMO_MODULE_TOKEN_ESTIMATES } from './demoOperationLogs'
 import PaperModuleNavIcon from './PaperModuleNavIcon.vue'
 import PaperMyManuscriptsPanel from './PaperMyManuscriptsPanel.vue'
+import PaperInviteRebatePanel from './PaperInviteRebatePanel.vue'
 import PaperPersonalCenterPanel from './PaperPersonalCenterPanel.vue'
-import PaperReferenceLibraryPanel from './PaperReferenceLibraryPanel.vue'
 import PaperSelect from './PaperSelect.vue'
 import PaperWorkflowPanels from './PaperWorkflowPanels.vue'
 
@@ -227,10 +224,11 @@ const currentManuscript = computed(
     manuscripts.value.find((m) => m.id === activeManuscriptId.value) ?? activeManuscripts.value[0],
 )
 
-const isReferenceLibraryModule = computed(() => activeModule.value === 'reference-library')
 const isMyManuscriptsModule = computed(() => activeModule.value === 'my-manuscripts')
+const isInviteRebateModule = computed(() => activeModule.value === 'invite-rebate')
+const isPersonalCenterModule = computed(() => activeModule.value === 'personal-center')
 const isUtilityModule = computed(
-  () => isReferenceLibraryModule.value || isMyManuscriptsModule.value,
+  () => isMyManuscriptsModule.value || isInviteRebateModule.value || isPersonalCenterModule.value,
 )
 const isTopicDiscoveryModule = computed(() => activeModule.value === 'topic-discovery')
 const isLiteratureReviewModule = computed(() => activeModule.value === 'literature-review')
@@ -676,15 +674,6 @@ function isTopicSourceChecked(code: string) {
   return topicForm.sourceCodes.includes(code)
 }
 
-const userReferenceUploadCount = computed(() => {
-  void activeModule.value
-  return getUserReferenceUploads(activeManuscriptId.value).length
-})
-
-function goToUserReferenceLibrary() {
-  selectModule('reference-library')
-}
-
 async function onPrimaryAction() {
   if (activeModule.value === 'topic-discovery') {
     if (!topicForm.direction.trim()) {
@@ -693,13 +682,6 @@ async function onPrimaryAction() {
     }
     if (topicForm.sourceCodes.length === 0) {
       ElMessage.warning('请至少选择一个文献来源（检索在选题发现完成）')
-      return
-    }
-    if (
-      topicForm.sourceCodes.includes(USER_LIBRARY_SOURCE_CODE) &&
-      userReferenceUploadCount.value === 0
-    ) {
-      ElMessage.warning('已勾选「上传文献」，请先在「上传文献」上传至少一篇')
       return
     }
   }
@@ -741,7 +723,11 @@ async function onPrimaryAction() {
           }
           persistExperimentPlanFlags()
         }
-        if (mod !== 'personal-center' && mod !== 'reference-library' && mod !== 'my-manuscripts') {
+        if (
+          mod !== 'personal-center' &&
+          mod !== 'invite-rebate' &&
+          mod !== 'my-manuscripts'
+        ) {
           recordModuleOperationLog(mod, `运行「${currentMeta.value.label}」`)
         }
         const successHint =
@@ -902,30 +888,6 @@ async function onPrimaryAction() {
               <span>{{ src.label }}</span>
             </label>
           </div>
-          <div class="paper-user-lib-source">
-            <label class="paper-check paper-check--inline">
-              <input
-                type="checkbox"
-                :checked="isTopicSourceChecked(TOPIC_USER_LIBRARY_SOURCE.code)"
-                @change="
-                  toggleTopicSource(
-                    TOPIC_USER_LIBRARY_SOURCE.code,
-                    ($event.target as HTMLInputElement).checked,
-                  )
-                "
-              />
-              <span>{{ TOPIC_USER_LIBRARY_SOURCE.label }}</span>
-            </label>
-            <p class="paper-hint paper-hint--block">
-              使用本篇「上传文献」中已上传 PDF / BibTeX 等，供模型阅读与归纳（不走 arXiv 等 API）。
-              <template v-if="isTopicSourceChecked(TOPIC_USER_LIBRARY_SOURCE.code)">
-                当前已上传 <strong>{{ userReferenceUploadCount }}</strong> 篇。
-              </template>
-              <button type="button" class="paper-inline-link" @click="goToUserReferenceLibrary">
-                去管理
-              </button>
-            </p>
-          </div>
         </div>
 
         <label class="paper-check">
@@ -1033,11 +995,7 @@ async function onPrimaryAction() {
         @update-manuscripts="onManuscriptsListUpdate"
       />
 
-      <PaperReferenceLibraryPanel
-        v-else-if="activeModule === 'reference-library'"
-        :manuscript-id="activeManuscriptId"
-        :manuscript-title="currentManuscript?.title ?? '未命名'"
-      />
+      <PaperInviteRebatePanel v-else-if="activeModule === 'invite-rebate'" />
 
       <PaperPersonalCenterPanel
         v-else-if="activeModule === 'personal-center'"
@@ -1721,28 +1679,6 @@ async function onPrimaryAction() {
 
 .paper-hint--block {
   margin: 10px 0 0;
-}
-
-.paper-user-lib-source {
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px dashed #e2e8f0;
-}
-
-.paper-inline-link {
-  margin-left: 6px;
-  padding: 0;
-  font-size: inherit;
-  font-weight: 600;
-  color: #6366f1;
-  cursor: pointer;
-  background: none;
-  border: none;
-  text-decoration: underline;
-}
-
-.paper-inline-link:hover {
-  color: #4f46e5;
 }
 
 .paper-check {

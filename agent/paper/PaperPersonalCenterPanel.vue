@@ -12,7 +12,7 @@ import {
   type EnvironmentPreferenceForm,
 } from './types'
 
-type PersonalCenterTabId = 'profile' | 'environment' | 'operation-log'
+type PersonalCenterTabId = 'profile' | 'environment' | 'wallet-records' | 'operation-log'
 
 type StoredUserProfile = {
   id?: number
@@ -45,6 +45,7 @@ const profileRefreshTick = ref(0)
 const tabs: { id: PersonalCenterTabId; label: string }[] = [
   { id: 'profile', label: '我的信息' },
   { id: 'environment', label: '默认配置' },
+  { id: 'wallet-records', label: '资金记录' },
   { id: 'operation-log', label: '操作日志' },
 ]
 
@@ -102,11 +103,18 @@ const demoPlanPercent = computed(() =>
   Math.min(100, Math.round((demoPlanUsed.value / demoPlanLimit) * 100)),
 )
 
-const recentTokenMoves = computed(() => {
+type FundRecordRow = {
+  id: string
+  at: string
+  label: string
+  delta: number
+  kind: 'recharge' | 'consume'
+}
+
+const fundRecords = computed((): FundRecordRow[] => {
   void profileRefreshTick.value
   const fromLogs = getOperationLogs()
     .filter((e) => e.status === 'success' && e.tokensTotal > 0)
-    .slice(0, 4)
     .map((e) => ({
       id: e.id,
       at: e.occurredAt,
@@ -114,12 +122,12 @@ const recentTokenMoves = computed(() => {
       delta: -e.tokensTotal,
       kind: 'consume' as const,
     }))
-  const demoRecharge = {
+  const demoRecharge: FundRecordRow = {
     id: 'demo-recharge',
     at: new Date(Date.now() - 86400000 * 3).toISOString(),
     label: '余额充值（演示）',
     delta: 10_000,
-    kind: 'recharge' as const,
+    kind: 'recharge',
   }
   return [demoRecharge, ...fromLogs].sort(
     (a, b) => new Date(b.at).getTime() - new Date(a.at).getTime(),
@@ -195,7 +203,7 @@ function reloadLogs() {
 }
 
 watch(activeTab, (tab) => {
-  if (tab === 'profile') profileRefreshTick.value += 1
+  if (tab === 'profile' || tab === 'wallet-records') profileRefreshTick.value += 1
 })
 
 defineExpose({ reloadLogs })
@@ -227,62 +235,6 @@ defineExpose({ reloadLogs })
         </div>
       </div>
 
-      <dl class="pc-metrics">
-        <div class="pc-metric">
-          <dt>Token 余额</dt>
-          <dd class="pc-metric-inline">
-            <span class="pc-metric-value">{{ formatTokens(walletBalance) }}</span>
-          </dd>
-        </div>
-        <div class="pc-metric">
-          <dt>本月已用</dt>
-          <dd class="pc-metric-inline">
-            <span class="pc-metric-value">{{ formatTokens(tokenUsage.monthUsed) }}</span>
-          </dd>
-        </div>
-        <div class="pc-metric pc-metric--with-action">
-          <dt>累计消耗</dt>
-          <dd class="pc-metric-inline">
-            <span class="pc-metric-value">{{ formatTokens(tokenUsage.totalUsed) }}</span>
-            <button type="button" class="pc-btn-recharge" @click="onRecharge">充值</button>
-          </dd>
-        </div>
-      </dl>
-
-      <section class="pc-plan-section">
-        <h3 class="pc-section-title pc-plan-title">套餐用量</h3>
-        <div class="pc-plan-bar">
-          <div class="pc-plan-bar-fill" :style="{ width: `${demoPlanPercent}%` }" />
-        </div>
-        <p class="pc-plan-meta">
-          已用 <strong>{{ formatTokens(demoPlanUsed) }}</strong> /
-          {{ formatTokens(demoPlanLimit) }} tokens（演示额度）
-        </p>
-      </section>
-
-      <section class="pc-moves-section">
-        <h3 class="pc-section-title">Token 动态</h3>
-        <ul v-if="recentTokenMoves.length" class="pc-moves-list">
-          <li v-for="item in recentTokenMoves" :key="item.id" class="pc-move-row">
-            <div class="pc-move-main">
-              <span class="pc-move-type" :class="`pc-move-type--${item.kind}`">
-                {{ item.kind === 'recharge' ? '充值' : '消耗' }}
-              </span>
-              <span class="pc-move-label">{{ item.label }}</span>
-            </div>
-            <div class="pc-move-side">
-              <span
-                class="pc-move-delta"
-                :class="item.delta > 0 ? 'pc-move-delta--plus' : 'pc-move-delta--minus'"
-              >
-                {{ item.delta > 0 ? '+' : '' }}{{ formatTokens(Math.abs(item.delta)) }}
-              </span>
-              <time class="pc-move-time">{{ formatDate(item.at) }}</time>
-            </div>
-          </li>
-        </ul>
-        <p v-else class="pc-moves-empty">暂无 Token 变动记录</p>
-      </section>
     </div>
 
     <div v-show="activeTab === 'environment'" class="pc-pane pc-pane--env" role="tabpanel">
@@ -342,6 +294,67 @@ defineExpose({ reloadLogs })
           {{ envSaving ? '保存中…' : '保存默认配置' }}
         </button>
       </div>
+    </div>
+
+    <div v-show="activeTab === 'wallet-records'" class="pc-pane" role="tabpanel">
+      <p class="pc-lead">Token 余额、套餐用量与充值/消耗明细（演示；接入后同步商城钱包与流水）。</p>
+
+      <dl class="pc-metrics">
+        <div class="pc-metric">
+          <dt>Token 余额</dt>
+          <dd class="pc-metric-inline">
+            <span class="pc-metric-value">{{ formatTokens(walletBalance) }}</span>
+          </dd>
+        </div>
+        <div class="pc-metric">
+          <dt>本月已用</dt>
+          <dd class="pc-metric-inline">
+            <span class="pc-metric-value">{{ formatTokens(tokenUsage.monthUsed) }}</span>
+          </dd>
+        </div>
+        <div class="pc-metric pc-metric--with-action">
+          <dt>累计消耗</dt>
+          <dd class="pc-metric-inline">
+            <span class="pc-metric-value">{{ formatTokens(tokenUsage.totalUsed) }}</span>
+            <button type="button" class="pc-btn-recharge" @click="onRecharge">充值</button>
+          </dd>
+        </div>
+      </dl>
+
+      <section class="pc-plan-section">
+        <h3 class="pc-section-title pc-plan-title">套餐用量</h3>
+        <div class="pc-plan-bar">
+          <div class="pc-plan-bar-fill" :style="{ width: `${demoPlanPercent}%` }" />
+        </div>
+        <p class="pc-plan-meta">
+          已用 <strong>{{ formatTokens(demoPlanUsed) }}</strong> /
+          {{ formatTokens(demoPlanLimit) }} tokens（演示额度）
+        </p>
+      </section>
+
+      <section class="pc-moves-section">
+        <h3 class="pc-section-title">资金记录</h3>
+        <ul v-if="fundRecords.length" class="pc-moves-list">
+          <li v-for="item in fundRecords" :key="item.id" class="pc-move-row">
+            <div class="pc-move-main">
+              <span class="pc-move-type" :class="`pc-move-type--${item.kind}`">
+                {{ item.kind === 'recharge' ? '充值' : '消耗' }}
+              </span>
+              <span class="pc-move-label">{{ item.label }}</span>
+            </div>
+            <div class="pc-move-side">
+              <span
+                class="pc-move-delta"
+                :class="item.delta > 0 ? 'pc-move-delta--plus' : 'pc-move-delta--minus'"
+              >
+                {{ item.delta > 0 ? '+' : '' }}{{ formatTokens(Math.abs(item.delta)) }}
+              </span>
+              <time class="pc-move-time">{{ formatDate(item.at) }}</time>
+            </div>
+          </li>
+        </ul>
+        <p v-else class="pc-moves-empty">暂无资金变动记录</p>
+      </section>
     </div>
 
     <div v-show="activeTab === 'operation-log'" class="pc-pane" role="tabpanel">
