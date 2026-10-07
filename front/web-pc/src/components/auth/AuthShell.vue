@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { RouterLink } from 'vue-router'
+import AuthResearchIllustration from '@/components/auth/AuthResearchIllustration.vue'
 import SiteLogo from '@/components/brand/SiteLogo.vue'
-import { SITE_ABBR, SITE_NAME } from '@/constants/brand'
+import { SITE_NAME } from '@/constants/brand'
 
 defineProps<{
   title: string
@@ -20,9 +21,8 @@ defineProps<{
       <div class="auth-brand-inner">
         <SiteLogo variant="auth" class="auth-brand-logo" />
 
-        <p class="auth-brand-eyebrow">{{ SITE_ABBR }}</p>
         <h2 class="auth-brand-headline">AI Research Studio</h2>
-        <p class="auth-brand-lead">科研工作台：选题、综述、实验、写作与审查一体化</p>
+        <p class="auth-brand-lead">AI科研工作台：选题、综述、实验、写作与审查一体化</p>
 
         <ul class="auth-brand-list">
           <li>
@@ -38,6 +38,8 @@ defineProps<{
             实验规划、论文写作与投稿前审查闭环，产出按篇沉淀
           </li>
         </ul>
+
+        <AuthResearchIllustration />
       </div>
     </aside>
 
@@ -79,6 +81,7 @@ defineProps<{
   position: relative;
   display: flex;
   align-items: stretch;
+  min-height: 100vh;
   overflow: hidden;
   color: #fff;
   background: linear-gradient(145deg, #4c1d95 0%, #6d28d9 42%, #4338ca 100%);
@@ -134,9 +137,11 @@ defineProps<{
   position: relative;
   z-index: 1;
   display: flex;
+  flex: 1;
   flex-direction: column;
   width: 100%;
   max-width: 520px;
+  min-height: 100%;
   margin: 0 auto;
   padding: 48px 48px 40px;
 }
@@ -191,7 +196,7 @@ defineProps<{
 }
 
 .auth-brand-list {
-  margin: 0 0 36px;
+  margin: 0 0 20px;
   padding: 0;
   list-style: none;
   display: flex;
