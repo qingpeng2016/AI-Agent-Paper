@@ -3,7 +3,6 @@ package boot
 import (
 	bot "github.com/qingpeng2016/ai-token-mall/application/bot"
 	couponexpire "github.com/qingpeng2016/ai-token-mall/application/bot/scripts/coupon_expire"
-	subscriptionlifecycle "github.com/qingpeng2016/ai-token-mall/application/bot/scripts/subscription_lifecycle"
 	viplevelsync "github.com/qingpeng2016/ai-token-mall/application/bot/scripts/vip_level_sync"
 	alipaysvc "github.com/qingpeng2016/ai-token-mall/application/core-service/alipay"
 	botscheduleconfig "github.com/qingpeng2016/ai-token-mall/application/core-service/bot_schedule_config"
@@ -83,7 +82,6 @@ func BuildContainer() *dig.Container {
 	_ = c.Provide(botscheduleconfig.NewBotScheduleConfigService)
 
 	// Bot
-	_ = c.Provide(subscriptionlifecycle.NewSubscriptionLifecycleJob)
 	_ = c.Provide(viplevelsync.NewVipLevelSyncJob)
 	_ = c.Provide(couponexpire.NewCouponExpireJob)
 	_ = c.Provide(bot.NewScheduler)

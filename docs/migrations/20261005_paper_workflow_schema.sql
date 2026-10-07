@@ -1,5 +1,5 @@
 -- Paper Agent 全量 schema（唯一 migration；新库执行本文件即可）
--- 多学科 / 多 venue / 多文献源；模块见 agent/paper/types.ts
+-- 多学科 / 多 venue / 多文献源；模块见 front/web-pc/types.ts
 -- 引擎：MySQL 8.0+，utf8mb4；表前缀 paper_
 -- user_id 与商城 users.id 对齐，不设 FK 便于独立部署
 --
@@ -24,7 +24,7 @@ SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
 -- ---------------------------------------------------------------------------
--- 1. ref 字典：学科、venue、文献源、强度与审计档位（七模块 code 见前端 agent/paper/types.ts）
+-- 1. ref 字典：学科、venue、文献源、强度与审计档位（七模块 code 见前端 front/web-pc/types.ts）
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS `paper_ref_discipline` (

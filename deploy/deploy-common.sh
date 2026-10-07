@@ -28,9 +28,9 @@ deploy_common_init() {
   MALL_USER_RUN_CONF="${MALL_USER_RUN_CONF:-prod}"
   MALL_BOT_RUN_CONF="${MALL_BOT_RUN_CONF:-prod}"
   MALL_USER_PORT="${MALL_USER_PORT:-8886}"
-  MALL_WEB_ROOT="${MALL_WEB_ROOT:-front/apps}"
-  MALL_WEB_DIST="${MALL_WEB_DIST:-front/apps/web-pc/dist}"
-  WEB_BUILD_CMD="${WEB_BUILD_CMD:-pnpm install && pnpm build:pc}"
+  MALL_WEB_ROOT="${MALL_WEB_ROOT:-front/web-pc}"
+  MALL_WEB_DIST="${MALL_WEB_DIST:-front/web-pc/dist}"
+  WEB_BUILD_CMD="${WEB_BUILD_CMD:-pnpm install && pnpm build}"
   # 生产打包写入 web-pc/.env.production（路径含 /api/v1，base 不要末尾斜杠）
   VITE_API_BASE_URL="${VITE_API_BASE_URL:-}"
   MALL_BIN_NAME="${MALL_BIN_NAME:-ai-token-mall}"

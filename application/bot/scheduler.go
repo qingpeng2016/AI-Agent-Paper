@@ -8,7 +8,6 @@ import (
 	"time"
 
 	couponexpire "github.com/qingpeng2016/ai-token-mall/application/bot/scripts/coupon_expire"
-	subscriptionlifecycle "github.com/qingpeng2016/ai-token-mall/application/bot/scripts/subscription_lifecycle"
 	viplevelsync "github.com/qingpeng2016/ai-token-mall/application/bot/scripts/vip_level_sync"
 	botscheduleconfig "github.com/qingpeng2016/ai-token-mall/application/core-service/bot_schedule_config"
 	"github.com/qingpeng2016/ai-token-mall/common/dederi/logger"
@@ -23,7 +22,6 @@ import (
 // Scheduler Bot 调度器
 type Scheduler struct {
 	botScheduleConfigService *botscheduleconfig.BotScheduleConfigService
-	subscriptionLifecycleJob *subscriptionlifecycle.SubscriptionLifecycleJob
 	vipLevelSyncJob          *viplevelsync.VipLevelSyncJob
 	couponExpireJob          *couponexpire.CouponExpireJob
 	ns                       *gocron.Scheduler
@@ -36,13 +34,11 @@ type Scheduler struct {
 // NewScheduler 创建调度器
 func NewScheduler(
 	botScheduleConfigService *botscheduleconfig.BotScheduleConfigService,
-	subscriptionLifecycleJob *subscriptionlifecycle.SubscriptionLifecycleJob,
 	vipLevelSyncJob *viplevelsync.VipLevelSyncJob,
 	couponExpireJob *couponexpire.CouponExpireJob,
 ) *Scheduler {
 	return &Scheduler{
 		botScheduleConfigService: botScheduleConfigService,
-		subscriptionLifecycleJob: subscriptionLifecycleJob,
 		vipLevelSyncJob:          vipLevelSyncJob,
 		couponExpireJob:          couponExpireJob,
 		ns:                       gocron.NewScheduler(time.Local),
@@ -80,7 +76,7 @@ func (s *Scheduler) Handle(configIDs ...uint) {
 	if hasConfigIDs {
 		where["id IN ?"] = configIDs
 	} else {
-		where["module IN ?"] = []string{subscriptionlifecycle.ModuleAITokenMall}
+		where["module IN ?"] = []string{couponexpire.ModuleAITokenMall}
 		where["is_enabled = ?"] = 1
 		where["is_strategy_enabled = ?"] = 1
 	}
@@ -217,7 +213,7 @@ func (s *Scheduler) Stop() error {
 
 func (s *Scheduler) getHandleFunc(module, taskName string) func() {
 	switch module {
-	case subscriptionlifecycle.ModuleAITokenMall:
+	case couponexpire.ModuleAITokenMall:
 		return s.getAITokenMallHandleFunc(taskName)
 	}
 	return nil
@@ -225,10 +221,6 @@ func (s *Scheduler) getHandleFunc(module, taskName string) func() {
 
 func (s *Scheduler) getAITokenMallHandleFunc(taskName string) func() {
 	switch taskName {
-	case subscriptionlifecycle.TaskSubscriptionLifecycle:
-		return func() {
-			s.subscriptionLifecycleJob.Run(context.Background())
-		}
 	case viplevelsync.TaskVipLevelSync:
 		return func() {
 			s.vipLevelSyncJob.Run(context.Background())

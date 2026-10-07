@@ -38,8 +38,8 @@ write_vite_production_env() {
     echo "ERROR: 请在 deploy/.deploy.env 设置 VITE_API_BASE_URL（如 https://api.niceboxs.com）" >&2
     exit 1
   }
-  local web_pc="${LOCAL_REPO_DIR}/front/apps/web-pc"
-  local env_file="${web_pc}/.env.production"
+  local web_app="${LOCAL_REPO_DIR}/front/web-pc"
+  local env_file="${web_app}/.env.production"
   echo ">>> [本机] 写入 ${env_file} ← VITE_API_BASE_URL=${VITE_API_BASE_URL}"
   cat >"$env_file" <<ENV
 # 由 deploy-frontend.sh 根据 deploy/.deploy.env 生成，打包后生效
