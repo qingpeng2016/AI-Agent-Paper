@@ -9,14 +9,7 @@ import {
 import { userApi } from '@/api'
 import { getSessionUser, isLoggedIn } from '@/composables/useSessionUser'
 import PaperOperationLogPanel from './PaperOperationLogPanel.vue'
-import PaperSelect from './PaperSelect.vue'
-import {
-  DISCIPLINE_OPTIONS,
-  ENV_PREFERENCE_STORAGE_KEY,
-  LITERATURE_SOURCE_OPTIONS,
-  getOperationLogs,
-  type EnvironmentPreferenceForm,
-} from './types'
+import { getOperationLogs } from './types'
 
 type StoredUserProfile = {
   id?: number
@@ -28,20 +21,14 @@ type StoredUserProfile = {
   last_login_at?: string | null
 }
 
-type PersonalCenterTabId = 'profile' | 'environment' | 'wallet-records' | 'operation-log'
+type PersonalCenterTabId = 'profile' | 'wallet-records' | 'operation-log'
 
-const props = defineProps<{
+defineProps<{
   manuscriptId: string
   manuscriptTitle: string
-  envPreference: EnvironmentPreferenceForm
-}>()
-
-const emit = defineEmits<{
-  environmentSaved: []
 }>()
 
 const activeTab = ref<PersonalCenterTabId>('profile')
-const envSaving = ref(false)
 const operationLogRef = ref<InstanceType<typeof PaperOperationLogPanel> | null>(null)
 const profileRefreshTick = ref(0)
 
@@ -62,7 +49,6 @@ const walletFlowTypeLabel: Record<string, string> = {
 
 const tabs: { id: PersonalCenterTabId; label: string }[] = [
   { id: 'profile', label: '我的信息' },
-  { id: 'environment', label: '默认配置' },
   { id: 'wallet-records', label: '资金记录' },
   { id: 'operation-log', label: '操作日志' },
 ]
@@ -199,58 +185,11 @@ function walletAmountClass(amount: number | string) {
   return 'pc-amount-zero'
 }
 
-const intensityOptions = [
-  { value: 'fast', label: '更快' },
-  { value: 'balanced', label: 'Balanced（平衡）' },
-  { value: 'deep', label: '更深' },
-]
-
-const auditOptions = [
-  { value: 'standard', label: 'Standard' },
-  { value: 'polished', label: 'Polished（精修）' },
-  { value: 'strict', label: 'Strict' },
-]
-
-const disciplineSelectOptions = DISCIPLINE_OPTIONS.map((d) => ({
-  value: d.code,
-  label: d.label,
-}))
-
 function formatDate(iso: string) {
   try {
     return new Date(iso).toLocaleString('zh-CN', { hour12: false })
   } catch {
     return iso
-  }
-}
-
-function isLiteratureSourceChecked(code: string) {
-  return props.envPreference.literatureSourceCodes.includes(code)
-}
-
-function toggleLiteratureSource(code: string, checked: boolean) {
-  const set = new Set(props.envPreference.literatureSourceCodes)
-  if (checked) set.add(code)
-  else set.delete(code)
-  props.envPreference.literatureSourceCodes = [...set]
-}
-
-async function saveEnvironment() {
-  if (props.envPreference.literatureSourceCodes.length === 0) {
-    ElMessage.warning('请至少选择一个文献来源')
-    return
-  }
-  envSaving.value = true
-  try {
-    await new Promise((r) => setTimeout(r, 400))
-    localStorage.setItem(
-      ENV_PREFERENCE_STORAGE_KEY,
-      JSON.stringify({ preference: { ...props.envPreference } }),
-    )
-    emit('environmentSaved')
-    ElMessage.success('默认配置已保存（本地演示）')
-  } finally {
-    envSaving.value = false
   }
 }
 
@@ -356,65 +295,6 @@ defineExpose({ reloadLogs })
         </ul>
         <p v-else class="pc-moves-empty">暂无 Token 变动记录</p>
       </section>
-    </div>
-
-    <div v-show="activeTab === 'environment'" class="pc-pane pc-pane--env" role="tabpanel">
-      <p class="pc-lead">新建工作流时的默认科研偏好与文献策略；保存后对后续「选题发现」等模块预填生效。</p>
-
-      <div class="pc-field-grid">
-        <label class="pc-field">
-          <span class="pc-label">默认学科</span>
-          <PaperSelect v-model="envPreference.disciplineCode" :options="disciplineSelectOptions" />
-        </label>
-
-        <label class="pc-field">
-          <span class="pc-label">默认目标会议/期刊</span>
-          <input v-model="envPreference.defaultVenueText" type="text" class="pc-input" />
-        </label>
-
-        <label class="pc-field">
-          <span class="pc-label">默认执行强度</span>
-          <PaperSelect v-model="envPreference.intensity" :options="intensityOptions" />
-        </label>
-
-        <label class="pc-field">
-          <span class="pc-label">默认审计等级</span>
-          <PaperSelect v-model="envPreference.auditLevel" :options="auditOptions" />
-        </label>
-      </div>
-
-      <div class="pc-field pc-field--block">
-        <span class="pc-label">默认文献来源</span>
-        <div class="pc-check-group">
-          <label v-for="src in LITERATURE_SOURCE_OPTIONS" :key="src.code" class="pc-check pc-check--inline">
-            <input
-              type="checkbox"
-              :checked="isLiteratureSourceChecked(src.code)"
-              @change="toggleLiteratureSource(src.code, ($event.target as HTMLInputElement).checked)"
-            />
-            <span>{{ src.label }}</span>
-          </label>
-        </div>
-      </div>
-
-      <label class="pc-check">
-        <input v-model="envPreference.humanCheckpoint" type="checkbox" />
-        <span><strong>默认开启人工检查点</strong></span>
-      </label>
-
-      <label class="pc-check">
-        <input v-model="envPreference.referenceGateEnabled" type="checkbox" />
-        <span>
-          <strong>参考文献门禁</strong>
-          <span class="pc-hint">未验证文献不得进入引用与正文</span>
-        </span>
-      </label>
-
-      <div class="pc-env-actions">
-        <button type="button" class="pc-btn-primary" :disabled="envSaving" @click="saveEnvironment">
-          {{ envSaving ? '保存中…' : '保存默认配置' }}
-        </button>
-      </div>
     </div>
 
     <div v-show="activeTab === 'wallet-records'" class="pc-pane" role="tabpanel">

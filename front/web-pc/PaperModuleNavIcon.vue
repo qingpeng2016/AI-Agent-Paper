@@ -70,7 +70,7 @@ defineProps<{
       <circle cx="12" cy="8" r="3.5" />
       <path d="M5 20c0-3.5 3.1-6 7-6s7 2.5 7 6" />
     </template>
-    <!-- 默认配置：齿轮 -->
+    <!-- 环境配置：齿轮 -->
     <template v-else-if="moduleId === 'environment'">
       <circle cx="12" cy="12" r="3" />
       <path

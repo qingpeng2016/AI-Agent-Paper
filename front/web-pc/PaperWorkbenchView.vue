@@ -26,6 +26,7 @@ import { DEMO_MODULE_TOKEN_ESTIMATES } from './demoOperationLogs'
 import PaperModuleNavIcon from './PaperModuleNavIcon.vue'
 import PaperMyManuscriptsPanel from './PaperMyManuscriptsPanel.vue'
 import PaperInviteRebatePanel from './PaperInviteRebatePanel.vue'
+import PaperEnvironmentPanel from './PaperEnvironmentPanel.vue'
 import PaperPersonalCenterPanel from './PaperPersonalCenterPanel.vue'
 import PaperSelect from './PaperSelect.vue'
 import PaperWorkflowPanels from './PaperWorkflowPanels.vue'
@@ -225,10 +226,15 @@ const currentManuscript = computed(
 )
 
 const isMyManuscriptsModule = computed(() => activeModule.value === 'my-manuscripts')
+const isEnvironmentModule = computed(() => activeModule.value === 'environment')
 const isInviteRebateModule = computed(() => activeModule.value === 'invite-rebate')
 const isPersonalCenterModule = computed(() => activeModule.value === 'personal-center')
 const isUtilityModule = computed(
-  () => isMyManuscriptsModule.value || isInviteRebateModule.value || isPersonalCenterModule.value,
+  () =>
+    isMyManuscriptsModule.value ||
+    isEnvironmentModule.value ||
+    isInviteRebateModule.value ||
+    isPersonalCenterModule.value,
 )
 const isTopicDiscoveryModule = computed(() => activeModule.value === 'topic-discovery')
 const isLiteratureReviewModule = computed(() => activeModule.value === 'literature-review')
@@ -259,13 +265,13 @@ function recordModuleOperationLog(
   personalCenterPanelRef.value?.reloadLogs()
 }
 
-function onPersonalCenterEnvironmentSaved() {
+function onEnvironmentSaved() {
   topicForm.disciplineCode = envPreference.disciplineCode
   topicForm.venue = envPreference.defaultVenueText || topicForm.venue
   topicForm.intensity = envPreference.intensity
   topicForm.auditLevel = envPreference.auditLevel
   topicForm.humanCheckpoint = envPreference.humanCheckpoint
-  recordModuleOperationLog('environment', '保存默认配置')
+  recordModuleOperationLog('environment', '保存环境配置')
 }
 
 const SECONDARY_WORKFLOW_MODULES = [
@@ -726,6 +732,7 @@ async function onPrimaryAction() {
         if (
           mod !== 'personal-center' &&
           mod !== 'invite-rebate' &&
+          mod !== 'environment' &&
           mod !== 'my-manuscripts'
         ) {
           recordModuleOperationLog(mod, `运行「${currentMeta.value.label}」`)
@@ -995,6 +1002,12 @@ async function onPrimaryAction() {
         @update-manuscripts="onManuscriptsListUpdate"
       />
 
+      <PaperEnvironmentPanel
+        v-else-if="activeModule === 'environment'"
+        :env-preference="envPreference"
+        @environment-saved="onEnvironmentSaved"
+      />
+
       <PaperInviteRebatePanel v-else-if="activeModule === 'invite-rebate'" />
 
       <PaperPersonalCenterPanel
@@ -1002,8 +1015,6 @@ async function onPrimaryAction() {
         ref="personalCenterPanelRef"
         :manuscript-id="activeManuscriptId"
         :manuscript-title="currentManuscript?.title ?? '未命名'"
-        :env-preference="envPreference"
-        @environment-saved="onPersonalCenterEnvironmentSaved"
       />
 
       <PaperWorkflowPanels
