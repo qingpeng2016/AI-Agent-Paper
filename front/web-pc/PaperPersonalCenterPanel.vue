@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   formatSignedCny,
@@ -7,7 +8,7 @@ import {
   type UserWalletFlowItem,
 } from '@ai-agent-paper/shared'
 import { userApi } from '@/api'
-import { getSessionUser, isLoggedIn } from '@/composables/useSessionUser'
+import { clearSessionUser, getSessionUser, isLoggedIn } from '@/composables/useSessionUser'
 import PaperOperationLogPanel from './PaperOperationLogPanel.vue'
 import { getOperationLogs } from './types'
 
@@ -136,8 +137,29 @@ function formatTokens(n: number) {
   return n.toLocaleString('zh-CN')
 }
 
+const router = useRouter()
+const logoutLoading = ref(false)
+
 function onRecharge() {
   ElMessage.info('余额充值请前往会员中心（演示）')
+}
+
+async function onLogout() {
+  if (logoutLoading.value) return
+  logoutLoading.value = true
+  try {
+    try {
+      await userApi.logout()
+    } catch {
+      /* 仍清除本地登录态 */
+    }
+    clearSessionUser()
+    profileRefreshTick.value += 1
+    ElMessage.success('已退出登录')
+    await router.push('/login')
+  } finally {
+    logoutLoading.value = false
+  }
 }
 
 function apiErrorMessage(e: unknown, fallback: string) {
@@ -235,7 +257,18 @@ defineExpose({ reloadLogs })
         <div class="pc-avatar" aria-hidden="true">{{ avatarLetter }}</div>
         <div class="pc-profile-id">
           <h2 class="pc-profile-name">{{ displayName }}</h2>
-          <p class="pc-profile-account">{{ accountLabel }}</p>
+          <p class="pc-profile-account-row">
+            <span class="pc-profile-account">{{ accountLabel }}</span>
+            <button
+              v-if="isLoggedIn()"
+              type="button"
+              class="pc-btn-recharge"
+              :disabled="logoutLoading"
+              @click="onLogout"
+            >
+              {{ logoutLoading ? '退出中…' : '退出' }}
+            </button>
+          </p>
         </div>
       </div>
 
@@ -410,6 +443,14 @@ defineExpose({ reloadLogs })
   margin-bottom: 18px;
 }
 
+.pc-profile-account-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin: 0;
+}
+
 .pc-avatar {
   display: flex;
   align-items: center;
@@ -527,6 +568,12 @@ defineExpose({ reloadLogs })
 
 .pc-btn-recharge:hover {
   transform: translateY(-1px);
+}
+
+.pc-btn-recharge:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .pc-plan-section {
