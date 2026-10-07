@@ -18,7 +18,7 @@
     "paths": {
       "@/*": ["./src/*"],
       "@paper/*": ["./*"],
-      "@ai-token-mall/shared": ["./shared/src/index.ts"]
+      "@ai-agent-paper/shared": ["./shared/src/index.ts"]
     }
   },
   "include": [

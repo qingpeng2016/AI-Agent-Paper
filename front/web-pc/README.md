@@ -7,7 +7,7 @@
 | 工作台 UI | `PaperWorkbenchView.vue` 及同目录各 `Paper*.vue` |
 | 模块类型、导航 | `types.ts` |
 | 登录 / 注册 | `src/views/LoginView.vue`、`RegisterView.vue` |
-| API 客户端 | `shared/`（`@ai-token-mall/shared`）+ `src/api/` |
+| API 客户端 | `shared/`（`@ai-agent-paper/shared`）+ `src/api/` |
 | 路由 | `/` → `/workbench`；`/login`、`/register`；`/workbench` 需登录 |
 
 ## 开发

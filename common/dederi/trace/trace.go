@@ -2,7 +2,7 @@ package trace
 
 import (
 	"context"
-	"github.com/qingpeng2016/ai-token-mall/common/dederi/tool"
+	"github.com/qingpeng2016/ai-agent-paper/common/dederi/tool"
 )
 
 const (

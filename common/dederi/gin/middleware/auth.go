@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/qingpeng2016/ai-token-mall/common/auth"
-	"github.com/qingpeng2016/ai-token-mall/common/constants"
+	"github.com/qingpeng2016/ai-agent-paper/common/auth"
+	"github.com/qingpeng2016/ai-agent-paper/common/constants"
 )
 
 const ContextUserIDKey = "userID"

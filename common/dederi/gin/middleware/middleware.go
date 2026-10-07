@@ -3,8 +3,8 @@ package middleware
 import (
 	"bytes"
 	"github.com/gin-gonic/gin"
-	"github.com/qingpeng2016/ai-token-mall/common/dederi/logger"
-	"github.com/qingpeng2016/ai-token-mall/common/dederi/trace"
+	"github.com/qingpeng2016/ai-agent-paper/common/dederi/logger"
+	"github.com/qingpeng2016/ai-agent-paper/common/dederi/trace"
 	"go.uber.org/zap"
 	"io"
 	"net/http"

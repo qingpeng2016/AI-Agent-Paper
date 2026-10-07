@@ -3,8 +3,8 @@ package alipay
 import (
 	"context"
 
-	httpentity "github.com/qingpeng2016/ai-token-mall/domain/http/entity"
-	httprepo "github.com/qingpeng2016/ai-token-mall/domain/http/repository"
+	httpentity "github.com/qingpeng2016/ai-agent-paper/domain/http/entity"
+	httprepo "github.com/qingpeng2016/ai-agent-paper/domain/http/repository"
 )
 
 type AlipayService struct {

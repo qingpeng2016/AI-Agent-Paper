@@ -4,10 +4,10 @@ import (
 	"context"
 	"strings"
 
-	"github.com/qingpeng2016/ai-token-mall/common/errorx"
-	httpentity "github.com/qingpeng2016/ai-token-mall/domain/http/entity"
-	httprepo "github.com/qingpeng2016/ai-token-mall/domain/http/repository"
-	"github.com/qingpeng2016/ai-token-mall/domain/rest/response"
+	"github.com/qingpeng2016/ai-agent-paper/common/errorx"
+	httpentity "github.com/qingpeng2016/ai-agent-paper/domain/http/entity"
+	httprepo "github.com/qingpeng2016/ai-agent-paper/domain/http/repository"
+	"github.com/qingpeng2016/ai-agent-paper/domain/rest/response"
 )
 
 const (

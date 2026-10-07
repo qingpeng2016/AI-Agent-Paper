@@ -24,7 +24,7 @@ deploy_common_init() {
   : "${SSH_PASS:?请在 .deploy.env 设置 SSH_PASS}"
 
   SSH_PORT="${SSH_PORT:-22}"
-  MALL_APP_DIR="${MALL_APP_DIR:-/www/wwwroot/AI-Token-Mall}"
+  MALL_APP_DIR="${MALL_APP_DIR:-/www/wwwroot/AI-Agent-Paper}"
   MALL_USER_RUN_CONF="${MALL_USER_RUN_CONF:-prod}"
   MALL_BOT_RUN_CONF="${MALL_BOT_RUN_CONF:-prod}"
   MALL_USER_PORT="${MALL_USER_PORT:-8886}"
@@ -33,7 +33,7 @@ deploy_common_init() {
   WEB_BUILD_CMD="${WEB_BUILD_CMD:-pnpm install && pnpm build}"
   # 生产打包写入 web-pc/.env.production（路径含 /api/v1，base 不要末尾斜杠）
   VITE_API_BASE_URL="${VITE_API_BASE_URL:-}"
-  MALL_BIN_NAME="${MALL_BIN_NAME:-ai-token-mall}"
+  MALL_BIN_NAME="${MALL_BIN_NAME:-ai-agent-paper}"
   GIT_FETCH_TIMEOUT="${GIT_FETCH_TIMEOUT:-120}"
   LOCAL_REPO_DIR="${LOCAL_REPO_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
   FRONTEND_DIST_COMMIT_MSG="${FRONTEND_DIST_COMMIT_MSG:-chore(deploy): web-pc dist}"

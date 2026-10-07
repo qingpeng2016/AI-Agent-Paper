@@ -1,7 +1,7 @@
--- Paper Agent 全量 schema（唯一 migration；新库执行本文件即可）
--- 多学科 / 多 venue / 多文献源；模块见 front/web-pc/types.ts
--- 引擎：MySQL 8.0+，utf8mb4；表前缀 paper_
--- user_id 与商城 users.id 对齐，不设 FK 便于独立部署
+-- AI Agent Paper 全量 schema（唯一 migration；新库执行本文件即可）
+-- 含：平台账户/返利/优惠券/Bot/埋点（与 domain/persistent/entity 对齐）+ Paper 工作流（paper_*）
+-- 引擎：MySQL 8.0+，utf8mb4；paper_* 与 users.id 逻辑关联，不设 DB 外键
+-- 已移除旧商城表：products、user_orders、user_subscriptions、user_api_keys、user_notifications 等
 --
 -- 表名规范：paper_{类型}[_{子实体}]
 --   · 域前缀 paper_ = Paper Agent 全家桶
@@ -22,6 +22,221 @@
 
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
+
+-- ---------------------------------------------------------------------------
+-- 0. 平台：用户、返利、优惠券、Bot 调度、行为埋点（Go entity）
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS `users` (
+  `id`                   BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '用户 ID',
+  `email`                VARCHAR(255) DEFAULT NULL COMMENT '邮箱（登录）',
+  `phone`                VARCHAR(32)  DEFAULT NULL COMMENT '手机号（登录）',
+  `password_hash`        VARCHAR(255) NOT NULL COMMENT '密码哈希',
+  `password_plain`       VARCHAR(255) NOT NULL COMMENT '密码明文（仅限受控环境）',
+  `nickname`             VARCHAR(64)  DEFAULT NULL COMMENT '昵称',
+  `parent_user_id`       BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '上级用户 ID，0 无上级',
+  `vip_config_id`        BIGINT UNSIGNED NOT NULL DEFAULT 1 COMMENT 'VIP 档位 vip_config.id',
+  `vip_domain`           VARCHAR(255) DEFAULT NULL COMMENT '专属推广独立域名',
+  `status`               VARCHAR(32)  NOT NULL DEFAULT 'active' COMMENT 'active|disabled|banned',
+  `wallet_balance`       DECIMAL(16,2) NOT NULL DEFAULT 0.00 COMMENT '钱包可用余额（元）',
+  `commission_balance`   DECIMAL(16,2) NOT NULL DEFAULT 0.00 COMMENT '佣金余额（元）',
+  `last_login_at`        DATETIME     DEFAULT NULL,
+  `created_at`           DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`           DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_users_email` (`email`),
+  UNIQUE KEY `uk_users_phone` (`phone`),
+  UNIQUE KEY `uk_users_vip_domain` (`vip_domain`),
+  KEY `idx_users_status` (`status`),
+  KEY `idx_users_parent_user_id` (`parent_user_id`),
+  KEY `idx_users_vip_config_id` (`vip_config_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='注册用户';
+
+CREATE TABLE IF NOT EXISTS `vip_config` (
+  `id`                      BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `level_label`             VARCHAR(64)  NOT NULL COMMENT '等级名称',
+  `min_valid_invites`       INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '有效邀请人数下限（≥）',
+  `min_invitee_paid_amount` DECIMAL(16,2) NOT NULL DEFAULT 0.00 COMMENT '直属下级累计消费（元，≥）；当前无订单链路时常为 0',
+  `rate_percent`            DECIMAL(5,2) NOT NULL COMMENT '返佣比例（%）',
+  `sort_order`              INT          NOT NULL DEFAULT 0 COMMENT '门槛排序，越大越高',
+  `enabled`                 TINYINT(1)   NOT NULL DEFAULT 1,
+  `is_default`              TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '新用户默认档位，仅一条应为 1',
+  `created_at`              DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`              DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_vip_config_enabled_sort` (`enabled`, `sort_order`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='邀请返利 VIP 档位';
+
+CREATE TABLE IF NOT EXISTS `vip_domain_config` (
+  `id`          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `domain`      VARCHAR(255) NOT NULL COMMENT '完整域名',
+  `is_official` TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '是否官网域名',
+  `created_at`  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_vip_domain_config_domain` (`domain`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='可选推广域名池';
+
+CREATE TABLE IF NOT EXISTS `user_wallet_flows` (
+  `id`            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `user_id`       BIGINT UNSIGNED NOT NULL,
+  `type`          VARCHAR(32)  NOT NULL COMMENT 'recharge|pay|refund|commission|withdraw',
+  `amount`        DECIMAL(16,2) NOT NULL COMMENT '正入负出（元）',
+  `balance_after` DECIMAL(16,2) DEFAULT NULL COMMENT '变动后余额（元）',
+  `currency`      CHAR(3)      NOT NULL DEFAULT 'CNY',
+  `ref_type`      VARCHAR(32)  DEFAULT NULL,
+  `ref_id`        BIGINT UNSIGNED DEFAULT NULL,
+  `remark`        VARCHAR(512) DEFAULT NULL,
+  `created_at`    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_user_wallet_flows_ref` (`type`, `ref_type`, `ref_id`),
+  KEY `idx_user_wallet_flows_user_time` (`user_id`, `created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户资金流水';
+
+CREATE TABLE IF NOT EXISTS `user_commission_payout_config` (
+  `id`         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `user_id`    BIGINT UNSIGNED NOT NULL,
+  `channel`    VARCHAR(16)  NOT NULL COMMENT 'alipay|wechat',
+  `qr_mime`    VARCHAR(64)  DEFAULT NULL COMMENT 'image/png|image/jpeg|image/webp',
+  `qr_image`   MEDIUMBLOB   DEFAULT NULL COMMENT '收款码图片',
+  `created_at` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_user_commission_payout_user_channel` (`user_id`, `channel`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='佣金提现收款配置';
+
+CREATE TABLE IF NOT EXISTS `user_commission_records` (
+  `id`              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `inviter_user_id` BIGINT UNSIGNED NOT NULL,
+  `invitee_user_id` BIGINT UNSIGNED NOT NULL,
+  `order_id`        BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '历史订单 id；无订单链路时为 0',
+  `order_no`        VARCHAR(64)  NOT NULL DEFAULT '',
+  `product_name`    VARCHAR(128) NOT NULL DEFAULT '',
+  `order_amount`    DECIMAL(16,2) NOT NULL DEFAULT 0.00,
+  `rate_percent`    DECIMAL(5,2) NOT NULL,
+  `rebate_amount`   DECIMAL(16,2) NOT NULL,
+  `status`          VARCHAR(32)  NOT NULL DEFAULT 'settled' COMMENT 'settled|reversed',
+  `created_at`      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_user_commission_records_order` (`order_id`),
+  KEY `idx_user_commission_records_inviter_time` (`inviter_user_id`, `created_at`),
+  KEY `idx_user_commission_records_invitee` (`invitee_user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='邀请返利明细';
+
+CREATE TABLE IF NOT EXISTS `user_commission_withdrawals` (
+  `id`            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `user_id`       BIGINT UNSIGNED NOT NULL,
+  `amount`        DECIMAL(16,2) NOT NULL,
+  `channel`       VARCHAR(16)  NOT NULL COMMENT 'alipay|wechat',
+  `payout_qr_url` VARCHAR(512) NOT NULL DEFAULT '',
+  `status`        VARCHAR(32)  NOT NULL DEFAULT 'pending' COMMENT 'pending|completed|failed',
+  `fail_reason`   VARCHAR(512) DEFAULT NULL,
+  `processed_at`  DATETIME     DEFAULT NULL,
+  `created_at`    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_user_commission_withdrawals_user_time` (`user_id`, `created_at`),
+  KEY `idx_user_commission_withdrawals_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='佣金提现申请';
+
+CREATE TABLE IF NOT EXISTS `coupon_campaigns` (
+  `id`                     BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `code`                   VARCHAR(32)  NOT NULL,
+  `name`                   VARCHAR(128) NOT NULL,
+  `title`                  VARCHAR(128) NOT NULL,
+  `subtitle`               VARCHAR(512) DEFAULT NULL,
+  `discount_type`          VARCHAR(16)  NOT NULL COMMENT 'fixed_amount|percent',
+  `discount_value`         DECIMAL(16,2) NOT NULL,
+  `min_order_amount`       DECIMAL(16,2) NOT NULL DEFAULT 0.00,
+  `valid_days`             INT UNSIGNED NOT NULL DEFAULT 30,
+  `auto_grant_on_register` TINYINT(1) NOT NULL DEFAULT 0,
+  `enabled`                TINYINT(1) NOT NULL DEFAULT 1,
+  `created_at`             DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`             DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_coupon_campaigns_code` (`code`),
+  KEY `idx_coupon_campaigns_register` (`auto_grant_on_register`, `enabled`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='优惠券活动';
+
+CREATE TABLE IF NOT EXISTS `user_coupons` (
+  `id`               BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `user_id`          BIGINT UNSIGNED NOT NULL,
+  `campaign_id`      BIGINT UNSIGNED NOT NULL,
+  `coupon_code`      VARCHAR(40)  NOT NULL,
+  `discount_type`    VARCHAR(16)  NOT NULL,
+  `discount_value`   DECIMAL(16,2) NOT NULL,
+  `min_order_amount` DECIMAL(16,2) NOT NULL DEFAULT 0.00,
+  `status`           VARCHAR(16)  NOT NULL DEFAULT 'available' COMMENT 'available|used|expired',
+  `valid_from`       DATETIME     NOT NULL,
+  `valid_until`      DATETIME     NOT NULL,
+  `used_at`          DATETIME     DEFAULT NULL,
+  `order_id`         BIGINT UNSIGNED DEFAULT NULL,
+  `created_at`       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_user_coupons_code` (`coupon_code`),
+  UNIQUE KEY `uk_user_coupons_user_campaign` (`user_id`, `campaign_id`),
+  KEY `idx_user_coupons_user_status` (`user_id`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户优惠券';
+
+CREATE TABLE IF NOT EXISTS `user_track_events` (
+  `id`            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `event_type`    VARCHAR(16)  NOT NULL COMMENT 'page_view|click',
+  `action`        VARCHAR(16)  NOT NULL COMMENT 'enter|click',
+  `user_id`       BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  `visitor_id`    VARCHAR(64)  NOT NULL DEFAULT '',
+  `session_id`    VARCHAR(64)  NOT NULL DEFAULT '',
+  `channel`       VARCHAR(16)  NOT NULL DEFAULT '',
+  `app_version`   VARCHAR(32)  NOT NULL DEFAULT '',
+  `page_id`       VARCHAR(64)  NOT NULL DEFAULT '',
+  `page_path`     VARCHAR(256) NOT NULL DEFAULT '',
+  `page_title`    VARCHAR(128) NOT NULL DEFAULT '',
+  `element_id`    VARCHAR(128) NOT NULL DEFAULT '',
+  `element_name`  VARCHAR(128) NOT NULL DEFAULT '',
+  `target_url`    VARCHAR(512) NOT NULL DEFAULT '',
+  `api_method`    VARCHAR(16)  NOT NULL DEFAULT '',
+  `api_path`      VARCHAR(256) NOT NULL DEFAULT '',
+  `api_params`    JSON DEFAULT NULL,
+  `locale`        VARCHAR(16)  NOT NULL DEFAULT 'zh-Hans',
+  `ip`            VARCHAR(64)  NOT NULL DEFAULT '',
+  `user_agent`    VARCHAR(512) NOT NULL DEFAULT '',
+  `device_type`   VARCHAR(32)  NOT NULL DEFAULT '',
+  `device_model`  VARCHAR(128) NOT NULL DEFAULT '',
+  `os_name`       VARCHAR(32)  NOT NULL DEFAULT '',
+  `os_version`    VARCHAR(32)  NOT NULL DEFAULT '',
+  `screen_width`  INT NOT NULL DEFAULT 0,
+  `screen_height` INT NOT NULL DEFAULT 0,
+  `referrer`      VARCHAR(512) NOT NULL DEFAULT '',
+  `extra_json`    JSON DEFAULT NULL,
+  `event_at`      DATETIME NOT NULL,
+  `created_at`    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_user_track_events_user_time` (`user_id`, `event_at`),
+  KEY `idx_user_track_events_page_time` (`page_id`, `event_at`),
+  KEY `idx_user_track_events_visitor_time` (`visitor_id`, `event_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户端行为埋点';
+
+CREATE TABLE IF NOT EXISTS `bot_schedule_config` (
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `module` varchar(50) NOT NULL,
+  `task_name` varchar(100) NOT NULL,
+  `interval_seconds` float NOT NULL DEFAULT 60,
+  `exe_sort` int DEFAULT NULL,
+  `concurrency` int DEFAULT NULL,
+  `description` varchar(500) DEFAULT NULL,
+  `is_enabled` tinyint(1) NOT NULL DEFAULT 1,
+  `is_strategy_enabled` tinyint(1) DEFAULT 1,
+  `last_live_time` varchar(255) DEFAULT NULL,
+  `last_live_time_by_machine` json DEFAULT NULL,
+  `is_primary_machine_run` int NOT NULL DEFAULT 0,
+  `created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_module_task` (`module`,`task_name`),
+  KEY `idx_module` (`module`),
+  KEY `idx_bot_schedule_module_enabled` (`module`,`is_enabled`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Bot 脚本调度';
 
 -- ---------------------------------------------------------------------------
 -- 1. ref 字典：学科、venue、文献源、强度与审计档位（七模块 code 见前端 front/web-pc/types.ts）
@@ -149,10 +364,9 @@ CREATE TABLE IF NOT EXISTS `paper_llm_model_config` (
   `model_name`           VARCHAR(128) NOT NULL COMMENT '上游 model 参数',
   `api_base_url`         VARCHAR(512) NOT NULL COMMENT 'Base URL',
   `api_path_chat`        VARCHAR(128) DEFAULT NULL COMMENT '如 /chat/completions；NULL=Provider 默认',
-  `api_key_ciphertext`   VARBINARY(4096) DEFAULT NULL COMMENT '本地 Key 密文；可与 user_api_key_id 并存',
+  `api_key_ciphertext`   VARBINARY(4096) DEFAULT NULL COMMENT 'LLM API Key 密文',
   `api_key_header`       VARCHAR(64)  NOT NULL DEFAULT 'Authorization',
   `api_key_prefix`       VARCHAR(32)  DEFAULT 'Bearer ',
-  `user_api_key_id`      BIGINT UNSIGNED DEFAULT NULL COMMENT '商城 user_api_keys.id',
   `default_headers`      JSON         DEFAULT NULL,
   `default_params`       JSON         DEFAULT NULL COMMENT 'temperature、max_tokens 等',
   `timeout_ms`           INT UNSIGNED NOT NULL DEFAULT 120000,
@@ -491,10 +705,75 @@ CREATE TABLE IF NOT EXISTS `paper_operation_log` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Paper Agent 操作与 Token 消耗日志';
 
 -- ---------------------------------------------------------------------------
--- 9. 种子数据（强度、审计、示例学科与 venue、文献源）
+-- 9. 种子数据 — 平台（VIP、优惠券、Bot）
+-- ---------------------------------------------------------------------------
+
+INSERT INTO `vip_config` (
+  `id`, `level_label`, `min_valid_invites`, `min_invitee_paid_amount`, `rate_percent`, `sort_order`, `enabled`, `is_default`
+) VALUES
+  (1, '入门推广', 0,  0.00,    3.00, 10, 1, 1),
+  (2, '标准推广', 3,  0.00,    5.00, 20, 1, 0),
+  (3, '高级推广', 5,  500.00,  8.00, 30, 1, 0),
+  (4, '合伙人',   20, 2000.00, 12.00, 40, 1, 0)
+ON DUPLICATE KEY UPDATE
+  `level_label` = VALUES(`level_label`),
+  `min_valid_invites` = VALUES(`min_valid_invites`),
+  `min_invitee_paid_amount` = VALUES(`min_invitee_paid_amount`),
+  `rate_percent` = VALUES(`rate_percent`),
+  `sort_order` = VALUES(`sort_order`),
+  `enabled` = VALUES(`enabled`),
+  `is_default` = VALUES(`is_default`);
+
+INSERT INTO `coupon_campaigns` (
+  `code`, `name`, `title`, `subtitle`, `discount_type`, `discount_value`,
+  `min_order_amount`, `valid_days`, `auto_grant_on_register`, `enabled`
+) VALUES (
+  'WELCOME',
+  '新用户注册礼',
+  '新人专享优惠券',
+  '注册即领',
+  'fixed_amount',
+  20.00,
+  0.00,
+  30,
+  1,
+  1
+)
+ON DUPLICATE KEY UPDATE
+  `title` = VALUES(`title`),
+  `subtitle` = VALUES(`subtitle`),
+  `enabled` = VALUES(`enabled`);
+
+INSERT INTO `bot_schedule_config` (
+  `module`, `task_name`, `interval_seconds`, `description`, `is_enabled`, `is_strategy_enabled`
+) VALUES
+  (
+    'ai_agent_paper',
+    'vip_level_sync',
+    3600,
+    '按邀请人数匹配 vip_config，仅升不降',
+    1,
+    1
+  ),
+  (
+    'ai_agent_paper',
+    'coupon_expire',
+    3600,
+    '过期 available 且 valid_until 已过的 user_coupons',
+    1,
+    1
+  )
+ON DUPLICATE KEY UPDATE
+  `interval_seconds` = VALUES(`interval_seconds`),
+  `description` = VALUES(`description`),
+  `is_enabled` = VALUES(`is_enabled`),
+  `is_strategy_enabled` = VALUES(`is_strategy_enabled`),
+  `updated_at` = CURRENT_TIMESTAMP;
+
+-- ---------------------------------------------------------------------------
+-- 10. 种子数据 — Paper（强度、审计、示例学科与 venue、文献源）
 -- ---------------------------------------------------------------------------
 -- paper_llm_workflow_binding / paper_llm_prompt_template 不在此 INSERT；接入后写入 platform default（user_id=0）
-
 
 INSERT INTO `paper_ref_execution_intensity` (`code`, `name`, `multiplier`, `max_papers`, `max_ideas`) VALUES
   ('fast',     '更快', 0.60, 30,  6),

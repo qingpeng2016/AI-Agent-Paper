@@ -4,13 +4,13 @@ import (
 	"context"
 	"time"
 
-	"github.com/qingpeng2016/ai-token-mall/common/dederi/logger"
-	"github.com/qingpeng2016/ai-token-mall/domain/persistent/repository"
+	"github.com/qingpeng2016/ai-agent-paper/common/dederi/logger"
+	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/repository"
 	"go.uber.org/zap"
 )
 
 const (
-	ModuleAITokenMall = "ai_token_mall"
+	ModuleAIAgentPaper = "ai_agent_paper"
 	TaskCouponExpire  = "coupon_expire"
 )
 

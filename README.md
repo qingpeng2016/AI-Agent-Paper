@@ -1,4 +1,4 @@
-# AI-Token-Mall
+# AI-Agent-Paper
 
 AI 聚合平台骨架：用户注册/登录 HTTP 服务、调度 Bot、支付宝账务明细 OpenAPI 客户端。
 
@@ -12,7 +12,7 @@ HTTP 接口：
 go run main.go --run_conf=local --run_bot=false
 ```
 
-Bot（按 `bot_schedule_config` 调度，默认任务 `ai_token_mall:user_stats` 统计用户数与访问日志数）：
+Bot（按 `bot_schedule_config` 调度，默认任务 `ai_agent_paper:user_stats` 统计用户数与访问日志数）：
 
 ```bash
 go run main.go --run_conf=local --run_bot=true
@@ -44,7 +44,7 @@ docs/                        ai-platform-design.md、ai-platform-schema.sql
 
 ```sql
 INSERT INTO bot_schedule_config (module, task_name, interval_seconds, is_enabled, is_strategy_enabled)
-VALUES ('ai_token_mall', 'user_stats', 60, 1, 1);
+VALUES ('ai_agent_paper', 'user_stats', 60, 1, 1);
 ```
 
 ## 配置

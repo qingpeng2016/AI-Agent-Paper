@@ -8,10 +8,10 @@ server:
   http_timeout_sec: 30
 
 db:
-  user: "ai_token_mall"
+  user: "ai_agent_paper"
   password: "36zMdr5EZ8rYshFD"
   host: "216.236.43.135"
-  db_name: "ai_token_mall"
+  db_name: "ai_agent_paper"
   max_idle_conn: 20
   max_open_conn: 200
   log_mode: false

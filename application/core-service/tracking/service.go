@@ -6,11 +6,11 @@ import (
 	"strings"
 	"time"
 
-	ginMiddleware "github.com/qingpeng2016/ai-token-mall/common/dederi/gin/middleware"
-	"github.com/qingpeng2016/ai-token-mall/domain/persistent/entity"
-	"github.com/qingpeng2016/ai-token-mall/domain/persistent/repository"
-	"github.com/qingpeng2016/ai-token-mall/domain/rest/request"
-	"github.com/qingpeng2016/ai-token-mall/domain/rest/response"
+	ginMiddleware "github.com/qingpeng2016/ai-agent-paper/common/dederi/gin/middleware"
+	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
+	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/repository"
+	"github.com/qingpeng2016/ai-agent-paper/domain/rest/request"
+	"github.com/qingpeng2016/ai-agent-paper/domain/rest/response"
 	"github.com/gin-gonic/gin"
 )
 

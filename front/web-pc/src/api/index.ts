@@ -1,4 +1,4 @@
-import { createInviteRebateApi, createUserApi } from '@ai-token-mall/shared'
+import { createInviteRebateApi, createUserApi } from '@ai-agent-paper/shared'
 import { getAuthToken } from '@/utils/auth-cookie'
 
 const baseURL = import.meta.env.VITE_API_BASE_URL ?? ''

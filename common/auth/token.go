@@ -16,7 +16,7 @@ var ErrInvalidToken = errors.New("invalid token")
 
 // SessionTokenSecret / SessionTokenTTL 与登录签发一致（MVP 固定密钥，生产应走配置）
 const (
-	SessionTokenSecret = "ai-token-mall-session-signing-key"
+	SessionTokenSecret = "ai-agent-paper-session-signing-key"
 	SessionTokenTTL    = 720 * time.Hour
 )
 

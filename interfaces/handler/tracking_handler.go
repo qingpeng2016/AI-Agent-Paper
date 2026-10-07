@@ -1,10 +1,10 @@
 package handler
 
 import (
-	trackingSvc "github.com/qingpeng2016/ai-token-mall/application/core-service/tracking"
-	"github.com/qingpeng2016/ai-token-mall/common/dederi/gin/response"
-	"github.com/qingpeng2016/ai-token-mall/common/errorx"
-	"github.com/qingpeng2016/ai-token-mall/domain/rest/request"
+	trackingSvc "github.com/qingpeng2016/ai-agent-paper/application/core-service/tracking"
+	"github.com/qingpeng2016/ai-agent-paper/common/dederi/gin/response"
+	"github.com/qingpeng2016/ai-agent-paper/common/errorx"
+	"github.com/qingpeng2016/ai-agent-paper/domain/rest/request"
 	"github.com/gin-gonic/gin"
 )
 

@@ -3,8 +3,8 @@ package notification
 import (
 	"context"
 
-	"github.com/qingpeng2016/ai-token-mall/common/dederi/logger"
-	"github.com/qingpeng2016/ai-token-mall/conf"
+	"github.com/qingpeng2016/ai-agent-paper/common/dederi/logger"
+	"github.com/qingpeng2016/ai-agent-paper/conf"
 	"go.uber.org/zap"
 )
 

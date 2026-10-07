@@ -8,10 +8,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/qingpeng2016/ai-token-mall/conf"
-	httpentity "github.com/qingpeng2016/ai-token-mall/domain/http/entity"
-	httprepo "github.com/qingpeng2016/ai-token-mall/domain/http/repository"
-	httpx "github.com/qingpeng2016/ai-token-mall/infrastructure/http"
+	"github.com/qingpeng2016/ai-agent-paper/conf"
+	httpentity "github.com/qingpeng2016/ai-agent-paper/domain/http/entity"
+	httprepo "github.com/qingpeng2016/ai-agent-paper/domain/http/repository"
+	httpx "github.com/qingpeng2016/ai-agent-paper/infrastructure/http"
 )
 
 // Client 实现 domain/http/repository.OpenAlexRepo
@@ -43,7 +43,7 @@ func (c *Client) Search(ctx context.Context, q httpentity.OpenAlexSearchQuery) (
 		"Accept": "application/json",
 	}
 	if c.mailto != "" {
-		headers["User-Agent"] = "AI-Token-Mall/1.0 (mailto:" + c.mailto + ")"
+		headers["User-Agent"] = "AI-Agent-Paper/1.0 (mailto:" + c.mailto + ")"
 	}
 	resp, err := c.http.Get(ctx, c.baseURL, params, headers)
 	if err != nil {

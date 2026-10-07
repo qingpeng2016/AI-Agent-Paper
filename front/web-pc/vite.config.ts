@@ -8,7 +8,7 @@ export default defineConfig({
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
       '@paper': fileURLToPath(new URL('.', import.meta.url)),
-      '@ai-token-mall/shared': fileURLToPath(
+      '@ai-agent-paper/shared': fileURLToPath(
         new URL('./shared/src/index.ts', import.meta.url),
       ),
     },

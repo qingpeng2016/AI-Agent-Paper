@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/qingpeng2016/ai-token-mall/conf"
+	"github.com/qingpeng2016/ai-agent-paper/conf"
 	"github.com/redis/go-redis/v9"
 )
 

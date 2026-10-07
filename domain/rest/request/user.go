@@ -24,8 +24,3 @@ type ListWalletFlowsQuery struct {
 	Page     int `form:"page"`
 	PageSize int `form:"page_size"`
 }
-
-type ListInvoicesQuery struct {
-	Page     int `form:"page"`
-	PageSize int `form:"page_size"`
-}

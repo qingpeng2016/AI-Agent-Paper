@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import type { UserProfile } from '@ai-token-mall/shared'
+import type { UserProfile } from '@ai-agent-paper/shared'
 import { clearAuthToken, getAuthToken, hasAuthToken } from '@/utils/auth-cookie'
 
 const STORAGE_KEY = 'atm_user'

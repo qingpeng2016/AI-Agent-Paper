@@ -8,7 +8,7 @@ importers:
 
   .:
     dependencies:
-      '@ai-token-mall/shared':
+      '@ai-agent-paper/shared':
         specifier: workspace:*
         version: link:shared
       element-plus:

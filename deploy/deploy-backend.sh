@@ -43,7 +43,7 @@ GIT_CLEAN_BIN="1"
 
 LOG_DIR="\${APP_DIR}/logs"
 BIN_DIR="\${APP_DIR}/bin"
-PID_NAME="ai-token-mall-\${MODE}"
+PID_NAME="ai-agent-paper-\${MODE}"
 PID_FILE="\${LOG_DIR}/\${PID_NAME}.pid"
 LOG_FILE="\${LOG_DIR}/\${PID_NAME}-nohup.log"
 
@@ -58,7 +58,7 @@ proc_cwd() {
 
 is_mall_go_cmd() {
   local cmd="\$1"
-  [[ "\${cmd}" == *"main.go"* || "\${cmd}" == *"/bin/\${MALL_BIN_NAME}"* || "\${cmd}" == *"\${MALL_BIN_NAME}"* || "\${cmd}" == *"ai-token-mall"* || "\${cmd}" == *"--run_conf="* ]]
+  [[ "\${cmd}" == *"main.go"* || "\${cmd}" == *"/bin/\${MALL_BIN_NAME}"* || "\${cmd}" == *"\${MALL_BIN_NAME}"* || "\${cmd}" == *"ai-agent-paper"* || "\${cmd}" == *"--run_conf="* ]]
 }
 
 cmdline_matches_mode() {
@@ -137,7 +137,7 @@ kill_matching() {
 }
 
 stop_mall() {
-  echo ">>> [服务器] 停止 ai-token-mall/\${MODE}"
+  echo ">>> [服务器] 停止 ai-agent-paper/\${MODE}"
   if [[ -f "\${PID_FILE}" ]]; then
     old_pid=\$(tr -d '[:space:]' <"\${PID_FILE}" 2>/dev/null || true)
     kill -TERM "\${old_pid}" 2>/dev/null || true
@@ -234,7 +234,7 @@ EOF
 echo ">>> 后端 分支=${BRANCH} 动作=${ACTION} 模式=${MODE}"
 if ! run_remote_bash "$REMOTE_SCRIPT_BODY"; then
   echo ">>> 远程脚本返回非 0（若上方已有 RUNNING，可先: ./deploy-backend.sh master status user）" >&2
-  echo ">>> 服务器日志: ${APP_DIR}/logs/ai-token-mall-${MODE}-nohup.log" >&2
+  echo ">>> 服务器日志: ${APP_DIR}/logs/ai-agent-paper-${MODE}-nohup.log" >&2
   exit 1
 fi
 echo ">>> 后端完成"

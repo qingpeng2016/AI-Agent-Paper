@@ -1,8 +1,8 @@
 package mysql
 
 import (
-	mysqlclient "github.com/qingpeng2016/ai-token-mall/common/dederi/mysql"
-	"github.com/qingpeng2016/ai-token-mall/conf"
+	mysqlclient "github.com/qingpeng2016/ai-agent-paper/common/dederi/mysql"
+	"github.com/qingpeng2016/ai-agent-paper/conf"
 	"gorm.io/gorm"
 	"sync"
 )

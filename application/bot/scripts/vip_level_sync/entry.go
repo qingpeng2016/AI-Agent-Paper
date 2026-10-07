@@ -4,18 +4,17 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
-	"time"
 
-	"github.com/qingpeng2016/ai-token-mall/application/core-service/invite_rebate"
-	"github.com/qingpeng2016/ai-token-mall/common/dederi/logger"
-	"github.com/qingpeng2016/ai-token-mall/domain/persistent/entity"
-	"github.com/qingpeng2016/ai-token-mall/domain/persistent/repository"
+	"github.com/qingpeng2016/ai-agent-paper/application/core-service/invite_rebate"
+	"github.com/qingpeng2016/ai-agent-paper/common/dederi/logger"
+	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
+	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/repository"
 	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 )
 
 const (
-	ModuleAITokenMall = "ai_token_mall"
+	ModuleAIAgentPaper = "ai_agent_paper"
 	TaskVipLevelSync  = "vip_level_sync"
 	syncBatchSize     = 100
 	listPageSize      = 500
@@ -29,20 +28,17 @@ type vipSyncPlan struct {
 }
 
 type VipLevelSyncJob struct {
-	users         repository.UsersRepo
-	vipConfigs    repository.VipConfigRepo
-	notifications repository.UserNotificationsRepo
+	users      repository.UsersRepo
+	vipConfigs repository.VipConfigRepo
 }
 
 func NewVipLevelSyncJob(
 	users repository.UsersRepo,
 	vipConfigs repository.VipConfigRepo,
-	notifications repository.UserNotificationsRepo,
 ) *VipLevelSyncJob {
 	return &VipLevelSyncJob{
-		users:         users,
-		vipConfigs:    vipConfigs,
-		notifications: notifications,
+		users:      users,
+		vipConfigs: vipConfigs,
 	}
 }
 
@@ -190,21 +186,5 @@ func (j *VipLevelSyncJob) syncOneUser(
 	if err := j.users.UpdateVipConfigID(ctx, u.ID, best.ID); err != nil {
 		return false, err
 	}
-	if err := j.insertVipUpgradeNotification(ctx, u.ID); err != nil {
-		return false, err
-	}
 	return true, nil
-}
-
-func (j *VipLevelSyncJob) insertVipUpgradeNotification(ctx context.Context, userID uint) error {
-	now := time.Now()
-	sentAt := now
-	return j.notifications.Create(ctx, nil, &entity.UserNotifications{
-		UserID:       userID,
-		Channel:      "in_app",
-		TemplateCode: "vip_level_upgraded",
-		Status:       entity.NotificationInAppUnread,
-		SentAt:       &sentAt,
-		CreatedAt:    now,
-	})
 }

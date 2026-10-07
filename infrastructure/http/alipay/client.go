@@ -15,10 +15,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/qingpeng2016/ai-token-mall/conf"
-	httpentity "github.com/qingpeng2016/ai-token-mall/domain/http/entity"
-	httprepo "github.com/qingpeng2016/ai-token-mall/domain/http/repository"
-	httpx "github.com/qingpeng2016/ai-token-mall/infrastructure/http"
+	"github.com/qingpeng2016/ai-agent-paper/conf"
+	httpentity "github.com/qingpeng2016/ai-agent-paper/domain/http/entity"
+	httprepo "github.com/qingpeng2016/ai-agent-paper/domain/http/repository"
+	httpx "github.com/qingpeng2016/ai-agent-paper/infrastructure/http"
 )
 
 const methodAccountLogQuery = "alipay.data.bill.accountlog.query"

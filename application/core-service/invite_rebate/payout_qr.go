@@ -4,7 +4,7 @@ import (
 	"encoding/base64"
 	"strings"
 
-	"github.com/qingpeng2016/ai-token-mall/common/errorx"
+	"github.com/qingpeng2016/ai-agent-paper/common/errorx"
 )
 
 const payoutQRMaxBytes = 2 << 20 // 2MB

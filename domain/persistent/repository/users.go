@@ -3,7 +3,7 @@ package repository
 import (
 	"context"
 
-	"github.com/qingpeng2016/ai-token-mall/domain/persistent/entity"
+	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
@@ -39,9 +39,4 @@ type UsersRepo interface {
 	UpdateLastLogin(ctx context.Context, id uint) error
 	UpdatePassword(ctx context.Context, id uint, passwordHash, passwordPlain string) error
 	Count(ctx context.Context) (int64, error)
-}
-
-type StatsRepo interface {
-	CountUsers(ctx context.Context) (int64, error)
-	CountAccessLogs(ctx context.Context) (int64, error)
 }

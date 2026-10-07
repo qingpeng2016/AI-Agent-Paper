@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/qingpeng2016/ai-token-mall/common/errorx"
-	"github.com/qingpeng2016/ai-token-mall/domain/persistent/entity"
-	"github.com/qingpeng2016/ai-token-mall/domain/rest/response"
+	"github.com/qingpeng2016/ai-agent-paper/common/errorx"
+	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
+	"github.com/qingpeng2016/ai-agent-paper/domain/rest/response"
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
@@ -64,18 +64,6 @@ func (s *Service) TransferCommissionToBalance(ctx context.Context, userID uint, 
 			RefType:      &refType,
 			RefID:        &refID,
 			Remark:       &remarkIn,
-			CreatedAt:    now,
-		}); err != nil {
-			return errorx.ErrDbError
-		}
-
-		sentAt := now
-		if err := s.notifications.Create(ctx, tx, &entity.UserNotifications{
-			UserID:       userID,
-			Channel:      "in_app",
-			TemplateCode: "commission_transferred_to_wallet",
-			Status:       entity.NotificationInAppUnread,
-			SentAt:       &sentAt,
 			CreatedAt:    now,
 		}); err != nil {
 			return errorx.ErrDbError

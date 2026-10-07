@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"github.com/go-resty/resty/v2"
-	"github.com/qingpeng2016/ai-token-mall/common/dederi/trace"
-	"github.com/qingpeng2016/ai-token-mall/conf"
+	"github.com/qingpeng2016/ai-agent-paper/common/dederi/trace"
+	"github.com/qingpeng2016/ai-agent-paper/conf"
 )
 
 type Client struct {

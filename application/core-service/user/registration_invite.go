@@ -7,7 +7,7 @@ import (
 	"math/big"
 	"strings"
 
-	"github.com/qingpeng2016/ai-token-mall/domain/persistent/entity"
+	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
 )
 
 var (

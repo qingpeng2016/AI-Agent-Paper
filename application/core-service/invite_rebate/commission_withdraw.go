@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/qingpeng2016/ai-token-mall/common/errorx"
-	"github.com/qingpeng2016/ai-token-mall/domain/persistent/entity"
-	"github.com/qingpeng2016/ai-token-mall/domain/rest/response"
+	"github.com/qingpeng2016/ai-agent-paper/common/errorx"
+	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
+	"github.com/qingpeng2016/ai-agent-paper/domain/rest/response"
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
@@ -81,18 +81,6 @@ func (s *Service) CreateCommissionWithdrawal(ctx context.Context, userID uint, a
 			RefType:      &refType,
 			RefID:        &refID,
 			Remark:       &remark,
-			CreatedAt:    now,
-		}); err != nil {
-			return errorx.ErrDbError
-		}
-
-		sentAt := now
-		if err := s.notifications.Create(ctx, tx, &entity.UserNotifications{
-			UserID:       userID,
-			Channel:      "in_app",
-			TemplateCode: "commission_withdraw_submitted",
-			Status:       entity.NotificationInAppUnread,
-			SentAt:       &sentAt,
 			CreatedAt:    now,
 		}); err != nil {
 			return errorx.ErrDbError

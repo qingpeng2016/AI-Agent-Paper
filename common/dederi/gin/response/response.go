@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/qingpeng2016/ai-token-mall/common/errorx"
+	"github.com/qingpeng2016/ai-agent-paper/common/errorx"
 
 	"github.com/gin-gonic/gin"
 )

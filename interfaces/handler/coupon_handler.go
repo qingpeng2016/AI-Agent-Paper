@@ -3,9 +3,9 @@ package handler
 import (
 	"net/http"
 
-	couponSvc "github.com/qingpeng2016/ai-token-mall/application/core-service/coupon"
-	ginMiddleware "github.com/qingpeng2016/ai-token-mall/common/dederi/gin/middleware"
-	"github.com/qingpeng2016/ai-token-mall/common/dederi/gin/response"
+	couponSvc "github.com/qingpeng2016/ai-agent-paper/application/core-service/coupon"
+	ginMiddleware "github.com/qingpeng2016/ai-agent-paper/common/dederi/gin/middleware"
+	"github.com/qingpeng2016/ai-agent-paper/common/dederi/gin/response"
 	"github.com/gin-gonic/gin"
 )
 

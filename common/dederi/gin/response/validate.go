@@ -6,7 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
-	"github.com/qingpeng2016/ai-token-mall/common/errorx"
+	"github.com/qingpeng2016/ai-agent-paper/common/errorx"
 )
 
 // ResponseBindErr JSON 绑定 / validator 错误（避免落进「未知错误」）

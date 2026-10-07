@@ -10,14 +10,14 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 
-	couponSvc "github.com/qingpeng2016/ai-token-mall/application/core-service/coupon"
-	"github.com/qingpeng2016/ai-token-mall/common/auth"
-	"github.com/qingpeng2016/ai-token-mall/common/dederi/logger"
-	"github.com/qingpeng2016/ai-token-mall/common/errorx"
-	"github.com/qingpeng2016/ai-token-mall/domain/persistent/entity"
-	"github.com/qingpeng2016/ai-token-mall/domain/persistent/repository"
-	"github.com/qingpeng2016/ai-token-mall/domain/rest/request"
-	"github.com/qingpeng2016/ai-token-mall/domain/rest/response"
+	couponSvc "github.com/qingpeng2016/ai-agent-paper/application/core-service/coupon"
+	"github.com/qingpeng2016/ai-agent-paper/common/auth"
+	"github.com/qingpeng2016/ai-agent-paper/common/dederi/logger"
+	"github.com/qingpeng2016/ai-agent-paper/common/errorx"
+	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
+	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/repository"
+	"github.com/qingpeng2016/ai-agent-paper/domain/rest/request"
+	"github.com/qingpeng2016/ai-agent-paper/domain/rest/response"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -28,7 +28,6 @@ var cnPhonePattern = regexp.MustCompile(`^1\d{10}$`)
 type UserService struct {
 	users      repository.UsersRepo
 	wallets    repository.UserWalletFlowsRepo
-	invoices   repository.UserInvoicesRepo
 	vipConfigs repository.VipConfigRepo
 	vipDomains repository.VipDomainConfigRepo
 	coupons    *couponSvc.Service
@@ -37,7 +36,6 @@ type UserService struct {
 func NewUserService(
 	users repository.UsersRepo,
 	wallets repository.UserWalletFlowsRepo,
-	invoices repository.UserInvoicesRepo,
 	vipConfigs repository.VipConfigRepo,
 	vipDomains repository.VipDomainConfigRepo,
 	coupons *couponSvc.Service,
@@ -45,7 +43,6 @@ func NewUserService(
 	return &UserService{
 		users:      users,
 		wallets:    wallets,
-		invoices:   invoices,
 		vipConfigs: vipConfigs,
 		vipDomains: vipDomains,
 		coupons:    coupons,
@@ -127,47 +124,6 @@ func (s *UserService) ListWalletFlows(ctx context.Context, userID uint, q *reque
 		})
 	}
 	return &response.UserWalletFlowListPageResp{
-		Items:    items,
-		Total:    total,
-		Page:     page,
-		PageSize: pageSize,
-	}, nil
-}
-
-func (s *UserService) ListInvoices(ctx context.Context, userID uint, q *request.ListInvoicesQuery) (*response.UserInvoiceListPageResp, error) {
-	page := q.Page
-	if page < 1 {
-		page = 1
-	}
-	pageSize := q.PageSize
-	if pageSize < 1 {
-		pageSize = 9
-	}
-	if pageSize > 100 {
-		pageSize = 100
-	}
-	offset := (page - 1) * pageSize
-
-	total, err := s.invoices.CountByUserID(ctx, userID)
-	if err != nil {
-		return nil, errorx.ErrDbError
-	}
-	rows, err := s.invoices.ListByUserID(ctx, userID, offset, pageSize)
-	if err != nil {
-		return nil, errorx.ErrDbError
-	}
-	items := make([]response.UserInvoiceListItem, 0, len(rows))
-	for _, row := range rows {
-		items = append(items, response.UserInvoiceListItem{
-			ID:        row.ID,
-			OrderNo:   row.OrderNo,
-			Title:     row.Title,
-			Amount:    response.MoneyFrom(row.Amount),
-			Status:    row.Status,
-			CreatedAt: formatUserDateTime(row.CreatedAt),
-		})
-	}
-	return &response.UserInvoiceListPageResp{
 		Items:    items,
 		Total:    total,
 		Page:     page,

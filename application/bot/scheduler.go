@@ -7,13 +7,13 @@ import (
 	"sync"
 	"time"
 
-	couponexpire "github.com/qingpeng2016/ai-token-mall/application/bot/scripts/coupon_expire"
-	viplevelsync "github.com/qingpeng2016/ai-token-mall/application/bot/scripts/vip_level_sync"
-	botscheduleconfig "github.com/qingpeng2016/ai-token-mall/application/core-service/bot_schedule_config"
-	"github.com/qingpeng2016/ai-token-mall/common/dederi/logger"
-	"github.com/qingpeng2016/ai-token-mall/common/notification"
-	"github.com/qingpeng2016/ai-token-mall/conf"
-	entity2 "github.com/qingpeng2016/ai-token-mall/domain/persistent/entity"
+	couponexpire "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/coupon_expire"
+	viplevelsync "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/vip_level_sync"
+	botscheduleconfig "github.com/qingpeng2016/ai-agent-paper/application/core-service/bot_schedule_config"
+	"github.com/qingpeng2016/ai-agent-paper/common/dederi/logger"
+	"github.com/qingpeng2016/ai-agent-paper/common/notification"
+	"github.com/qingpeng2016/ai-agent-paper/conf"
+	entity2 "github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
 
 	"github.com/go-co-op/gocron"
 	"go.uber.org/zap"
@@ -76,7 +76,7 @@ func (s *Scheduler) Handle(configIDs ...uint) {
 	if hasConfigIDs {
 		where["id IN ?"] = configIDs
 	} else {
-		where["module IN ?"] = []string{couponexpire.ModuleAITokenMall}
+		where["module IN ?"] = []string{couponexpire.ModuleAIAgentPaper}
 		where["is_enabled = ?"] = 1
 		where["is_strategy_enabled = ?"] = 1
 	}
@@ -213,13 +213,13 @@ func (s *Scheduler) Stop() error {
 
 func (s *Scheduler) getHandleFunc(module, taskName string) func() {
 	switch module {
-	case couponexpire.ModuleAITokenMall:
-		return s.getAITokenMallHandleFunc(taskName)
+	case couponexpire.ModuleAIAgentPaper:
+		return s.getAIAgentPaperHandleFunc(taskName)
 	}
 	return nil
 }
 
-func (s *Scheduler) getAITokenMallHandleFunc(taskName string) func() {
+func (s *Scheduler) getAIAgentPaperHandleFunc(taskName string) func() {
 	switch taskName {
 	case viplevelsync.TaskVipLevelSync:
 		return func() {

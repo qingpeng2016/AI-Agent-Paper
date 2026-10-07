@@ -3,11 +3,11 @@ package handler
 import (
 	"net/http"
 
-	"github.com/qingpeng2016/ai-token-mall/application/core-service/user"
-	"github.com/qingpeng2016/ai-token-mall/common/constants"
-	ginMiddleware "github.com/qingpeng2016/ai-token-mall/common/dederi/gin/middleware"
-	"github.com/qingpeng2016/ai-token-mall/common/dederi/gin/response"
-	"github.com/qingpeng2016/ai-token-mall/domain/rest/request"
+	"github.com/qingpeng2016/ai-agent-paper/application/core-service/user"
+	"github.com/qingpeng2016/ai-agent-paper/common/constants"
+	ginMiddleware "github.com/qingpeng2016/ai-agent-paper/common/dederi/gin/middleware"
+	"github.com/qingpeng2016/ai-agent-paper/common/dederi/gin/response"
+	"github.com/qingpeng2016/ai-agent-paper/domain/rest/request"
 	"github.com/gin-gonic/gin"
 )
 
@@ -117,23 +117,6 @@ func (h *UserHandler) ListWalletFlows(c *gin.Context) {
 	var q request.ListWalletFlowsQuery
 	_ = c.ShouldBindQuery(&q)
 	data, err := h.userSvc.ListWalletFlows(c.Request.Context(), userID, &q)
-	if err != nil {
-		response.ResponseErr(c, err)
-		return
-	}
-	response.ResponseSuccess(c, data)
-}
-
-// ListInvoices 当前用户发票列表（会员中心 · 发票管理）
-func (h *UserHandler) ListInvoices(c *gin.Context) {
-	userID, ok := ginMiddleware.UserIDFromContext(c)
-	if !ok {
-		c.JSON(http.StatusUnauthorized, gin.H{"code": 401, "message": "unauthorized", "data": nil})
-		return
-	}
-	var q request.ListInvoicesQuery
-	_ = c.ShouldBindQuery(&q)
-	data, err := h.userSvc.ListInvoices(c.Request.Context(), userID, &q)
 	if err != nil {
 		response.ResponseErr(c, err)
 		return

@@ -8,11 +8,11 @@ import (
 	"github.com/shopspring/decimal"
 	"time"
 
-	"github.com/qingpeng2016/ai-token-mall/common/errorx"
-	"github.com/qingpeng2016/ai-token-mall/domain/persistent/entity"
-	"github.com/qingpeng2016/ai-token-mall/domain/persistent/repository"
-	"github.com/qingpeng2016/ai-token-mall/domain/rest/request"
-	"github.com/qingpeng2016/ai-token-mall/domain/rest/response"
+	"github.com/qingpeng2016/ai-agent-paper/common/errorx"
+	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
+	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/repository"
+	"github.com/qingpeng2016/ai-agent-paper/domain/rest/request"
+	"github.com/qingpeng2016/ai-agent-paper/domain/rest/response"
 	"gorm.io/gorm"
 )
 
@@ -29,8 +29,7 @@ type Service struct {
 	records      repository.UserCommissionRecordsRepo
 	withdraws    repository.UserCommissionWithdrawalsRepo
 	payouts      repository.UserCommissionPayoutConfigRepo
-	wallets      repository.UserWalletFlowsRepo
-	notifications repository.UserNotificationsRepo
+	wallets repository.UserWalletFlowsRepo
 }
 
 func NewService(
@@ -41,17 +40,15 @@ func NewService(
 	withdraws repository.UserCommissionWithdrawalsRepo,
 	payouts repository.UserCommissionPayoutConfigRepo,
 	wallets repository.UserWalletFlowsRepo,
-	notifications repository.UserNotificationsRepo,
 ) *Service {
 	return &Service{
-		tx:            tx,
-		users:         users,
-		vipConfigs:    vipConfigs,
-		records:       records,
-		withdraws:     withdraws,
-		payouts:       payouts,
-		wallets:       wallets,
-		notifications: notifications,
+		tx:         tx,
+		users:      users,
+		vipConfigs: vipConfigs,
+		records:    records,
+		withdraws:  withdraws,
+		payouts:    payouts,
+		wallets:    wallets,
 	}
 }
 

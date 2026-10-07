@@ -10,7 +10,7 @@ import {
   type InviteRebateMember,
   type InviteRebateOverview,
   type InviteWithdrawalRecord,
-} from '@ai-token-mall/shared'
+} from '@ai-agent-paper/shared'
 
 type PanelTabId = 'details' | 'withdrawals' | 'members' | 'rebates'
 

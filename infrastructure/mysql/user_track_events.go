@@ -3,8 +3,8 @@ package mysql
 import (
 	"context"
 
-	"github.com/qingpeng2016/ai-token-mall/domain/persistent/entity"
-	"github.com/qingpeng2016/ai-token-mall/domain/persistent/repository"
+	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
+	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/repository"
 	"gorm.io/gorm"
 )
 

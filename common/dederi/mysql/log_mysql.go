@@ -3,7 +3,7 @@ package mysqlclient
 import (
 	"context"
 	"fmt"
-	logger2 "github.com/qingpeng2016/ai-token-mall/common/dederi/logger"
+	logger2 "github.com/qingpeng2016/ai-agent-paper/common/dederi/logger"
 	"go.uber.org/zap"
 	"gorm.io/gorm/logger"
 	"gorm.io/gorm/utils"

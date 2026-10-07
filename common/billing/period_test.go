@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/qingpeng2016/ai-token-mall/common/constants"
+	"github.com/qingpeng2016/ai-agent-paper/common/constants"
 )
 
 func TestCountUpgradeBillingCycles(t *testing.T) {

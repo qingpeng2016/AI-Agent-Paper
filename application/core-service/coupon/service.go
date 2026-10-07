@@ -8,10 +8,10 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 
-	"github.com/qingpeng2016/ai-token-mall/common/errorx"
-	"github.com/qingpeng2016/ai-token-mall/domain/persistent/entity"
-	"github.com/qingpeng2016/ai-token-mall/domain/persistent/repository"
-	"github.com/qingpeng2016/ai-token-mall/domain/rest/response"
+	"github.com/qingpeng2016/ai-agent-paper/common/errorx"
+	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
+	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/repository"
+	"github.com/qingpeng2016/ai-agent-paper/domain/rest/response"
 	"github.com/shopspring/decimal"
 )
 

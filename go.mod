@@ -1,4 +1,4 @@
-module github.com/qingpeng2016/ai-token-mall
+module github.com/qingpeng2016/ai-agent-paper
 
 go 1.22.5
 

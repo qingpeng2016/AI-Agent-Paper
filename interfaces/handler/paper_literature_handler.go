@@ -4,9 +4,9 @@ import (
 	"strconv"
 	"strings"
 
-	papersvc "github.com/qingpeng2016/ai-token-mall/application/core-service/paper"
-	"github.com/qingpeng2016/ai-token-mall/common/dederi/gin/response"
-	"github.com/qingpeng2016/ai-token-mall/common/errorx"
+	papersvc "github.com/qingpeng2016/ai-agent-paper/application/core-service/paper"
+	"github.com/qingpeng2016/ai-agent-paper/common/dederi/gin/response"
+	"github.com/qingpeng2016/ai-agent-paper/common/errorx"
 	"github.com/gin-gonic/gin"
 )
 

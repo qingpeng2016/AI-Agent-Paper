@@ -7,8 +7,8 @@ import (
 
 	"fmt"
 
-	"github.com/qingpeng2016/ai-token-mall/domain/persistent/entity"
-	"github.com/qingpeng2016/ai-token-mall/domain/persistent/repository"
+	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
+	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/repository"
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -145,35 +145,14 @@ func (r *UsersImpl) ListIDAndVipConfigID(ctx context.Context, offset, limit int)
 }
 
 func (r *UsersImpl) SumInviteeCompletedOrderAmountByInviter(ctx context.Context, inviterUserID uint) (decimal.Decimal, error) {
-	var total decimal.Decimal
-	err := r.db.WithContext(ctx).Table("users AS invitee").
-		Select("COALESCE(SUM(o.total_amount), 0)").
-		Joins("INNER JOIN user_orders o ON o.user_id = invitee.id AND o.status = ?", "completed").
-		Where("invitee.parent_user_id = ?", inviterUserID).
-		Scan(&total).Error
-	return total, err
+	_ = ctx
+	_ = inviterUserID
+	return decimal.Zero, nil
 }
 
 func (r *UsersImpl) SumInviteeCompletedOrderAmountGroupByInviter(ctx context.Context) (map[uint]decimal.Decimal, error) {
-	type row struct {
-		InviterID uint            `gorm:"column:inviter_id"`
-		Total     decimal.Decimal `gorm:"column:total"`
-	}
-	var rows []row
-	err := r.db.WithContext(ctx).Table("users AS invitee").
-		Select("invitee.parent_user_id AS inviter_id, COALESCE(SUM(o.total_amount), 0) AS total").
-		Joins("INNER JOIN user_orders o ON o.user_id = invitee.id AND o.status = ?", "completed").
-		Where("invitee.parent_user_id > ?", 0).
-		Group("invitee.parent_user_id").
-		Scan(&rows).Error
-	if err != nil {
-		return nil, err
-	}
-	out := make(map[uint]decimal.Decimal, len(rows))
-	for _, r := range rows {
-		out[r.InviterID] = r.Total
-	}
-	return out, nil
+	_ = ctx
+	return map[uint]decimal.Decimal{}, nil
 }
 
 func (r *UsersImpl) UpdateVipConfigID(ctx context.Context, userID, vipConfigID uint) error {
@@ -286,25 +265,5 @@ func (r *UsersImpl) UpdatePassword(ctx context.Context, id uint, passwordHash, p
 func (r *UsersImpl) Count(ctx context.Context) (int64, error) {
 	var n int64
 	err := r.db.WithContext(ctx).Model(&entity.Users{}).Count(&n).Error
-	return n, err
-}
-
-type StatsImpl struct {
-	db *gorm.DB
-}
-
-func NewStatsImpl(db *gorm.DB) repository.StatsRepo {
-	return &StatsImpl{db: db}
-}
-
-func (r *StatsImpl) CountUsers(ctx context.Context) (int64, error) {
-	var n int64
-	err := r.db.WithContext(ctx).Model(&entity.Users{}).Count(&n).Error
-	return n, err
-}
-
-func (r *StatsImpl) CountAccessLogs(ctx context.Context) (int64, error) {
-	var n int64
-	err := r.db.WithContext(ctx).Model(&entity.UserAccessLogs{}).Count(&n).Error
 	return n, err
 }

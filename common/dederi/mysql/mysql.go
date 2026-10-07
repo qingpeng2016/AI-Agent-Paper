@@ -2,7 +2,7 @@ package mysqlclient
 
 import (
 	"fmt"
-	"github.com/qingpeng2016/ai-token-mall/conf"
+	"github.com/qingpeng2016/ai-agent-paper/conf"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm/logger"
 	"gorm.io/plugin/dbresolver"

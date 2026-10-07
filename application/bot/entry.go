@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/go-co-op/gocron"
-	"github.com/qingpeng2016/ai-token-mall/common/dederi/logger"
-	"github.com/qingpeng2016/ai-token-mall/common/notification"
-	"github.com/qingpeng2016/ai-token-mall/conf"
+	"github.com/qingpeng2016/ai-agent-paper/common/dederi/logger"
+	"github.com/qingpeng2016/ai-agent-paper/common/notification"
+	"github.com/qingpeng2016/ai-agent-paper/conf"
 	"go.uber.org/zap"
 )
 
@@ -33,7 +33,7 @@ func NewEntry(scheduler *Scheduler) *Entry {
 
 // Start 启动 Bot
 func (e *Entry) Start() error {
-	_ = notification.GetGlobalNotificationManager().SendInfoAlert(context.Background(), "AI-Token-Mall bot 启动", []notification.FieldPair{
+	_ = notification.GetGlobalNotificationManager().SendInfoAlert(context.Background(), "AI-Agent-Paper bot 启动", []notification.FieldPair{
 		{Key: "机器", Value: conf.Get_MACHINE_NAME()},
 	})
 
@@ -55,7 +55,7 @@ func (e *Entry) Start() error {
 	e.ns.SetMaxConcurrentJobs(1, gocron.WaitMode)
 	e.ns.StartAsync()
 
-	logger.InfoZ(context.Background(), "bot Start", zap.String("message", "AI-Token-Mall bot 已启动"))
+	logger.InfoZ(context.Background(), "bot Start", zap.String("message", "AI-Agent-Paper bot 已启动"))
 	return nil
 }
 
