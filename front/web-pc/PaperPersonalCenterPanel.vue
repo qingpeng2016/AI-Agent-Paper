@@ -262,11 +262,11 @@ defineExpose({ reloadLogs })
             <button
               v-if="isLoggedIn()"
               type="button"
-              class="pc-btn-recharge"
+              class="pc-btn-logout"
               :disabled="logoutLoading"
               @click="onLogout"
             >
-              {{ logoutLoading ? '退出中…' : '退出' }}
+              {{ logoutLoading ? '退出登录中…' : '退出登录' }}
             </button>
           </p>
         </div>
@@ -574,6 +574,29 @@ defineExpose({ reloadLogs })
   opacity: 0.65;
   cursor: not-allowed;
   transform: none;
+}
+
+.pc-btn-logout {
+  padding: 0;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: #0f172a;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.pc-btn-logout:hover:not(:disabled) {
+  color: #334155;
+}
+
+.pc-btn-logout:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
 }
 
 .pc-plan-section {
