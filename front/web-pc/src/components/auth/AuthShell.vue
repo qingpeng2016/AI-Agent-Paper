@@ -180,7 +180,7 @@ defineProps<{
 }
 
 .auth-brand-headline {
-  margin: 0 0 16px;
+  margin: 0 0 28px;
   font-size: 36px;
   font-weight: 800;
   line-height: 1.15;
@@ -188,7 +188,7 @@ defineProps<{
 }
 
 .auth-brand-lead {
-  margin: 0 0 32px;
+  margin: 0 0 44px;
   max-width: 380px;
   font-size: 15px;
   line-height: 1.65;
@@ -201,7 +201,7 @@ defineProps<{
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 22px;
 }
 
 .auth-brand-list li {
