@@ -9,6 +9,7 @@ export type PaperModuleId =
   | 'my-manuscripts'
   | 'invite-rebate'
   | 'personal-center'
+  /** 操作日志等；侧栏无独立入口（环境配置在个人中心 Tab） */
   | 'environment'
 
 export type PaperModuleMeta = {
@@ -59,11 +60,6 @@ export const PAPER_MODULES: PaperModuleMeta[] = [
     description: '切换、编辑与归档工作台下的论文项目（paper_manuscript）',
   },
   {
-    id: 'environment',
-    label: '环境配置',
-    description: '默认学科、文献源、执行强度与审计等级等科研偏好',
-  },
-  {
     id: 'invite-rebate',
     label: '邀请返利',
     description: '推广域名、返佣等级、邀请成员与佣金提现（与会员中心一致）',
@@ -71,7 +67,12 @@ export const PAPER_MODULES: PaperModuleMeta[] = [
   {
     id: 'personal-center',
     label: '个人中心',
-    description: '我的信息、资金记录与操作日志',
+    description: '我的信息、环境配置、资金记录与操作日志',
+  },
+  {
+    id: 'environment',
+    label: '环境配置',
+    description: '默认科研偏好（入口在个人中心 · 环境配置 Tab）',
   },
 ]
 
@@ -102,8 +103,8 @@ export const PAPER_MODULE_GROUPS: PaperModuleGroup[] = [
   },
   {
     id: 'resources',
-    label: '账户与设置',
-    moduleIds: ['environment', 'invite-rebate', 'personal-center'],
+    label: '账户与返利',
+    moduleIds: ['invite-rebate', 'personal-center'],
   },
 ]
 

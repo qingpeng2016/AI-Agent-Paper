@@ -9,8 +9,9 @@ import {
 } from '@ai-agent-paper/shared'
 import { userApi } from '@/api'
 import { clearSessionUser, getSessionUser, isLoggedIn } from '@/composables/useSessionUser'
+import PaperEnvironmentPanel from './PaperEnvironmentPanel.vue'
 import PaperOperationLogPanel from './PaperOperationLogPanel.vue'
-import { getOperationLogs } from './types'
+import { getOperationLogs, type EnvironmentPreferenceForm } from './types'
 
 type StoredUserProfile = {
   id?: number
@@ -22,11 +23,16 @@ type StoredUserProfile = {
   last_login_at?: string | null
 }
 
-type PersonalCenterTabId = 'profile' | 'wallet-records' | 'operation-log'
+type PersonalCenterTabId = 'profile' | 'environment' | 'wallet-records' | 'operation-log'
 
-defineProps<{
+const props = defineProps<{
   manuscriptId: string
   manuscriptTitle: string
+  envPreference: EnvironmentPreferenceForm
+}>()
+
+const emit = defineEmits<{
+  environmentSaved: []
 }>()
 
 const activeTab = ref<PersonalCenterTabId>('profile')
@@ -50,6 +56,7 @@ const walletFlowTypeLabel: Record<string, string> = {
 
 const tabs: { id: PersonalCenterTabId; label: string }[] = [
   { id: 'profile', label: '我的信息' },
+  { id: 'environment', label: '环境配置' },
   { id: 'wallet-records', label: '资金记录' },
   { id: 'operation-log', label: '操作日志' },
 ]
@@ -328,6 +335,14 @@ defineExpose({ reloadLogs })
         </ul>
         <p v-else class="pc-moves-empty">暂无 Token 变动记录</p>
       </section>
+    </div>
+
+    <div v-show="activeTab === 'environment'" class="pc-pane" role="tabpanel">
+      <PaperEnvironmentPanel
+        embedded
+        :env-preference="props.envPreference"
+        @environment-saved="emit('environmentSaved')"
+      />
     </div>
 
     <div v-show="activeTab === 'wallet-records'" class="pc-pane" role="tabpanel">

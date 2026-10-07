@@ -26,7 +26,6 @@ import { DEMO_MODULE_TOKEN_ESTIMATES } from './demoOperationLogs'
 import PaperModuleNavIcon from './PaperModuleNavIcon.vue'
 import PaperMyManuscriptsPanel from './PaperMyManuscriptsPanel.vue'
 import PaperInviteRebatePanel from './PaperInviteRebatePanel.vue'
-import PaperEnvironmentPanel from './PaperEnvironmentPanel.vue'
 import PaperPersonalCenterPanel from './PaperPersonalCenterPanel.vue'
 import PaperSelect from './PaperSelect.vue'
 import PaperWorkflowPanels from './PaperWorkflowPanels.vue'
@@ -226,13 +225,11 @@ const currentManuscript = computed(
 )
 
 const isMyManuscriptsModule = computed(() => activeModule.value === 'my-manuscripts')
-const isEnvironmentModule = computed(() => activeModule.value === 'environment')
 const isInviteRebateModule = computed(() => activeModule.value === 'invite-rebate')
 const isPersonalCenterModule = computed(() => activeModule.value === 'personal-center')
 const isUtilityModule = computed(
   () =>
     isMyManuscriptsModule.value ||
-    isEnvironmentModule.value ||
     isInviteRebateModule.value ||
     isPersonalCenterModule.value,
 )
@@ -1002,12 +999,6 @@ async function onPrimaryAction() {
         @update-manuscripts="onManuscriptsListUpdate"
       />
 
-      <PaperEnvironmentPanel
-        v-else-if="activeModule === 'environment'"
-        :env-preference="envPreference"
-        @environment-saved="onEnvironmentSaved"
-      />
-
       <PaperInviteRebatePanel v-else-if="activeModule === 'invite-rebate'" />
 
       <PaperPersonalCenterPanel
@@ -1015,6 +1006,8 @@ async function onPrimaryAction() {
         ref="personalCenterPanelRef"
         :manuscript-id="activeManuscriptId"
         :manuscript-title="currentManuscript?.title ?? '未命名'"
+        :env-preference="envPreference"
+        @environment-saved="onEnvironmentSaved"
       />
 
       <PaperWorkflowPanels

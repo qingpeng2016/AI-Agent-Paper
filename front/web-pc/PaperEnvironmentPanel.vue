@@ -9,9 +9,14 @@ import {
   type EnvironmentPreferenceForm,
 } from './types'
 
-const props = defineProps<{
-  envPreference: EnvironmentPreferenceForm
-}>()
+const props = withDefaults(
+  defineProps<{
+    envPreference: EnvironmentPreferenceForm
+    /** 嵌入个人中心 Tab：无外层卡片 */
+    embedded?: boolean
+  }>(),
+  { embedded: false },
+)
 
 const emit = defineEmits<{
   environmentSaved: []
@@ -68,7 +73,7 @@ async function saveEnvironment() {
 </script>
 
 <template>
-  <section class="pc-panel">
+  <component :is="embedded ? 'div' : 'section'" :class="embedded ? 'pc-embed' : 'pc-panel'">
     <div class="pc-pane pc-pane--env" role="region" aria-label="环境配置">
       <p class="pc-lead">
         新建工作流时的默认科研偏好与文献策略；保存后对后续「选题发现」等模块预填生效。
@@ -129,10 +134,14 @@ async function saveEnvironment() {
         </button>
       </div>
     </div>
-  </section>
+  </component>
 </template>
 
 <style scoped>
+.pc-embed {
+  padding: 0;
+}
+
 .pc-panel {
   padding: 20px 26px 28px;
   background: #fff;
