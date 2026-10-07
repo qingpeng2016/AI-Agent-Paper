@@ -2,22 +2,31 @@
 import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
-  formatCny,
   formatSignedCny,
   signedMoneyClass,
-  type UserProfile,
   type UserWalletFlowItem,
 } from '@ai-agent-paper/shared'
 import { userApi } from '@/api'
-import { getSessionUser, isLoggedIn, setSessionUser } from '@/composables/useSessionUser'
+import { getSessionUser, isLoggedIn } from '@/composables/useSessionUser'
 import PaperOperationLogPanel from './PaperOperationLogPanel.vue'
 import PaperSelect from './PaperSelect.vue'
 import {
   DISCIPLINE_OPTIONS,
   ENV_PREFERENCE_STORAGE_KEY,
   LITERATURE_SOURCE_OPTIONS,
+  getOperationLogs,
   type EnvironmentPreferenceForm,
 } from './types'
+
+type StoredUserProfile = {
+  id?: number
+  email?: string | null
+  phone?: string | null
+  nickname?: string | null
+  wallet_balance?: number | string
+  created_at?: string
+  last_login_at?: string | null
+}
 
 type PersonalCenterTabId = 'profile' | 'environment' | 'wallet-records' | 'operation-log'
 
@@ -34,8 +43,7 @@ const emit = defineEmits<{
 const activeTab = ref<PersonalCenterTabId>('profile')
 const envSaving = ref(false)
 const operationLogRef = ref<InstanceType<typeof PaperOperationLogPanel> | null>(null)
-const profile = ref<UserProfile | null>(getSessionUser())
-const profileLoading = ref(false)
+const profileRefreshTick = ref(0)
 
 const walletFlows = ref<UserWalletFlowItem[]>([])
 const walletFlowsTotal = ref(0)
@@ -52,12 +60,6 @@ const walletFlowTypeLabel: Record<string, string> = {
   withdraw: '提现',
 }
 
-const statusLabel: Record<string, string> = {
-  active: '正常',
-  disabled: '已禁用',
-  banned: '已封禁',
-}
-
 const tabs: { id: PersonalCenterTabId; label: string }[] = [
   { id: 'profile', label: '我的信息' },
   { id: 'environment', label: '默认配置' },
@@ -65,22 +67,91 @@ const tabs: { id: PersonalCenterTabId; label: string }[] = [
   { id: 'operation-log', label: '操作日志' },
 ]
 
+const sessionUser = computed((): StoredUserProfile | null => {
+  void profileRefreshTick.value
+  const u = getSessionUser()
+  return u as StoredUserProfile | null
+})
+
+function parseWalletBalance(raw: number | string | undefined | null): number {
+  if (raw == null || raw === '') return 12_800
+  const n = typeof raw === 'number' ? raw : parseFloat(String(raw))
+  return Number.isFinite(n) ? n : 12_800
+}
+
 const displayName = computed(() => {
-  const u = profile.value
+  const u = sessionUser.value
   return u?.nickname?.trim() || '科研用户'
 })
 
 const accountLabel = computed(() => {
-  const u = profile.value
-  if (!u) return '未登录'
-  return u.email?.trim() || u.phone?.trim() || `用户 #${u.id}`
+  const u = sessionUser.value
+  return u?.email?.trim() || u?.phone?.trim() || '演示账号 · 未登录'
 })
 
 const avatarLetter = computed(() => displayName.value.slice(0, 1).toUpperCase())
 
-function displayField(value: string | null | undefined, fallback = '—') {
-  const v = value?.trim()
-  return v || fallback
+const walletBalance = computed(() => parseWalletBalance(sessionUser.value?.wallet_balance))
+
+const tokenUsage = computed(() => {
+  void profileRefreshTick.value
+  const logs = getOperationLogs().filter((e) => e.status === 'success')
+  const now = new Date()
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime()
+  let monthUsed = 0
+  let totalUsed = 0
+  for (const row of logs) {
+    totalUsed += row.tokensTotal
+    if (new Date(row.occurredAt).getTime() >= monthStart) {
+      monthUsed += row.tokensTotal
+    }
+  }
+  return { monthUsed, totalUsed }
+})
+
+const demoPlanLimit = 50_000
+const demoPlanUsed = computed(() => tokenUsage.value.totalUsed)
+const demoPlanPercent = computed(() =>
+  Math.min(100, Math.round((demoPlanUsed.value / demoPlanLimit) * 100)),
+)
+
+type TokenMoveRow = {
+  id: string
+  at: string
+  label: string
+  delta: number
+  kind: 'recharge' | 'consume'
+}
+
+const tokenMoveRecords = computed((): TokenMoveRow[] => {
+  void profileRefreshTick.value
+  const fromLogs = getOperationLogs()
+    .filter((e) => e.status === 'success' && e.tokensTotal > 0)
+    .map((e) => ({
+      id: e.id,
+      at: e.occurredAt,
+      label: `${e.moduleLabel} · ${e.action}`,
+      delta: -e.tokensTotal,
+      kind: 'consume' as const,
+    }))
+  const demoRecharge: TokenMoveRow = {
+    id: 'demo-recharge',
+    at: new Date(Date.now() - 86400000 * 3).toISOString(),
+    label: '余额充值（演示）',
+    delta: 10_000,
+    kind: 'recharge',
+  }
+  return [demoRecharge, ...fromLogs].sort(
+    (a, b) => new Date(b.at).getTime() - new Date(a.at).getTime(),
+  )
+})
+
+function formatTokens(n: number) {
+  return n.toLocaleString('zh-CN')
+}
+
+function onRecharge() {
+  ElMessage.info('余额充值请前往会员中心（演示）')
 }
 
 function apiErrorMessage(e: unknown, fallback: string) {
@@ -89,24 +160,6 @@ function apiErrorMessage(e: unknown, fallback: string) {
     return '未登录或登录已失效，请重新登录后再试'
   }
   return msg || fallback
-}
-
-async function loadProfile() {
-  if (!isLoggedIn()) {
-    profile.value = getSessionUser()
-    return
-  }
-  profileLoading.value = true
-  try {
-    const u = await userApi.me()
-    profile.value = u
-    setSessionUser(u)
-  } catch (e) {
-    ElMessage.error(apiErrorMessage(e, '加载账户信息失败'))
-    profile.value = getSessionUser()
-  } finally {
-    profileLoading.value = false
-  }
 }
 
 async function loadWalletFlows() {
@@ -203,10 +256,11 @@ async function saveEnvironment() {
 
 function reloadLogs() {
   operationLogRef.value?.reload()
+  profileRefreshTick.value += 1
 }
 
 watch(activeTab, (tab) => {
-  if (tab === 'profile') void loadProfile()
+  if (tab === 'profile') profileRefreshTick.value += 1
   if (tab === 'wallet-records') {
     walletFlowsPage.value = 1
     void loadWalletFlows()
@@ -216,8 +270,6 @@ watch(activeTab, (tab) => {
 watch(walletFlowsPage, () => {
   if (activeTab.value === 'wallet-records') void loadWalletFlows()
 })
-
-void loadProfile()
 
 defineExpose({ reloadLogs })
 </script>
@@ -246,59 +298,64 @@ defineExpose({ reloadLogs })
           <h2 class="pc-profile-name">{{ displayName }}</h2>
           <p class="pc-profile-account">{{ accountLabel }}</p>
         </div>
-        <button
-          type="button"
-          class="pc-btn-secondary pc-btn--compact pc-profile-refresh"
-          :disabled="profileLoading"
-          @click="loadProfile"
-        >
-          {{ profileLoading ? '刷新中…' : '刷新' }}
-        </button>
       </div>
 
-      <p v-if="!isLoggedIn()" class="pc-lead">登录后可查看完整账户信息与余额。</p>
-
-      <dl v-else class="pc-metrics">
+      <dl class="pc-metrics">
         <div class="pc-metric">
-          <dt>钱包余额</dt>
-          <dd class="pc-metric-value">{{ formatCny(profile?.wallet_balance ?? 0) }}</dd>
+          <dt>Token 余额</dt>
+          <dd class="pc-metric-inline">
+            <span class="pc-metric-value">{{ formatTokens(walletBalance) }}</span>
+          </dd>
         </div>
         <div class="pc-metric">
-          <dt>佣金余额</dt>
-          <dd class="pc-metric-value">{{ formatCny(profile?.commission_balance ?? 0) }}</dd>
+          <dt>本月已用</dt>
+          <dd class="pc-metric-inline">
+            <span class="pc-metric-value">{{ formatTokens(tokenUsage.monthUsed) }}</span>
+          </dd>
+        </div>
+        <div class="pc-metric pc-metric--with-action">
+          <dt>累计消耗</dt>
+          <dd class="pc-metric-inline">
+            <span class="pc-metric-value">{{ formatTokens(tokenUsage.totalUsed) }}</span>
+            <button type="button" class="pc-btn-recharge" @click="onRecharge">充值</button>
+          </dd>
         </div>
       </dl>
 
-      <dl class="pc-info-grid">
-        <div class="pc-info-item">
-          <dt>用户 ID</dt>
-          <dd>{{ profile?.id ?? '—' }}</dd>
+      <section class="pc-plan-section">
+        <h3 class="pc-section-title pc-plan-title">套餐用量</h3>
+        <div class="pc-plan-bar">
+          <div class="pc-plan-bar-fill" :style="{ width: `${demoPlanPercent}%` }" />
         </div>
-        <div class="pc-info-item">
-          <dt>昵称</dt>
-          <dd>{{ displayField(profile?.nickname ?? undefined) }}</dd>
-        </div>
-        <div class="pc-info-item">
-          <dt>邮箱</dt>
-          <dd>{{ displayField(profile?.email ?? undefined) }}</dd>
-        </div>
-        <div class="pc-info-item">
-          <dt>手机号</dt>
-          <dd>{{ displayField(profile?.phone ?? undefined) }}</dd>
-        </div>
-        <div class="pc-info-item">
-          <dt>账号状态</dt>
-          <dd>{{ statusLabel[profile?.status ?? ''] ?? profile?.status ?? '—' }}</dd>
-        </div>
-        <div class="pc-info-item">
-          <dt>注册时间</dt>
-          <dd>{{ profile?.created_at ? formatDate(profile.created_at) : '—' }}</dd>
-        </div>
-        <div class="pc-info-item">
-          <dt>最后登录</dt>
-          <dd>{{ profile?.last_login_at ? formatDate(profile.last_login_at) : '—' }}</dd>
-        </div>
-      </dl>
+        <p class="pc-plan-meta">
+          已用 <strong>{{ formatTokens(demoPlanUsed) }}</strong> /
+          {{ formatTokens(demoPlanLimit) }} tokens（演示额度）
+        </p>
+      </section>
+
+      <section class="pc-moves-section">
+        <h3 class="pc-section-title">Token 动态</h3>
+        <ul v-if="tokenMoveRecords.length" class="pc-moves-list">
+          <li v-for="item in tokenMoveRecords" :key="item.id" class="pc-move-row">
+            <div class="pc-move-main">
+              <span class="pc-move-type" :class="`pc-move-type--${item.kind}`">
+                {{ item.kind === 'recharge' ? '充值' : '消耗' }}
+              </span>
+              <span class="pc-move-label">{{ item.label }}</span>
+            </div>
+            <div class="pc-move-side">
+              <span
+                class="pc-move-delta"
+                :class="item.delta > 0 ? 'pc-move-delta--plus' : 'pc-move-delta--minus'"
+              >
+                {{ item.delta > 0 ? '+' : '' }}{{ formatTokens(Math.abs(item.delta)) }}
+              </span>
+              <time class="pc-move-time">{{ formatDate(item.at) }}</time>
+            </div>
+          </li>
+        </ul>
+        <p v-else class="pc-moves-empty">暂无 Token 变动记录</p>
+      </section>
     </div>
 
     <div v-show="activeTab === 'environment'" class="pc-pane pc-pane--env" role="tabpanel">
@@ -473,10 +530,6 @@ defineExpose({ reloadLogs })
   margin-bottom: 18px;
 }
 
-.pc-profile-refresh {
-  margin-left: auto;
-}
-
 .pc-avatar {
   display: flex;
   align-items: center;
@@ -502,51 +555,6 @@ defineExpose({ reloadLogs })
   margin: 0;
   font-size: 13px;
   color: #64748b;
-}
-
-.pc-info-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 14px 24px;
-  margin: 0;
-  padding: 20px 0 0;
-  border-top: 1px solid #f1f5f9;
-}
-
-.pc-info-item dt {
-  margin: 0 0 4px;
-  font-size: 12px;
-  font-weight: 500;
-  color: #94a3b8;
-}
-
-.pc-info-item dd {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 500;
-  color: #1e293b;
-  word-break: break-all;
-}
-
-.pc-btn-secondary {
-  padding: 8px 16px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #334155;
-  background: #fff;
-  border: 1px solid #cbd5e1;
-  border-radius: 10px;
-  cursor: pointer;
-}
-
-.pc-btn-secondary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.pc-btn--compact {
-  padding: 7px 14px;
-  font-size: 13px;
 }
 
 .pc-metrics {
@@ -620,6 +628,157 @@ defineExpose({ reloadLogs })
   font-size: 20px;
   font-weight: 700;
   line-height: 1.2;
+}
+
+.pc-btn-recharge {
+  padding: 8px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--atm-gradient, linear-gradient(135deg, #7c3aed, #6366f1));
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  box-shadow: 0 6px 20px rgba(91, 33, 182, 0.28);
+  transition:
+    transform 0.12s,
+    opacity 0.12s;
+}
+
+.pc-btn-recharge:hover {
+  transform: translateY(-1px);
+}
+
+.pc-plan-section {
+  margin-bottom: 24px;
+  padding: 0 0 4px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.pc-section-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.pc-plan-title {
+  margin-bottom: 12px;
+}
+
+.pc-plan-bar {
+  height: 8px;
+  overflow: hidden;
+  background: #e2e8f0;
+  border-radius: 999px;
+}
+
+.pc-plan-bar-fill {
+  height: 100%;
+  background: #64748b;
+  border-radius: 999px;
+  transition: width 0.35s ease;
+}
+
+.pc-plan-meta {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.pc-plan-meta strong {
+  color: #334155;
+}
+
+.pc-moves-section {
+  padding-top: 4px;
+}
+
+.pc-moves-list {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid #e8eaf0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.pc-move-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.pc-move-row:last-child {
+  border-bottom: none;
+}
+
+.pc-move-main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  min-width: 0;
+}
+
+.pc-move-type {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 6px;
+}
+
+.pc-move-type--recharge {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.pc-move-type--consume {
+  color: #5b21b6;
+  background: #ede9fe;
+}
+
+.pc-move-label {
+  font-size: 13px;
+  color: #334155;
+  line-height: 1.4;
+}
+
+.pc-move-side {
+  flex-shrink: 0;
+  text-align: right;
+}
+
+.pc-move-delta {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.pc-move-delta--plus {
+  color: #059669;
+}
+
+.pc-move-delta--minus {
+  color: #4f46e5;
+}
+
+.pc-move-time {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.pc-moves-empty {
+  margin: 12px 0 0;
+  font-size: 13px;
+  color: #94a3b8;
 }
 
 .pc-table-wrap {
