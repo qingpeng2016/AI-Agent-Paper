@@ -49,6 +49,18 @@ const router = createRouter({
       ],
     },
     {
+      path: '/workbench',
+      component: () => import('@/layouts/WorkbenchLayout.vue'),
+      children: [
+        {
+          path: '',
+          name: 'paper-workbench',
+          component: () => import('@/views/paper/PaperWorkbenchView.vue'),
+          meta: { requiresAuth: true },
+        },
+      ],
+    },
+    {
       path: '/',
       component: () => import('@/layouts/AuthLayout.vue'),
       children: [

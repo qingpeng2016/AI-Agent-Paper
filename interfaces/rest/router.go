@@ -30,6 +30,7 @@ type Router struct {
 	userAPIKeyHandler          *handler.UserAPIKeyHandler
 	couponHandler              *handler.CouponHandler
 	trackingHandler            *handler.TrackingHandler
+	paperLiteratureHandler     *handler.PaperLiteratureHandler
 }
 
 func NewRouter(
@@ -46,6 +47,7 @@ func NewRouter(
 	userAPIKeyHandler *handler.UserAPIKeyHandler,
 	couponHandler *handler.CouponHandler,
 	trackingHandler *handler.TrackingHandler,
+	paperLiteratureHandler *handler.PaperLiteratureHandler,
 ) *Router {
 	return &Router{
 		setting:                   setting,
@@ -61,6 +63,7 @@ func NewRouter(
 		userAPIKeyHandler:       userAPIKeyHandler,
 		couponHandler:           couponHandler,
 		trackingHandler:         trackingHandler,
+		paperLiteratureHandler:  paperLiteratureHandler,
 	}
 }
 
@@ -118,6 +121,17 @@ func (r *Router) setupRouters() *gin.Engine {
 		userAuth.POST("/users/api-team/members", r.userAPIKeyHandler.AddTeamMember)
 		userAuth.GET("/users/api-team/enterprise-inquiry", r.userAPIKeyHandler.GetEnterpriseInquiry)
 		userAuth.POST("/users/api-team/enterprise-inquiry", r.userAPIKeyHandler.SubmitEnterpriseInquiry)
+	}
+
+	// 服务端代请求外部 API（文献库等）；联调测试暂不鉴权
+	thirdParty := engine.Group("/api/v1/third-party")
+	{
+		literature := thirdParty.Group("/literature")
+		{
+			literature.GET("/arxiv", r.paperLiteratureHandler.SearchArxiv)
+			literature.GET("/openalex", r.paperLiteratureHandler.SearchOpenAlex)
+			literature.GET("/semantic-scholar", r.paperLiteratureHandler.SearchSemanticScholar)
+		}
 	}
 
 	// 需登录；正式网关回调另开 /api/v1/payments/notify 且无鉴权

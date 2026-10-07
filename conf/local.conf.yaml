@@ -45,3 +45,17 @@ notification:
     error_webhook_url: "https://open.larksuite.com/open-apis/bot/v2/hook/63cb5b8a-86f9-4fc0-9a2a-978676ab2be2"
     service_name: "ai-token-mall"
     timeout: 10
+
+# 文献检索（Paper Agent RAG）
+# arxiv：无需 key/token
+# openalex：无需 key；建议填 mailto（User-Agent 礼貌池，非 token）
+# semantic_scholar：api_key 可选（Header x-api-key）；不配也能用，限流更严。也可用环境变量 SEMANTIC_SCHOLAR_API_KEY
+literature:
+  arxiv:
+    base_url: "https://export.arxiv.org/api/query"
+  openalex:
+    base_url: "https://api.openalex.org/works"
+    mailto: ""
+  semantic_scholar:
+    base_url: "https://api.semanticscholar.org/graph/v1/paper/search"
+    api_key: ""

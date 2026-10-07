@@ -1223,9 +1223,9 @@ async function confirmAddTeamMember() {
           </h1>
         </div>
         <div class="member-hero-actions">
-          <button type="button" class="hero-btn hero-btn--light" @click="openCatalogPicker">
-            选购套餐
-          </button>
+          <RouterLink to="/workbench" class="hero-btn hero-btn--light">
+            进入工作台
+          </RouterLink>
           <button type="button" class="hero-btn hero-btn--ghost" @click="goInviteRebateTab">
             邀请返利
           </button>
@@ -2616,6 +2616,7 @@ async function confirmAddTeamMember() {
 
 .hero-btn--light {
   color: var(--atm-primary);
+  text-decoration: none;
   background: #fff;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
 }

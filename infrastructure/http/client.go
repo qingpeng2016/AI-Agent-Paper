@@ -26,3 +26,15 @@ func (c *Client) PostForm(ctx context.Context, url string, form map[string]strin
 	req.SetHeader(trace.HeaderTraceID, trace.GetTraceIdByCtx(ctx))
 	return req.Post(url)
 }
+
+func (c *Client) Get(ctx context.Context, url string, query map[string]string, headers map[string]string) (*resty.Response, error) {
+	req := c.rc.R().SetContext(ctx)
+	if query != nil {
+		req.SetQueryParams(query)
+	}
+	for k, v := range headers {
+		req.SetHeader(k, v)
+	}
+	req.SetHeader(trace.HeaderTraceID, trace.GetTraceIdByCtx(ctx))
+	return req.Get(url)
+}

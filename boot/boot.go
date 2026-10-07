@@ -11,6 +11,7 @@ import (
 	inviteRebateSvc "github.com/qingpeng2016/ai-token-mall/application/core-service/invite_rebate"
 	invoicesvc "github.com/qingpeng2016/ai-token-mall/application/core-service/invoice"
 	notificationsvc "github.com/qingpeng2016/ai-token-mall/application/core-service/notification"
+	papersvc "github.com/qingpeng2016/ai-token-mall/application/core-service/paper"
 	"github.com/qingpeng2016/ai-token-mall/application/core-service/order"
 	productsvc "github.com/qingpeng2016/ai-token-mall/application/core-service/product"
 	"github.com/qingpeng2016/ai-token-mall/application/core-service/subscription"
@@ -24,6 +25,9 @@ import (
 	"github.com/qingpeng2016/ai-token-mall/conf"
 	"github.com/qingpeng2016/ai-token-mall/infrastructure/http"
 	"github.com/qingpeng2016/ai-token-mall/infrastructure/http/invoicelookup"
+	arxivinfra "github.com/qingpeng2016/ai-token-mall/infrastructure/http/arxiv"
+	openalexinfra "github.com/qingpeng2016/ai-token-mall/infrastructure/http/openalex"
+	semanticscholarinfra "github.com/qingpeng2016/ai-token-mall/infrastructure/http/semanticscholar"
 	payinfra "github.com/qingpeng2016/ai-token-mall/infrastructure/http/alipay"
 	"github.com/qingpeng2016/ai-token-mall/infrastructure/mysql"
 	"github.com/qingpeng2016/ai-token-mall/infrastructure/redis"
@@ -58,7 +62,9 @@ func BuildContainer() *dig.Container {
 	_ = c.Provide(handler.NewUserAPIKeyHandler)
 	_ = c.Provide(handler.NewCouponHandler)
 	_ = c.Provide(handler.NewTrackingHandler)
+	_ = c.Provide(handler.NewPaperLiteratureHandler)
 	_ = c.Provide(trackingSvc.NewService)
+	_ = c.Provide(papersvc.NewLiteratureSearchService)
 	_ = c.Provide(userAPIKeySvc.NewService)
 	_ = c.Provide(couponSvc.NewService)
 	_ = c.Provide(inviteRebateSvc.NewService)
@@ -114,6 +120,9 @@ func BuildContainer() *dig.Container {
 	_ = c.Provide(redis.NewClient)
 	_ = c.Provide(http.NewHTTPClient)
 	_ = c.Provide(payinfra.NewClient)
+	_ = c.Provide(arxivinfra.NewClient)
+	_ = c.Provide(openalexinfra.NewClient)
+	_ = c.Provide(semanticscholarinfra.NewClient)
 
 	_ = c.Provide(notification.NewNotificationManager)
 

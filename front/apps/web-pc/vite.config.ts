@@ -7,6 +7,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
+      '@paper': fileURLToPath(new URL('../../../agent/paper', import.meta.url)),
     },
   },
   server: {
