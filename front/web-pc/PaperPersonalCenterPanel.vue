@@ -1,29 +1,25 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import {
+  formatCny,
+  formatSignedCny,
+  signedMoneyClass,
+  type UserProfile,
+  type UserWalletFlowItem,
+} from '@ai-agent-paper/shared'
+import { userApi } from '@/api'
+import { getSessionUser, isLoggedIn, setSessionUser } from '@/composables/useSessionUser'
 import PaperOperationLogPanel from './PaperOperationLogPanel.vue'
 import PaperSelect from './PaperSelect.vue'
 import {
   DISCIPLINE_OPTIONS,
   ENV_PREFERENCE_STORAGE_KEY,
   LITERATURE_SOURCE_OPTIONS,
-  getOperationLogs,
   type EnvironmentPreferenceForm,
 } from './types'
 
 type PersonalCenterTabId = 'profile' | 'environment' | 'wallet-records' | 'operation-log'
-
-type StoredUserProfile = {
-  id?: number
-  email?: string | null
-  phone?: string | null
-  nickname?: string | null
-  wallet_balance?: number | string
-  created_at?: string
-  last_login_at?: string | null
-}
-
-const SESSION_USER_STORAGE_KEY = 'atm_user'
 
 const props = defineProps<{
   manuscriptId: string
@@ -38,7 +34,29 @@ const emit = defineEmits<{
 const activeTab = ref<PersonalCenterTabId>('profile')
 const envSaving = ref(false)
 const operationLogRef = ref<InstanceType<typeof PaperOperationLogPanel> | null>(null)
-const profileRefreshTick = ref(0)
+const profile = ref<UserProfile | null>(getSessionUser())
+const profileLoading = ref(false)
+
+const walletFlows = ref<UserWalletFlowItem[]>([])
+const walletFlowsTotal = ref(0)
+const walletFlowsPage = ref(1)
+const walletFlowsPageSize = 9
+const walletFlowsLoaded = ref(false)
+const walletFlowsLoading = ref(false)
+
+const walletFlowTypeLabel: Record<string, string> = {
+  recharge: '充值',
+  pay: '消费',
+  refund: '退款',
+  commission: '佣金',
+  withdraw: '提现',
+}
+
+const statusLabel: Record<string, string> = {
+  active: '正常',
+  disabled: '已禁用',
+  banned: '已封禁',
+}
 
 const tabs: { id: PersonalCenterTabId; label: string }[] = [
   { id: 'profile', label: '我的信息' },
@@ -47,90 +65,86 @@ const tabs: { id: PersonalCenterTabId; label: string }[] = [
   { id: 'operation-log', label: '操作日志' },
 ]
 
-const sessionUser = computed(() => {
-  try {
-    const raw = localStorage.getItem(SESSION_USER_STORAGE_KEY)
-    if (!raw) return null
-    const profile = JSON.parse(raw) as StoredUserProfile
-    return profile?.id ? profile : null
-  } catch {
-    return null
-  }
-})
-
-function parseWalletBalance(raw: number | string | undefined | null): number {
-  if (raw == null || raw === '') return 12_800
-  const n = typeof raw === 'number' ? raw : parseFloat(String(raw))
-  return Number.isFinite(n) ? n : 12_800
-}
-
 const displayName = computed(() => {
-  const u = sessionUser.value
+  const u = profile.value
   return u?.nickname?.trim() || '科研用户'
 })
 
 const accountLabel = computed(() => {
-  const u = sessionUser.value
-  return u?.email?.trim() || u?.phone?.trim() || '演示账号 · 未登录'
+  const u = profile.value
+  if (!u) return '未登录'
+  return u.email?.trim() || u.phone?.trim() || `用户 #${u.id}`
 })
 
 const avatarLetter = computed(() => displayName.value.slice(0, 1).toUpperCase())
 
-const walletBalance = computed(() => parseWalletBalance(sessionUser.value?.wallet_balance))
-
-const tokenUsage = computed(() => {
-  void profileRefreshTick.value
-  const logs = getOperationLogs().filter((e) => e.status === 'success')
-  const now = new Date()
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime()
-  let monthUsed = 0
-  let totalUsed = 0
-  for (const row of logs) {
-    totalUsed += row.tokensTotal
-    if (new Date(row.occurredAt).getTime() >= monthStart) {
-      monthUsed += row.tokensTotal
-    }
-  }
-  return { monthUsed, totalUsed }
-})
-
-/** 演示：套餐额度（接入后来自订阅 API） */
-const demoPlanLimit = 50_000
-const demoPlanUsed = computed(() => tokenUsage.value.totalUsed)
-const demoPlanPercent = computed(() =>
-  Math.min(100, Math.round((demoPlanUsed.value / demoPlanLimit) * 100)),
-)
-
-type FundRecordRow = {
-  id: string
-  at: string
-  label: string
-  delta: number
-  kind: 'recharge' | 'consume'
+function displayField(value: string | null | undefined, fallback = '—') {
+  const v = value?.trim()
+  return v || fallback
 }
 
-const fundRecords = computed((): FundRecordRow[] => {
-  void profileRefreshTick.value
-  const fromLogs = getOperationLogs()
-    .filter((e) => e.status === 'success' && e.tokensTotal > 0)
-    .map((e) => ({
-      id: e.id,
-      at: e.occurredAt,
-      label: `${e.moduleLabel} · ${e.action}`,
-      delta: -e.tokensTotal,
-      kind: 'consume' as const,
-    }))
-  const demoRecharge: FundRecordRow = {
-    id: 'demo-recharge',
-    at: new Date(Date.now() - 86400000 * 3).toISOString(),
-    label: '余额充值（演示）',
-    delta: 10_000,
-    kind: 'recharge',
+function apiErrorMessage(e: unknown, fallback: string) {
+  const msg = e instanceof Error ? e.message : fallback
+  if (msg === 'unauthorized') {
+    return '未登录或登录已失效，请重新登录后再试'
   }
-  return [demoRecharge, ...fromLogs].sort(
-    (a, b) => new Date(b.at).getTime() - new Date(a.at).getTime(),
-  )
-})
+  return msg || fallback
+}
+
+async function loadProfile() {
+  if (!isLoggedIn()) {
+    profile.value = getSessionUser()
+    return
+  }
+  profileLoading.value = true
+  try {
+    const u = await userApi.me()
+    profile.value = u
+    setSessionUser(u)
+  } catch (e) {
+    ElMessage.error(apiErrorMessage(e, '加载账户信息失败'))
+    profile.value = getSessionUser()
+  } finally {
+    profileLoading.value = false
+  }
+}
+
+async function loadWalletFlows() {
+  if (!isLoggedIn()) {
+    walletFlows.value = []
+    walletFlowsTotal.value = 0
+    walletFlowsLoaded.value = true
+    return
+  }
+  walletFlowsLoading.value = true
+  try {
+    const page = await userApi.walletFlows({
+      page: walletFlowsPage.value,
+      page_size: walletFlowsPageSize,
+    })
+    walletFlows.value = page.items ?? []
+    walletFlowsTotal.value = page.total ?? 0
+    walletFlowsLoaded.value = true
+  } catch (e) {
+    ElMessage.error(apiErrorMessage(e, '加载资金记录失败'))
+    walletFlows.value = []
+    walletFlowsTotal.value = 0
+    walletFlowsLoaded.value = true
+  } finally {
+    walletFlowsLoading.value = false
+  }
+}
+
+function walletFlowTypeText(type: string) {
+  return walletFlowTypeLabel[type] ?? type
+}
+
+function walletAmountClass(amount: number | string) {
+  const key = signedMoneyClass(amount)
+  if (key === 'amount-plus') return 'pc-amount-plus'
+  if (key === 'amount-minus') return 'pc-amount-minus'
+  return 'pc-amount-zero'
+}
 
 const intensityOptions = [
   { value: 'fast', label: '更快' },
@@ -157,10 +171,6 @@ function formatDate(iso: string) {
   }
 }
 
-function formatTokens(n: number) {
-  return n.toLocaleString('zh-CN')
-}
-
 function isLiteratureSourceChecked(code: string) {
   return props.envPreference.literatureSourceCodes.includes(code)
 }
@@ -170,10 +180,6 @@ function toggleLiteratureSource(code: string, checked: boolean) {
   if (checked) set.add(code)
   else set.delete(code)
   props.envPreference.literatureSourceCodes = [...set]
-}
-
-function onRecharge() {
-  ElMessage.info('余额充值请前往商城会员中心（演示）')
 }
 
 async function saveEnvironment() {
@@ -197,12 +203,21 @@ async function saveEnvironment() {
 
 function reloadLogs() {
   operationLogRef.value?.reload()
-  profileRefreshTick.value += 1
 }
 
 watch(activeTab, (tab) => {
-  if (tab === 'profile' || tab === 'wallet-records') profileRefreshTick.value += 1
+  if (tab === 'profile') void loadProfile()
+  if (tab === 'wallet-records') {
+    walletFlowsPage.value = 1
+    void loadWalletFlows()
+  }
 })
+
+watch(walletFlowsPage, () => {
+  if (activeTab.value === 'wallet-records') void loadWalletFlows()
+})
+
+void loadProfile()
 
 defineExpose({ reloadLogs })
 </script>
@@ -231,8 +246,59 @@ defineExpose({ reloadLogs })
           <h2 class="pc-profile-name">{{ displayName }}</h2>
           <p class="pc-profile-account">{{ accountLabel }}</p>
         </div>
+        <button
+          type="button"
+          class="pc-btn-secondary pc-btn--compact pc-profile-refresh"
+          :disabled="profileLoading"
+          @click="loadProfile"
+        >
+          {{ profileLoading ? '刷新中…' : '刷新' }}
+        </button>
       </div>
 
+      <p v-if="!isLoggedIn()" class="pc-lead">登录后可查看完整账户信息与余额。</p>
+
+      <dl v-else class="pc-metrics">
+        <div class="pc-metric">
+          <dt>钱包余额</dt>
+          <dd class="pc-metric-value">{{ formatCny(profile?.wallet_balance ?? 0) }}</dd>
+        </div>
+        <div class="pc-metric">
+          <dt>佣金余额</dt>
+          <dd class="pc-metric-value">{{ formatCny(profile?.commission_balance ?? 0) }}</dd>
+        </div>
+      </dl>
+
+      <dl class="pc-info-grid">
+        <div class="pc-info-item">
+          <dt>用户 ID</dt>
+          <dd>{{ profile?.id ?? '—' }}</dd>
+        </div>
+        <div class="pc-info-item">
+          <dt>昵称</dt>
+          <dd>{{ displayField(profile?.nickname ?? undefined) }}</dd>
+        </div>
+        <div class="pc-info-item">
+          <dt>邮箱</dt>
+          <dd>{{ displayField(profile?.email ?? undefined) }}</dd>
+        </div>
+        <div class="pc-info-item">
+          <dt>手机号</dt>
+          <dd>{{ displayField(profile?.phone ?? undefined) }}</dd>
+        </div>
+        <div class="pc-info-item">
+          <dt>账号状态</dt>
+          <dd>{{ statusLabel[profile?.status ?? ''] ?? profile?.status ?? '—' }}</dd>
+        </div>
+        <div class="pc-info-item">
+          <dt>注册时间</dt>
+          <dd>{{ profile?.created_at ? formatDate(profile.created_at) : '—' }}</dd>
+        </div>
+        <div class="pc-info-item">
+          <dt>最后登录</dt>
+          <dd>{{ profile?.last_login_at ? formatDate(profile.last_login_at) : '—' }}</dd>
+        </div>
+      </dl>
     </div>
 
     <div v-show="activeTab === 'environment'" class="pc-pane pc-pane--env" role="tabpanel">
@@ -295,64 +361,44 @@ defineExpose({ reloadLogs })
     </div>
 
     <div v-show="activeTab === 'wallet-records'" class="pc-pane" role="tabpanel">
-      <p class="pc-lead">Token 余额、套餐用量与充值/消耗明细（演示；接入后同步商城钱包与流水）。</p>
+      <p class="pc-lead">账户资金变动明细（充值、消费、退款、佣金划入、提现等）。</p>
 
-      <dl class="pc-metrics">
-        <div class="pc-metric">
-          <dt>Token 余额</dt>
-          <dd class="pc-metric-inline">
-            <span class="pc-metric-value">{{ formatTokens(walletBalance) }}</span>
-          </dd>
-        </div>
-        <div class="pc-metric">
-          <dt>本月已用</dt>
-          <dd class="pc-metric-inline">
-            <span class="pc-metric-value">{{ formatTokens(tokenUsage.monthUsed) }}</span>
-          </dd>
-        </div>
-        <div class="pc-metric pc-metric--with-action">
-          <dt>累计消耗</dt>
-          <dd class="pc-metric-inline">
-            <span class="pc-metric-value">{{ formatTokens(tokenUsage.totalUsed) }}</span>
-            <button type="button" class="pc-btn-recharge" @click="onRecharge">充值</button>
-          </dd>
-        </div>
-      </dl>
+      <p v-if="!isLoggedIn()" class="pc-empty">请先登录后查看资金记录。</p>
+      <p v-else-if="walletFlowsLoading && !walletFlows.length" class="pc-empty">加载中…</p>
+      <div v-else-if="walletFlows.length" class="pc-table-wrap">
+        <table class="pc-table">
+          <thead>
+            <tr>
+              <th>类型</th>
+              <th>金额</th>
+              <th>备注</th>
+              <th>时间</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in walletFlows" :key="row.id">
+              <td>{{ walletFlowTypeText(row.type) }}</td>
+              <td :class="walletAmountClass(row.amount)">{{ formatSignedCny(row.amount) }}</td>
+              <td>{{ row.remark?.trim() || '—' }}</td>
+              <td class="pc-time">{{ row.created_at }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p v-else-if="walletFlowsLoaded" class="pc-empty">暂无资金记录</p>
 
-      <section class="pc-plan-section">
-        <h3 class="pc-section-title pc-plan-title">套餐用量</h3>
-        <div class="pc-plan-bar">
-          <div class="pc-plan-bar-fill" :style="{ width: `${demoPlanPercent}%` }" />
-        </div>
-        <p class="pc-plan-meta">
-          已用 <strong>{{ formatTokens(demoPlanUsed) }}</strong> /
-          {{ formatTokens(demoPlanLimit) }} tokens（演示额度）
-        </p>
-      </section>
-
-      <section class="pc-moves-section">
-        <h3 class="pc-section-title">资金记录</h3>
-        <ul v-if="fundRecords.length" class="pc-moves-list">
-          <li v-for="item in fundRecords" :key="item.id" class="pc-move-row">
-            <div class="pc-move-main">
-              <span class="pc-move-type" :class="`pc-move-type--${item.kind}`">
-                {{ item.kind === 'recharge' ? '充值' : '消耗' }}
-              </span>
-              <span class="pc-move-label">{{ item.label }}</span>
-            </div>
-            <div class="pc-move-side">
-              <span
-                class="pc-move-delta"
-                :class="item.delta > 0 ? 'pc-move-delta--plus' : 'pc-move-delta--minus'"
-              >
-                {{ item.delta > 0 ? '+' : '' }}{{ formatTokens(Math.abs(item.delta)) }}
-              </span>
-              <time class="pc-move-time">{{ formatDate(item.at) }}</time>
-            </div>
-          </li>
-        </ul>
-        <p v-else class="pc-moves-empty">暂无资金变动记录</p>
-      </section>
+      <div
+        v-if="isLoggedIn() && walletFlowsTotal > walletFlowsPageSize"
+        class="pc-pagination"
+      >
+        <el-pagination
+          v-model:current-page="walletFlowsPage"
+          :page-size="walletFlowsPageSize"
+          :total="walletFlowsTotal"
+          layout="total, prev, pager, next"
+          background
+        />
+      </div>
     </div>
 
     <div v-show="activeTab === 'operation-log'" class="pc-pane" role="tabpanel">
@@ -427,6 +473,10 @@ defineExpose({ reloadLogs })
   margin-bottom: 18px;
 }
 
+.pc-profile-refresh {
+  margin-left: auto;
+}
+
 .pc-avatar {
   display: flex;
   align-items: center;
@@ -452,6 +502,51 @@ defineExpose({ reloadLogs })
   margin: 0;
   font-size: 13px;
   color: #64748b;
+}
+
+.pc-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 14px 24px;
+  margin: 0;
+  padding: 20px 0 0;
+  border-top: 1px solid #f1f5f9;
+}
+
+.pc-info-item dt {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #94a3b8;
+}
+
+.pc-info-item dd {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: #1e293b;
+  word-break: break-all;
+}
+
+.pc-btn-secondary {
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.pc-btn-secondary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.pc-btn--compact {
+  padding: 7px 14px;
+  font-size: 13px;
 }
 
 .pc-metrics {
@@ -527,155 +622,76 @@ defineExpose({ reloadLogs })
   line-height: 1.2;
 }
 
-.pc-btn-recharge {
-  padding: 8px 18px;
-  font-size: 14px;
-  font-weight: 600;
-  color: #fff;
-  background: var(--atm-gradient, linear-gradient(135deg, #7c3aed, #6366f1));
-  border: none;
-  border-radius: 10px;
-  cursor: pointer;
-  box-shadow: 0 6px 20px rgba(91, 33, 182, 0.28);
-  transition:
-    transform 0.12s,
-    opacity 0.12s;
-}
-
-.pc-btn-recharge:hover {
-  transform: translateY(-1px);
-}
-
-.pc-plan-section {
-  margin-bottom: 24px;
-  padding: 0 0 4px;
-  border-bottom: 1px solid #f1f5f9;
-}
-
-.pc-section-title {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 700;
-  color: #1e293b;
-}
-
-.pc-plan-title {
-  margin-bottom: 12px;
-}
-
-.pc-plan-bar {
-  height: 8px;
-  overflow: hidden;
-  background: #e2e8f0;
-  border-radius: 999px;
-}
-
-.pc-plan-bar-fill {
-  height: 100%;
-  background: #64748b;
-  border-radius: 999px;
-  transition: width 0.35s ease;
-}
-
-.pc-plan-meta {
-  margin: 10px 0 0;
-  font-size: 13px;
-  color: #64748b;
-}
-
-.pc-plan-meta strong {
-  color: #334155;
-}
-
-.pc-moves-section {
-  padding-top: 4px;
-}
-
-.pc-moves-list {
-  margin: 12px 0 0;
-  padding: 0;
-  list-style: none;
+.pc-table-wrap {
+  overflow-x: auto;
   border: 1px solid #e8eaf0;
   border-radius: 12px;
-  overflow: hidden;
 }
 
-.pc-move-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 16px;
-  border-bottom: 1px solid #f1f5f9;
+.pc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
 }
 
-.pc-move-row:last-child {
+.pc-table th,
+.pc-table td {
+  padding: 11px 14px;
+  text-align: left;
+  border-bottom: 1px solid #eef2f6;
+  vertical-align: top;
+}
+
+.pc-table th {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  white-space: nowrap;
+  background: #f8fafc;
+}
+
+.pc-table tbody tr:hover {
+  background: #fafbff;
+}
+
+.pc-table tbody tr:last-child td {
   border-bottom: none;
 }
 
-.pc-move-main {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  min-width: 0;
+.pc-time {
+  font-size: 12px;
+  color: #64748b;
+  white-space: nowrap;
 }
 
-.pc-move-type {
-  flex-shrink: 0;
-  padding: 2px 8px;
-  font-size: 11px;
+.pc-amount-plus {
   font-weight: 600;
-  border-radius: 6px;
-}
-
-.pc-move-type--recharge {
-  color: #166534;
-  background: #dcfce7;
-}
-
-.pc-move-type--consume {
-  color: #5b21b6;
-  background: #ede9fe;
-}
-
-.pc-move-label {
-  font-size: 13px;
-  color: #334155;
-  line-height: 1.4;
-}
-
-.pc-move-side {
-  flex-shrink: 0;
-  text-align: right;
-}
-
-.pc-move-delta {
-  display: block;
-  font-size: 14px;
-  font-weight: 700;
+  color: #059669;
   font-variant-numeric: tabular-nums;
 }
 
-.pc-move-delta--plus {
-  color: #059669;
+.pc-amount-minus {
+  font-weight: 600;
+  color: #dc2626;
+  font-variant-numeric: tabular-nums;
 }
 
-.pc-move-delta--minus {
-  color: #4f46e5;
+.pc-amount-zero {
+  font-variant-numeric: tabular-nums;
+  color: #64748b;
 }
 
-.pc-move-time {
-  display: block;
-  margin-top: 2px;
-  font-size: 11px;
-  color: #94a3b8;
+.pc-empty {
+  padding: 28px 16px;
+  font-size: 14px;
+  color: #64748b;
+  text-align: center;
+  background: #f8fafc;
+  border-radius: 12px;
 }
 
-.pc-moves-empty {
-  margin: 12px 0 0;
-  font-size: 13px;
-  color: #94a3b8;
+.pc-pagination {
+  margin-top: 16px;
 }
 
 .pc-lead {

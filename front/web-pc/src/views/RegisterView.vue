@@ -5,6 +5,7 @@ import { ElMessage } from 'element-plus'
 import AuthShell from '@/components/auth/AuthShell.vue'
 import { userApi } from '@/api'
 import { setSessionUser } from '@/composables/useSessionUser'
+import { setAuthToken } from '@/utils/auth-cookie'
 
 const router = useRouter()
 const route = useRoute()
@@ -54,6 +55,7 @@ async function onSubmit() {
             registration_host: registrationHost,
           }
     const res = await userApi.register(body)
+    if (res.token?.trim()) setAuthToken(res.token.trim())
     setSessionUser({
       id: res.user.id,
       email: res.user.email ?? null,

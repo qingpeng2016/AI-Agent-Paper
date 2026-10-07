@@ -41,7 +41,7 @@ func (h *UserHandler) Register(c *gin.Context) {
 		false,
 		false,
 	)
-	payload := gin.H{"user": data.User}
+	payload := gin.H{"user": data.User, "token": data.Token}
 	if data.RegisterCouponsGranted > 0 {
 		payload["register_coupons_granted"] = data.RegisterCouponsGranted
 	}
@@ -70,7 +70,7 @@ func (h *UserHandler) Login(c *gin.Context) {
 		false,
 		false,
 	)
-	response.ResponseSuccess(c, gin.H{"user": data.User})
+	response.ResponseSuccess(c, gin.H{"user": data.User, "token": data.Token})
 }
 
 // Me 当前登录用户信息（会员中心概览 / 账户设置）
