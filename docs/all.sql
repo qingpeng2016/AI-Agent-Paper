@@ -379,6 +379,7 @@ CREATE TABLE IF NOT EXISTS `paper_llm_model_config` (
 CREATE TABLE IF NOT EXISTS `paper_llm_workflow_binding` (
   `id`                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `stage_code`        VARCHAR(64)  NOT NULL DEFAULT 'default' COMMENT '环节键：default|retrieve|…（与 prompt 表同键；由代码约定）',
+  `stage_name`        VARCHAR(128) NOT NULL COMMENT '环节中文名（运营/排查）',
   `model_config_id`   BIGINT UNSIGNED NOT NULL COMMENT 'paper_llm_model_config.id',
   `status`            VARCHAR(16)  NOT NULL DEFAULT 'active' COMMENT 'active|disabled',
   `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -392,6 +393,7 @@ CREATE TABLE IF NOT EXISTS `paper_llm_workflow_binding` (
 CREATE TABLE IF NOT EXISTS `paper_llm_prompt_template` (
   `id`                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `stage_code`        VARCHAR(64)  NOT NULL DEFAULT 'default' COMMENT '环节键：default|retrieve|generate_ideas|…（由代码约定）',
+  `stage_name`        VARCHAR(128) NOT NULL COMMENT '环节中文名（运营/排查）',
   `template_body`     MEDIUMTEXT   NOT NULL COMMENT '话术正文；占位符 {{var_name}}，由代码渲染',
   `status`            VARCHAR(16)  NOT NULL DEFAULT 'active' COMMENT 'active|disabled',
   `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -813,66 +815,37 @@ SET @paper_llm_model_id = (
   ORDER BY c.`id` DESC LIMIT 1
 );
 
-INSERT INTO `paper_llm_workflow_binding` (`stage_code`, `model_config_id`, `status`) VALUES
-  ('default', @paper_llm_model_id, 'active'),
-  ('retrieve', @paper_llm_model_id, 'active'),
-  ('generate_ideas', @paper_llm_model_id, 'active'),
-  ('novelty', @paper_llm_model_id, 'active'),
-  ('audit', @paper_llm_model_id, 'active'),
-  ('literature_review', @paper_llm_model_id, 'active'),
-  ('experiment_planning', @paper_llm_model_id, 'active'),
-  ('auto_review', @paper_llm_model_id, 'active'),
-  ('paper_writing', @paper_llm_model_id, 'active'),
-  ('figure_generation', @paper_llm_model_id, 'active'),
-  ('citation_audit', @paper_llm_model_id, 'active'),
-  ('claim_audit', @paper_llm_model_id, 'active'),
-  ('kill_argument', @paper_llm_model_id, 'active')
+-- 当前产品范围：选题发现（topic-discovery）四步 + default 兜底
+INSERT INTO `paper_llm_workflow_binding` (`stage_code`, `stage_name`, `model_config_id`, `status`) VALUES
+  ('default', '默认（全局兜底）', @paper_llm_model_id, 'active'),
+  ('retrieve', '多源文献检索与校验入库', @paper_llm_model_id, 'active'),
+  ('generate_ideas', '脑暴候选选题', @paper_llm_model_id, 'active'),
+  ('novelty', '新颖性检查', @paper_llm_model_id, 'active'),
+  ('audit', '选题断言初审', @paper_llm_model_id, 'active')
 ON DUPLICATE KEY UPDATE
+  `stage_name` = VALUES(`stage_name`),
   `model_config_id` = VALUES(`model_config_id`),
   `status` = VALUES(`status`);
 
--- 11.3 环节话术（与 front/web-pc TOPIC_DISCOVERY_FLOW_STEPS + 各 PaperModule 对齐）
-INSERT INTO `paper_llm_prompt_template` (`stage_code`, `template_body`, `status`) VALUES
-  ('default',
+-- 11.3 选题发现话术（front/web-pc TOPIC_DISCOVERY_FLOW_STEPS）
+INSERT INTO `paper_llm_prompt_template` (`stage_code`, `stage_name`, `template_body`, `status`) VALUES
+  ('default', '默认（全局兜底）',
    'You are an expert academic research assistant for the Paper Agent platform. Be precise, cite evidence when provided, and state uncertainty clearly. Default to clear scholarly English.',
    'active'),
-  ('retrieve',
+  ('retrieve', '多源文献检索与校验入库',
    'Stage: multi-source literature retrieve and validate for direction {{direction}}. Dedupe by external_key; list coverage gaps.',
    'active'),
-  ('generate_ideas',
+  ('generate_ideas', '脑暴候选选题',
    'Stage: generate_ideas for {{direction}}. Propose up to {{max_ideas}} testable ideas with title, one-line claim, and reference keys.',
    'active'),
-  ('novelty',
+  ('novelty', '新颖性检查',
    'Stage: novelty check for {{direction}}. Compare each idea to ingested literature; flag overlap and suggest differentiation.',
    'active'),
-  ('audit',
+  ('audit', '选题断言初审',
    'Stage: topic audit. Review claims like a strict reviewer: unsupported claims, missing baselines, vague contributions. Output blocker/major/minor issues.',
-   'active'),
-  ('literature_review',
-   'Stage: literature_review. Synthesize ingested corpus into a structured review for {{direction}}; gap analysis and related-work outline for {{venue}}.',
-   'active'),
-  ('experiment_planning',
-   'Stage: experiment_planning for {{direction}}. Hypotheses, datasets, strong baselines, ablations, metrics, reproducible steps (intensity {{intensity}}).',
-   'active'),
-  ('auto_review',
-   'Stage: auto_review before writing. Simulate a reviewer on plan and evidence: controls, baselines, overclaiming.',
-   'active'),
-  ('paper_writing',
-   'Stage: paper_writing for venue {{venue}}. Conference/journal sections, consistent notation; citation keys from bibliography gate.',
-   'active'),
-  ('figure_generation',
-   'Stage: figure_generation. Publication-ready figure spec: chart type, axes, statistics, caption.',
-   'active'),
-  ('citation_audit',
-   'Stage: citation_audit on full draft. Missing keys, mismatched claims, over-citation, uncited facts; section anchors.',
-   'active'),
-  ('claim_audit',
-   'Stage: claim_audit. Match claims to evidence; separate contributions, limitations, speculation.',
-   'active'),
-  ('kill_argument',
-   'Stage: kill_argument for venue {{venue}}. Strongest rejection reasons; stay constructive.',
    'active')
 ON DUPLICATE KEY UPDATE
+  `stage_name` = VALUES(`stage_name`),
   `template_body` = VALUES(`template_body`),
   `status` = VALUES(`status`);
 
