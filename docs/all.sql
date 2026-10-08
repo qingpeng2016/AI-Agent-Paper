@@ -378,46 +378,28 @@ CREATE TABLE IF NOT EXISTS `paper_llm_model_config` (
 
 CREATE TABLE IF NOT EXISTS `paper_llm_workflow_binding` (
   `id`                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `module_code`       VARCHAR(32)  NOT NULL COMMENT
-    'topic_discovery|literature_review|experiment_planning|auto_review|paper_writing|figure_generation|manuscript_analysis|*',
-  `stage_code`        VARCHAR(64)  DEFAULT NULL COMMENT
-    'topic: retrieve|generate_ideas|novelty|audit；NULL=整模块默认',
-  `llm_role`          VARCHAR(32)  NOT NULL COMMENT
-    'executor|reviewer|ingest|system|citation_audit|claim_audit|kill_argument',
+  `stage_code`        VARCHAR(64)  NOT NULL DEFAULT 'default' COMMENT '环节键：default|retrieve|…（与 prompt 表同键；由代码约定）',
   `model_config_id`   BIGINT UNSIGNED NOT NULL COMMENT 'paper_llm_model_config.id',
-  `priority`          INT          NOT NULL DEFAULT 100 COMMENT '同键多条时越小越优先',
   `status`            VARCHAR(16)  NOT NULL DEFAULT 'active' COMMENT 'active|disabled',
   `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  KEY `idx_paper_llm_bind_lookup` (`module_code`, `stage_code`, `llm_role`, `status`, `priority`),
-  KEY `idx_paper_llm_bind_model` (`model_config_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='平台：环节/阶段/角色 → model_config';
+  UNIQUE KEY `uk_paper_llm_bind_stage` (`stage_code`),
+  KEY `idx_paper_llm_bind_model` (`model_config_id`),
+  KEY `idx_paper_llm_bind_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='平台：stage_code → model_config';
 
 CREATE TABLE IF NOT EXISTS `paper_llm_prompt_template` (
   `id`                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `module_code`       VARCHAR(32)  NOT NULL COMMENT
-    'topic_discovery|literature_review|experiment_planning|auto_review|paper_writing|figure_generation|manuscript_analysis|*',
-  `stage_code`        VARCHAR(64)  DEFAULT NULL COMMENT
-    'topic: retrieve|generate_ideas|novelty|audit；NULL=整模块默认',
-  `llm_role`          VARCHAR(32)  NOT NULL COMMENT
-    'executor|reviewer|ingest|system|citation_audit|claim_audit|kill_argument',
-  `message_role`      VARCHAR(16)  NOT NULL DEFAULT 'system' COMMENT 'system|user|assistant（拼 chat messages）',
+  `stage_code`        VARCHAR(64)  NOT NULL DEFAULT 'default' COMMENT '环节键：default|retrieve|generate_ideas|…（由代码约定）',
   `template_body`     MEDIUMTEXT   NOT NULL COMMENT '话术正文；占位符 {{var_name}}，由代码渲染',
-  `priority`          INT          NOT NULL DEFAULT 100 COMMENT '同键多条时越小越优先',
   `status`            VARCHAR(16)  NOT NULL DEFAULT 'active' COMMENT 'active|disabled',
   `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  KEY `idx_paper_llm_prompt_lookup` (
-    `module_code`,
-    `stage_code`,
-    `llm_role`,
-    `message_role`,
-    `status`,
-    `priority`
-  )
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='平台话术模板（module×stage×role×message_role）';
+  UNIQUE KEY `uk_paper_llm_prompt_stage` (`stage_code`),
+  KEY `idx_paper_llm_prompt_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='平台话术（按 stage_code）';
 
 CREATE TABLE IF NOT EXISTS `paper_manuscript_runtime` (
   `id`                    BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -442,7 +424,7 @@ CREATE TABLE IF NOT EXISTS `paper_manuscript_literature_hit` (
   `manuscript_id`       BIGINT UNSIGNED NOT NULL COMMENT 'paper_manuscript.id',
   `source_id`           BIGINT UNSIGNED NOT NULL COMMENT 'paper_ref_literature_source.id',
   `external_key`        VARCHAR(256) NOT NULL COMMENT 'arxiv:2401.12345 / doi:… / s2:…',
-  `from_module_code`    VARCHAR(32)  NOT NULL DEFAULT 'topic_discovery' COMMENT '哪次模块检索写入',
+  `stage_code`          VARCHAR(64)  DEFAULT NULL COMMENT '写入时的环节键，如 retrieve',
   `relevance_score`     DECIMAL(6,4) DEFAULT NULL,
   `query_text`          VARCHAR(512) DEFAULT NULL,
   `meta`                JSON         DEFAULT NULL COMMENT 'title、authors、doi 等快照',
@@ -454,8 +436,7 @@ CREATE TABLE IF NOT EXISTS `paper_manuscript_literature_hit` (
 CREATE TABLE IF NOT EXISTS `paper_manuscript_citation_gate` (
   `id`                  BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `manuscript_id`       BIGINT UNSIGNED NOT NULL COMMENT 'paper_manuscript.id',
-  `module_code`         VARCHAR(32)  DEFAULT NULL COMMENT '校验发生时的模块',
-  `target_module`       VARCHAR(32)  DEFAULT NULL COMMENT '产出所属模块，如 paper_writing',
+  `stage_code`          VARCHAR(64)  DEFAULT NULL COMMENT '校验发生时的环节键',
   `target_id`           BIGINT UNSIGNED DEFAULT NULL COMMENT '如 paper_manuscript.id 或其它 paper_output_*',
   `source_id`           BIGINT UNSIGNED DEFAULT NULL COMMENT '门禁关联文献源',
   `external_key`        VARCHAR(256) DEFAULT NULL COMMENT '与 literature_hit 同源键',
@@ -622,12 +603,10 @@ CREATE TABLE IF NOT EXISTS `paper_output_figure` (
 CREATE TABLE IF NOT EXISTS `paper_llm_call_logs` (
   `id`              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `manuscript_id`   BIGINT UNSIGNED NOT NULL COMMENT 'paper_manuscript.id',
-  `module_code`     VARCHAR(32)  NOT NULL COMMENT 'topic_discovery|literature_review|…',
-  `stage_code`      VARCHAR(64)  DEFAULT NULL COMMENT '模块内阶段，可选',
+  `stage_code`      VARCHAR(64)  DEFAULT NULL COMMENT '环节键（与 binding/prompt 同 stage_code）',
   `model_config_id` BIGINT UNSIGNED DEFAULT NULL COMMENT 'paper_llm_model_config.id',
   `workflow_binding_id` BIGINT UNSIGNED DEFAULT NULL COMMENT 'paper_llm_workflow_binding.id',
   `prompt_template_id` BIGINT UNSIGNED DEFAULT NULL COMMENT 'paper_llm_prompt_template.id',
-  `role`            VARCHAR(16)  NOT NULL COMMENT 'executor|reviewer',
   `model_name`      VARCHAR(128) NOT NULL,
   `prompt_tokens`   INT          DEFAULT NULL,
   `completion_tokens` INT        DEFAULT NULL,
@@ -666,8 +645,7 @@ CREATE TABLE IF NOT EXISTS `paper_operation_log` (
   `user_id`            BIGINT UNSIGNED NOT NULL,
   `manuscript_id`      BIGINT UNSIGNED DEFAULT NULL,
   `manuscript_title`   VARCHAR(256) DEFAULT NULL,
-  `module_code`        VARCHAR(32)  NOT NULL COMMENT '工作流 module_code 或 system|environment',
-  `module_label`       VARCHAR(64)  NOT NULL,
+  `stage_code`         VARCHAR(64)  NOT NULL DEFAULT 'default' COMMENT '环节键（展示名见 action / note）',
   `action`             VARCHAR(512) NOT NULL,
   `tokens_prompt`      INT UNSIGNED NOT NULL DEFAULT 0,
   `tokens_completion`  INT UNSIGNED NOT NULL DEFAULT 0,
@@ -748,9 +726,8 @@ ON DUPLICATE KEY UPDATE
   `updated_at` = CURRENT_TIMESTAMP;
 
 -- ---------------------------------------------------------------------------
--- 10. 种子数据 — Paper（强度、审计、示例学科与 venue、文献源）
+-- 10. 种子数据 — Paper（强度、审计、学科、venue、文献源）
 -- ---------------------------------------------------------------------------
--- paper_llm_workflow_binding / paper_llm_prompt_template 不在此 INSERT；见 docs/migrations/
 
 INSERT INTO `paper_ref_execution_intensity` (`code`, `name`, `multiplier`, `max_papers`, `max_ideas`) VALUES
   ('fast',     '更快', 0.60, 30,  6),
@@ -807,5 +784,96 @@ ON DUPLICATE KEY UPDATE
   `auth_type` = VALUES(`auth_type`),
   `default_config` = VALUES(`default_config`),
   `config_schema` = VALUES(`config_schema`);
+
+-- ---------------------------------------------------------------------------
+-- 11. 种子 — LLM（model 首次插入后请 UPDATE api_key；重复跑请跳过 11.1 或自行去重）
+-- ---------------------------------------------------------------------------
+
+-- 11.1 Claude 端点（勿重复 INSERT 多条相同 label，除非手动清理）
+INSERT INTO `paper_llm_model_config` (
+  `label`, `provider_code`, `model_name`, `api_base_url`, `api_key`,
+  `timeout_ms`, `max_retries`, `supports_vision`, `context_window_hint`, `status`
+) VALUES (
+  'Claude Sonnet（平台默认）',
+  'anthropic',
+  'claude-sonnet-4-20250514',
+  'https://api.anthropic.com',
+  'PASTE_YOUR_ANTHROPIC_API_KEY_HERE',
+  120000,
+  2,
+  1,
+  200000,
+  'active'
+);
+
+-- 11.2 各环节 → 同一 Claude（@model_id 取自最新 active anthropic 配置）
+SET @paper_llm_model_id = (
+  SELECT c.`id` FROM `paper_llm_model_config` c
+  WHERE c.`provider_code` = 'anthropic' AND c.`status` = 'active'
+  ORDER BY c.`id` DESC LIMIT 1
+);
+
+INSERT INTO `paper_llm_workflow_binding` (`stage_code`, `model_config_id`, `status`) VALUES
+  ('default', @paper_llm_model_id, 'active'),
+  ('retrieve', @paper_llm_model_id, 'active'),
+  ('generate_ideas', @paper_llm_model_id, 'active'),
+  ('novelty', @paper_llm_model_id, 'active'),
+  ('audit', @paper_llm_model_id, 'active'),
+  ('literature_review', @paper_llm_model_id, 'active'),
+  ('experiment_planning', @paper_llm_model_id, 'active'),
+  ('auto_review', @paper_llm_model_id, 'active'),
+  ('paper_writing', @paper_llm_model_id, 'active'),
+  ('figure_generation', @paper_llm_model_id, 'active'),
+  ('citation_audit', @paper_llm_model_id, 'active'),
+  ('claim_audit', @paper_llm_model_id, 'active'),
+  ('kill_argument', @paper_llm_model_id, 'active')
+ON DUPLICATE KEY UPDATE
+  `model_config_id` = VALUES(`model_config_id`),
+  `status` = VALUES(`status`);
+
+-- 11.3 环节话术（与 front/web-pc TOPIC_DISCOVERY_FLOW_STEPS + 各 PaperModule 对齐）
+INSERT INTO `paper_llm_prompt_template` (`stage_code`, `template_body`, `status`) VALUES
+  ('default',
+   'You are an expert academic research assistant for the Paper Agent platform. Be precise, cite evidence when provided, and state uncertainty clearly. Default to clear scholarly English.',
+   'active'),
+  ('retrieve',
+   'Stage: multi-source literature retrieve and validate for direction {{direction}}. Dedupe by external_key; list coverage gaps.',
+   'active'),
+  ('generate_ideas',
+   'Stage: generate_ideas for {{direction}}. Propose up to {{max_ideas}} testable ideas with title, one-line claim, and reference keys.',
+   'active'),
+  ('novelty',
+   'Stage: novelty check for {{direction}}. Compare each idea to ingested literature; flag overlap and suggest differentiation.',
+   'active'),
+  ('audit',
+   'Stage: topic audit. Review claims like a strict reviewer: unsupported claims, missing baselines, vague contributions. Output blocker/major/minor issues.',
+   'active'),
+  ('literature_review',
+   'Stage: literature_review. Synthesize ingested corpus into a structured review for {{direction}}; gap analysis and related-work outline for {{venue}}.',
+   'active'),
+  ('experiment_planning',
+   'Stage: experiment_planning for {{direction}}. Hypotheses, datasets, strong baselines, ablations, metrics, reproducible steps (intensity {{intensity}}).',
+   'active'),
+  ('auto_review',
+   'Stage: auto_review before writing. Simulate a reviewer on plan and evidence: controls, baselines, overclaiming.',
+   'active'),
+  ('paper_writing',
+   'Stage: paper_writing for venue {{venue}}. Conference/journal sections, consistent notation; citation keys from bibliography gate.',
+   'active'),
+  ('figure_generation',
+   'Stage: figure_generation. Publication-ready figure spec: chart type, axes, statistics, caption.',
+   'active'),
+  ('citation_audit',
+   'Stage: citation_audit on full draft. Missing keys, mismatched claims, over-citation, uncited facts; section anchors.',
+   'active'),
+  ('claim_audit',
+   'Stage: claim_audit. Match claims to evidence; separate contributions, limitations, speculation.',
+   'active'),
+  ('kill_argument',
+   'Stage: kill_argument for venue {{venue}}. Strongest rejection reasons; stay constructive.',
+   'active')
+ON DUPLICATE KEY UPDATE
+  `template_body` = VALUES(`template_body`),
+  `status` = VALUES(`status`);
 
 SET FOREIGN_KEY_CHECKS = 1;
