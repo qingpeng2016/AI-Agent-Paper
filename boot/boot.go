@@ -70,6 +70,7 @@ func BuildContainer() *dig.Container {
 	_ = c.Provide(mysql.NewCouponCampaignsImpl)
 	_ = c.Provide(mysql.NewUserCouponsImpl)
 	_ = c.Provide(mysql.NewUserTrackEventsImpl)
+	_ = c.Provide(mysql.NewPaperRefLiteratureSourceImpl)
 	_ = c.Provide(redis.NewClient)
 	_ = c.Provide(http.NewHTTPClient)
 	_ = c.Provide(arxivinfra.NewClient)

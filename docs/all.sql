@@ -358,17 +358,11 @@ CREATE TABLE IF NOT EXISTS `paper_user_preference` (
 
 CREATE TABLE IF NOT EXISTS `paper_llm_model_config` (
   `id`                   BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `user_id`              BIGINT UNSIGNED NOT NULL COMMENT 'users.id；0=平台预置模板',
   `label`                VARCHAR(128) NOT NULL COMMENT '展示名',
   `provider_code`        VARCHAR(32)  NOT NULL COMMENT 'openai|anthropic|azure_openai|openai_compatible|ollama|gateway|other',
   `model_name`           VARCHAR(128) NOT NULL COMMENT '上游 model 参数',
-  `api_base_url`         VARCHAR(512) NOT NULL COMMENT 'Base URL',
-  `api_path_chat`        VARCHAR(128) DEFAULT NULL COMMENT '如 /chat/completions；NULL=Provider 默认',
-  `api_key_ciphertext`   VARBINARY(4096) DEFAULT NULL COMMENT 'LLM API Key 密文',
-  `api_key_header`       VARCHAR(64)  NOT NULL DEFAULT 'Authorization',
-  `api_key_prefix`       VARCHAR(32)  DEFAULT 'Bearer ',
-  `default_headers`      JSON         DEFAULT NULL,
-  `default_params`       JSON         DEFAULT NULL COMMENT 'temperature、max_tokens 等',
+  `api_base_url`         VARCHAR(512) NOT NULL COMMENT 'API Host / Base URL（具体 path 由 provider_code 在代码中决定）',
+  `api_key`              VARCHAR(512) DEFAULT NULL COMMENT 'LLM API Key 明文（库内存储；生产建议库权限+TLS）',
   `timeout_ms`           INT UNSIGNED NOT NULL DEFAULT 120000,
   `max_retries`          TINYINT UNSIGNED NOT NULL DEFAULT 2,
   `supports_vision`      TINYINT(1)   NOT NULL DEFAULT 0,
@@ -378,9 +372,9 @@ CREATE TABLE IF NOT EXISTS `paper_llm_model_config` (
   `created_at`           DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`           DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  KEY `idx_paper_llm_model_cfg_user` (`user_id`, `status`),
+  KEY `idx_paper_llm_model_cfg_status` (`status`),
   KEY `idx_paper_llm_model_cfg_provider` (`provider_code`, `model_name`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='LLM 端点配置（Key/Host/模型名）';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='平台 LLM 端点配置（Key/Host/模型名）';
 
 CREATE TABLE IF NOT EXISTS `paper_llm_workflow_binding` (
   `id`                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -816,10 +810,19 @@ SELECT 'ml_top3', 'NeurIPS/ICLR/ICML', 'conference', d.id,
 FROM `paper_ref_discipline` d WHERE d.code = 'cs_ai' LIMIT 1
 ON DUPLICATE KEY UPDATE `name` = VALUES(`name`);
 
-INSERT INTO `paper_ref_literature_source` (`code`, `name`, `api_kind`, `base_url`, `auth_type`) VALUES
-  ('arxiv', 'arXiv', 'rest', 'https://export.arxiv.org/api/query', 'none'),
-  ('openalex', 'OpenAlex', 'rest', 'https://api.openalex.org', 'none'),
-  ('semantic_scholar', 'Semantic Scholar', 'rest', 'https://api.semanticscholar.org/graph/v1', 'api_key')
-ON DUPLICATE KEY UPDATE `name` = VALUES(`name`);
+INSERT INTO `paper_ref_literature_source` (`code`, `name`, `api_kind`, `base_url`, `auth_type`, `default_config`, `config_schema`) VALUES
+  ('arxiv', 'arXiv', 'rest', 'https://export.arxiv.org/api/query', 'none', NULL, NULL),
+  ('openalex', 'OpenAlex', 'rest', 'https://api.openalex.org/works', 'none',
+   JSON_OBJECT('mailto', ''),
+   JSON_OBJECT('type', 'object', 'properties', JSON_OBJECT('mailto', JSON_OBJECT('type', 'string', 'description', 'User-Agent 礼貌池')))),
+  ('semantic_scholar', 'Semantic Scholar', 'rest', 'https://api.semanticscholar.org/graph/v1/paper/search', 'api_key',
+   NULL,
+   JSON_OBJECT('type', 'object', 'properties', JSON_OBJECT('api_key', JSON_OBJECT('type', 'string', 'description', 'Header x-api-key；可选'))))
+ON DUPLICATE KEY UPDATE
+  `name` = VALUES(`name`),
+  `base_url` = VALUES(`base_url`),
+  `auth_type` = VALUES(`auth_type`),
+  `default_config` = VALUES(`default_config`),
+  `config_schema` = VALUES(`config_schema`);
 
 SET FOREIGN_KEY_CHECKS = 1;

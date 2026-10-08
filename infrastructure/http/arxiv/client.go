@@ -13,6 +13,7 @@ import (
 	"github.com/qingpeng2016/ai-agent-paper/conf"
 	httpentity "github.com/qingpeng2016/ai-agent-paper/domain/http/entity"
 	httprepo "github.com/qingpeng2016/ai-agent-paper/domain/http/repository"
+	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/repository"
 	httpx "github.com/qingpeng2016/ai-agent-paper/infrastructure/http"
 )
 
@@ -24,12 +25,13 @@ type Client struct {
 	baseURL string
 }
 
-func NewClient(http *httpx.Client, cfg *conf.Config) httprepo.ArxivRepo {
-	lit := conf.GetLiteratureConf()
-	baseURL := conf.DefaultLiteratureArxivBaseURL
-	if lit != nil && lit.Arxiv != nil && strings.TrimSpace(lit.Arxiv.BaseURL) != "" {
-		baseURL = strings.TrimSpace(lit.Arxiv.BaseURL)
-	}
+func NewClient(http *httpx.Client, sources repository.PaperRefLiteratureSourceRepo) httprepo.ArxivRepo {
+	baseURL := httpx.ResolveLiteratureBaseURL(
+		context.Background(),
+		sources,
+		httpx.LiteratureSourceCodeArxiv,
+		conf.DefaultLiteratureArxivBaseURL,
+	)
 	return &Client{http: http, baseURL: baseURL}
 }
 

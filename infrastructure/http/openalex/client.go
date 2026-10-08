@@ -11,6 +11,7 @@ import (
 	"github.com/qingpeng2016/ai-agent-paper/conf"
 	httpentity "github.com/qingpeng2016/ai-agent-paper/domain/http/entity"
 	httprepo "github.com/qingpeng2016/ai-agent-paper/domain/http/repository"
+	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/repository"
 	httpx "github.com/qingpeng2016/ai-agent-paper/infrastructure/http"
 )
 
@@ -21,16 +22,15 @@ type Client struct {
 	mailto  string
 }
 
-func NewClient(http *httpx.Client, cfg *conf.Config) httprepo.OpenAlexRepo {
-	lit := conf.GetLiteratureConf()
-	baseURL := conf.DefaultLiteratureOpenAlexBaseURL
-	mailto := ""
-	if lit != nil && lit.OpenAlex != nil {
-		if u := strings.TrimSpace(lit.OpenAlex.BaseURL); u != "" {
-			baseURL = u
-		}
-		mailto = strings.TrimSpace(lit.OpenAlex.Mailto)
-	}
+func NewClient(http *httpx.Client, sources repository.PaperRefLiteratureSourceRepo) httprepo.OpenAlexRepo {
+	ctx := context.Background()
+	baseURL := httpx.ResolveLiteratureBaseURL(
+		ctx,
+		sources,
+		httpx.LiteratureSourceCodeOpenAlex,
+		conf.DefaultLiteratureOpenAlexBaseURL,
+	)
+	mailto := httpx.ResolveOpenAlexMailto(ctx, sources)
 	return &Client{http: http, baseURL: baseURL, mailto: mailto}
 }
 

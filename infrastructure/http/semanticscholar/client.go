@@ -11,6 +11,7 @@ import (
 	"github.com/qingpeng2016/ai-agent-paper/conf"
 	httpentity "github.com/qingpeng2016/ai-agent-paper/domain/http/entity"
 	httprepo "github.com/qingpeng2016/ai-agent-paper/domain/http/repository"
+	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/repository"
 	httpx "github.com/qingpeng2016/ai-agent-paper/infrastructure/http"
 )
 
@@ -21,16 +22,15 @@ type Client struct {
 	apiKey  string
 }
 
-func NewClient(http *httpx.Client, cfg *conf.Config) httprepo.SemanticScholarRepo {
-	lit := conf.GetLiteratureConf()
-	baseURL := conf.DefaultLiteratureSemanticScholarBaseURL
-	apiKey := ""
-	if lit != nil && lit.SemanticScholar != nil {
-		if u := strings.TrimSpace(lit.SemanticScholar.BaseURL); u != "" {
-			baseURL = u
-		}
-		apiKey = strings.TrimSpace(lit.SemanticScholar.APIKey)
-	}
+func NewClient(http *httpx.Client, sources repository.PaperRefLiteratureSourceRepo) httprepo.SemanticScholarRepo {
+	ctx := context.Background()
+	baseURL := httpx.ResolveLiteratureBaseURL(
+		ctx,
+		sources,
+		httpx.LiteratureSourceCodeSemanticScholar,
+		conf.DefaultLiteratureSemanticScholarBaseURL,
+	)
+	apiKey := httpx.ResolveSemanticScholarAPIKey(ctx, sources)
 	return &Client{http: http, baseURL: baseURL, apiKey: apiKey}
 }
 
