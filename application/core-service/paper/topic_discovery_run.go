@@ -326,7 +326,10 @@ func (s *TopicDiscoveryRunService) executeStage(ctx context.Context, manuscriptI
 }
 
 func (s *TopicDiscoveryRunService) stageRetrieve(ctx context.Context, step *entity.PaperOutputTopicStep, input topicRunInput) error {
-	query := input.Direction
+	query := ExtractLiteratureSearchQuery(input.Direction)
+	if query == "" {
+		query = strings.TrimSpace(input.Direction)
+	}
 	perSource := input.MaxPapers / len(input.SourceCodes)
 	if perSource < 5 {
 		perSource = 5
@@ -394,8 +397,9 @@ func (s *TopicDiscoveryRunService) stageRetrieve(ctx context.Context, step *enti
 	result := map[string]any{"literature_hits": hits}
 	step.Result = mustJSON(result)
 	step.Meta = mustJSON(map[string]any{
-		"hit_count":     len(hits),
+		"hit_count":      len(hits),
 		"verified_count": len(hits),
+		"search_query":   query,
 	})
 
 	titles := make([]string, 0, min(12, len(hits)))

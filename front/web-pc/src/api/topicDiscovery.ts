@@ -60,15 +60,25 @@ export type TopicDiscoveryRunResponse = {
   steps: TopicDiscoveryStepDTO[]
 }
 
+const RUN_TIMEOUT_MS = 600_000
+
 export async function postTopicDiscoveryRun(
   body: TopicDiscoveryRunRequest,
 ): Promise<TopicDiscoveryRunResponse> {
-  const res = await fetch('/api/v1/paper/topic-discovery/run', {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
+  const controller = new AbortController()
+  const timer = window.setTimeout(() => controller.abort(), RUN_TIMEOUT_MS)
+  let res: Response
+  try {
+    res = await fetch('/api/v1/paper/topic-discovery/run', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    })
+  } finally {
+    window.clearTimeout(timer)
+  }
   if (!res.ok) {
     throw new Error(`topic-discovery run http ${res.status}`)
   }

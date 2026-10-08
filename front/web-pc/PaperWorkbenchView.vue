@@ -2,6 +2,12 @@
 import { computed, nextTick, reactive, ref, watch } from 'vue'
 import { loadWorkbenchModuleContent } from '@/composables/loadWorkbenchModule'
 import { useTopicDiscoveryFormOptions } from '@/composables/useTopicDiscoveryFormOptions'
+import {
+  postTopicDiscoveryRun,
+  fetchCurrentTopicDiscoveryRun,
+  type TopicDiscoveryRunResponse,
+  type TopicDiscoveryStepDTO,
+} from '@/api/topicDiscovery'
 import { ElMessage } from 'element-plus'
 import {
   DEFAULT_ENV_PREFERENCE,
@@ -113,6 +119,28 @@ function buildDemoExperimentPlanLines(): string[] {
 
 const MANUSCRIPTS_STORAGE_KEY = 'atm:paper:manuscripts:v1'
 const LEGACY_PROJECTS_STORAGE_KEY = 'atm:paper:projects:v1'
+const MANUSCRIPT_BACKEND_ID_KEY = 'atm:paper:manuscript-backend-id:v1'
+
+const manuscriptBackendIds = ref<Record<string, number>>({})
+const topicLastRunByMs = ref<Record<string, TopicDiscoveryRunResponse>>({})
+
+function loadManuscriptBackendIdMap() {
+  try {
+    const raw = localStorage.getItem(MANUSCRIPT_BACKEND_ID_KEY)
+    if (!raw) return
+    const parsed = JSON.parse(raw) as Record<string, number>
+    if (parsed && typeof parsed === 'object') manuscriptBackendIds.value = parsed
+  } catch {
+    /* ignore */
+  }
+}
+
+function persistManuscriptBackendId(clientMsId: string, backendId: number) {
+  manuscriptBackendIds.value = { ...manuscriptBackendIds.value, [clientMsId]: backendId }
+  localStorage.setItem(MANUSCRIPT_BACKEND_ID_KEY, JSON.stringify(manuscriptBackendIds.value))
+}
+
+loadManuscriptBackendIdMap()
 
 const activeModule = ref<PaperModuleId>('topic-discovery')
 
@@ -356,7 +384,10 @@ function ensureTopicRunForManuscript(id: string) {
 watch(
   activeManuscriptId,
   (id) => {
-    if (id) ensureTopicRunForManuscript(id)
+    if (id) {
+      ensureTopicRunForManuscript(id)
+      void hydrateTopicRunFromServer(id)
+    }
   },
   { immediate: true },
 )
@@ -395,6 +426,24 @@ const topicDiscoveryArtifact = computed((): TopicDiscoveryArtifactSnapshot => {
     disciplineSelectOptions.value.find((d) => d.value === topicForm.disciplineCode)?.label ??
     topicForm.disciplineCode
 
+  const apiRun = topicLastRunByMs.value[activeManuscriptId.value]
+  const retrieveStep = apiRun?.steps.find((s) => s.stage_code === 'retrieve')
+  const ideasStep = apiRun?.steps.find((s) => s.stage_code === 'generate_ideas')
+  const noveltyStep = apiRun?.steps.find((s) => s.stage_code === 'novelty')
+  const retrieveMeta = (retrieveStep?.meta ?? {}) as Record<string, unknown>
+  const hitCount =
+    typeof retrieveMeta.hit_count === 'number'
+      ? retrieveMeta.hit_count
+      : corpusReady
+        ? 86
+        : 0
+  const verifiedCount =
+    typeof retrieveMeta.verified_count === 'number'
+      ? retrieveMeta.verified_count
+      : corpusReady
+        ? 79
+        : 0
+
   return {
     runStatus: run.status,
     corpusReady,
@@ -403,10 +452,10 @@ const topicDiscoveryArtifact = computed((): TopicDiscoveryArtifactSnapshot => {
     direction,
     venue: topicForm.venue,
     sourceLabels,
-    literatureHitCount: corpusReady ? 86 : 0,
-    verifiedHitCount: corpusReady ? 79 : 0,
-    candidateIdeas: noveltyReady ? [...CHECKPOINT_COPY.generate_ideas_ready.lines] : [],
-    noveltyLines: noveltyReady ? [...CHECKPOINT_COPY.novelty_ready.lines] : [],
+    literatureHitCount: corpusReady ? hitCount : 0,
+    verifiedHitCount: corpusReady ? verifiedCount : 0,
+    candidateIdeas: noveltyReady ? linesFromApiStep(ideasStep) : [],
+    noveltyLines: noveltyReady ? linesFromApiStep(noveltyStep) : [],
     experimentPlanLines: experimentPlanDoneForManuscript.value ? buildDemoExperimentPlanLines() : [],
   }
 })
@@ -469,18 +518,167 @@ function persistTopicRun(msId: string, patch: TopicRunDemo) {
   topicRunsByManuscript.value = { ...topicRunsByManuscript.value, [msId]: patch }
 }
 
-function delay(ms: number, token: number) {
-  return new Promise<void>((resolve, reject) => {
-    window.setTimeout(() => {
-      if (token !== topicRunToken.value) reject(new Error('aborted'))
-      else resolve()
-    }, ms)
-  })
+function mapApiRunStatus(runStatus: string): TopicRunDemo['status'] {
+  if (runStatus === 'checkpoint') return 'checkpoint'
+  if (runStatus === 'completed') return 'completed'
+  if (runStatus === 'failed') return 'failed'
+  if (runStatus === 'running') return 'running'
+  return 'running'
 }
 
-function checkpointView(key: TopicCheckpointKey): TopicCheckpointView {
-  const copy = CHECKPOINT_COPY[key]
-  return { key, title: copy.title, lines: [...copy.lines] }
+function mapStepStatus(raw: string): TopicFlowStepStatus {
+  if (raw === 'completed') return 'completed'
+  if (raw === 'running') return 'running'
+  if (raw === 'failed') return 'failed'
+  return 'pending'
+}
+
+function linesFromApiStep(step?: TopicDiscoveryStepDTO): string[] {
+  if (!step) return []
+  const summary = step.summary_text?.trim()
+  if (summary) {
+    const fromSummary = summary
+      .split(/\n+/)
+      .map((l) => l.trim())
+      .filter(Boolean)
+    if (fromSummary.length) return fromSummary.slice(0, 12)
+  }
+  const result = step.result as Record<string, unknown> | undefined
+  if (!result) return summary ? [summary] : []
+
+  if (step.stage_code === 'retrieve') {
+    const hits = (result.literature_hits as Array<{ title?: string; external_key?: string }>) ?? []
+    const meta = (step.meta ?? {}) as Record<string, unknown>
+    const lines: string[] = []
+    if (typeof meta.hit_count === 'number') {
+      lines.push(`命中 ${meta.hit_count} 篇 · 验真 ${meta.verified_count ?? meta.hit_count} 篇`)
+    }
+    for (const h of hits.slice(0, 6)) {
+      if (h.title) lines.push(`· ${h.title}${h.external_key ? ` (${h.external_key})` : ''}`)
+    }
+    return lines.length ? lines : ['检索已完成']
+  }
+
+  if (step.stage_code === 'generate_ideas') {
+    const ideas = (result.ideas as Array<{ title?: string; problem?: string }>) ?? []
+    return ideas.slice(0, 8).map((idea, i) => {
+      const t = idea.title?.trim() || `Idea ${i + 1}`
+      const p = idea.problem?.trim()
+      return p ? `${t} — ${p}` : t
+    })
+  }
+
+  if (step.stage_code === 'novelty') {
+    const lines = (result.lines as string[]) ?? []
+    if (lines.length) return lines.slice(0, 10)
+    const risks = (result.risks as Array<{ idea_title?: string; risk?: string; note?: string }>) ?? []
+    return risks.slice(0, 8).map((r) => {
+      const t = r.idea_title ?? '选题'
+      return `${t}：${r.risk ?? '—'}${r.note ? ` · ${r.note}` : ''}`
+    })
+  }
+
+  if (step.stage_code === 'audit') {
+    const rounds = (result.rounds as Array<{ issues?: Array<{ severity?: string; claim?: string }> }>) ?? []
+    const last = rounds[rounds.length - 1]
+    const issues = last?.issues ?? (result.issues as Array<{ severity?: string; claim?: string }>)
+    if (issues?.length) {
+      return issues.slice(0, 8).map((iss) => `[${iss.severity ?? 'issue'}] ${iss.claim ?? ''}`.trim())
+    }
+  }
+
+  try {
+    return [JSON.stringify(result).slice(0, 500)]
+  } catch {
+    return ['（已返回结构化结果）']
+  }
+}
+
+function topicRunFromApi(data: TopicDiscoveryRunResponse): TopicRunDemo {
+  const status = mapApiRunStatus(data.run_status)
+  const steps: TopicFlowStepRuntime[] = TOPIC_DISCOVERY_FLOW_STEPS.map((def) => {
+    const st = data.steps.find((s) => s.stage_code === def.stageCode)
+    return {
+      stageCode: def.stageCode,
+      label: def.label,
+      checkpointKey: def.checkpointKey,
+      status: mapStepStatus(st?.status ?? 'pending'),
+    }
+  })
+
+  let checkpoint: TopicCheckpointView | null = null
+  if (status === 'checkpoint' && data.pause_after_stage) {
+    const def = TOPIC_DISCOVERY_FLOW_STEPS.find((s) => s.stageCode === data.pause_after_stage)
+    const step = data.steps.find((s) => s.stage_code === data.pause_after_stage)
+    if (def && step) {
+      const lines = linesFromApiStep(step)
+      checkpoint = {
+        key: def.checkpointKey,
+        title: def.label,
+        lines: lines.length ? lines : CHECKPOINT_COPY[def.checkpointKey].lines,
+      }
+    }
+  }
+
+  return { status, steps, checkpoint }
+}
+
+function buildTopicRunRequest(action: 'start' | 'continue') {
+  const msId = activeManuscriptId.value
+  const backendId = msId ? manuscriptBackendIds.value[msId] : undefined
+  return {
+    manuscript_id: backendId ?? 0,
+    manuscript_title: currentManuscript.value?.title ?? '',
+    discipline_code: topicForm.disciplineCode,
+    direction: topicForm.direction.trim(),
+    venue: topicForm.venue,
+    source_codes: [...topicForm.sourceCodes],
+    intensity: topicForm.intensity,
+    audit_level: topicForm.auditLevel,
+    human_checkpoint: topicForm.humanCheckpoint,
+    action,
+  }
+}
+
+async function hydrateTopicRunFromServer(msId: string) {
+  const backendId = manuscriptBackendIds.value[msId]
+  if (!backendId) return
+  try {
+    const data = await fetchCurrentTopicDiscoveryRun(backendId)
+    if (!data) return
+    topicLastRunByMs.value = { ...topicLastRunByMs.value, [msId]: data }
+    persistTopicRun(msId, topicRunFromApi(data))
+  } catch {
+    /* 未登录或无 run 时忽略 */
+  }
+}
+
+async function invokeTopicDiscoveryRun(action: 'start' | 'continue', token: number) {
+  const msId = activeManuscriptId.value
+  if (!msId) return
+
+  persistTopicRun(msId, {
+    ...currentTopicRun.value,
+    status: 'running',
+    checkpoint: null,
+    steps: currentTopicRun.value.steps.map((s) => ({ ...s })),
+  })
+
+  const data = await postTopicDiscoveryRun(buildTopicRunRequest(action))
+  if (token !== topicRunToken.value) return
+
+  persistManuscriptBackendId(msId, data.manuscript_id)
+  topicLastRunByMs.value = { ...topicLastRunByMs.value, [msId]: data }
+  const run = topicRunFromApi(data)
+  persistTopicRun(msId, run)
+
+  if (run.status === 'completed') {
+    finalizeTopicDiscoveryRun(msId)
+  } else if (run.status === 'checkpoint' && run.checkpoint) {
+    ElMessage.info(`流程已暂停：请确认「${run.checkpoint.title}」后再继续`)
+  } else if (run.status === 'failed') {
+    ElMessage.error('选题发现运行失败，请查看后端日志或改参数重试')
+  }
 }
 
 function finalizeTopicDiscoveryRun(msId: string) {
@@ -493,44 +691,6 @@ function finalizeTopicDiscoveryRun(msId: string) {
   persistTopicRun(msId, run)
   recordModuleOperationLog('topic-discovery', '运行工作流（retrieve → ideas → novelty → audit）')
   ElMessage.success('选题发现已完成：可点顶栏「生成文献综述」继续')
-}
-
-async function executeTopicFlow(fromIndex: number, token: number) {
-  const msId = activeManuscriptId.value
-  if (!msId) return
-
-  const humanOn = topicForm.humanCheckpoint
-  let run = { ...currentTopicRun.value, steps: currentTopicRun.value.steps.map((s) => ({ ...s })) }
-
-  for (let i = fromIndex; i < run.steps.length; i++) {
-    if (token !== topicRunToken.value) return
-
-    const step = run.steps[i]
-    step.status = 'running'
-    run.status = 'running'
-    run.checkpoint = null
-    persistTopicRun(msId, run)
-
-    const ms = step.stageCode === 'retrieve' ? 1400 : step.stageCode === 'audit' ? 900 : 1100
-    try {
-      await delay(ms, token)
-    } catch {
-      return
-    }
-
-    step.status = 'completed'
-    persistTopicRun(msId, { ...run })
-
-    if (humanOn && step.checkpointKey) {
-      run.status = 'checkpoint'
-      run.checkpoint = checkpointView(step.checkpointKey)
-      persistTopicRun(msId, { ...run })
-      ElMessage.info(`流程已暂停：请确认「${step.label}」结果后再继续`)
-      return
-    }
-  }
-
-  finalizeTopicDiscoveryRun(msId)
 }
 
 function resetTopicRunForAction(msId: string) {
@@ -653,7 +813,12 @@ async function startTopicDiscoveryRun() {
   await scrollToTopicFlowPanel()
 
   try {
-    await executeTopicFlow(0, token)
+    await invokeTopicDiscoveryRun('start', token)
+  } catch (e) {
+    if (token !== topicRunToken.value) return
+    const msg = e instanceof Error ? e.message : '运行失败'
+    persistTopicRun(msId, { ...currentTopicRun.value, status: 'failed', checkpoint: null })
+    ElMessage.error(msg.includes('401') ? '请先登录后再运行选题发现' : msg)
   } finally {
     if (token === topicRunToken.value) running.value = false
   }
@@ -663,25 +828,18 @@ function continueTopicAfterCheckpoint() {
   const msId = activeManuscriptId.value
   if (!msId || currentTopicRun.value.status !== 'checkpoint') return
 
-  const nextIndex = currentTopicRun.value.steps.findIndex((s) => s.status === 'pending')
   const token = topicRunToken.value
   running.value = true
-  persistTopicRun(msId, {
-    ...currentTopicRun.value,
-    status: 'running',
-    checkpoint: null,
-    steps: currentTopicRun.value.steps.map((s) => ({ ...s })),
-  })
 
-  if (nextIndex < 0) {
-    finalizeTopicDiscoveryRun(msId)
-    running.value = false
-    return
-  }
-
-  executeTopicFlow(nextIndex, token).finally(() => {
-    if (token === topicRunToken.value) running.value = false
-  })
+  invokeTopicDiscoveryRun('continue', token)
+    .catch((e) => {
+      if (token !== topicRunToken.value) return
+      const msg = e instanceof Error ? e.message : '继续失败'
+      ElMessage.error(msg)
+    })
+    .finally(() => {
+      if (token === topicRunToken.value) running.value = false
+    })
 }
 
 function rejectTopicCheckpoint() {
@@ -1008,7 +1166,7 @@ async function onPrimaryAction() {
           </button>
         </div>
         <p class="paper-section-lead">
-          阶段进度由各 <code>paper_output_*</code> 与 <code>paper_manuscript.draft_*</code> 是否存在推导（演示交互，非真实 Agent）。
+          进度来自后端 <code>paper_output_topic_step</code>（检索 + 四步模型调用）；长步骤请耐心等待。
         </p>
 
         <ol class="paper-flow-steps">
