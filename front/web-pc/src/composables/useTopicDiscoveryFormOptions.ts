@@ -8,6 +8,8 @@ import { DISCIPLINE_OPTIONS } from '@paper/types'
 const disciplineSelectOptions = ref<PaperSelectOption[]>([])
 const intensityOptions = ref<PaperSelectOption[]>([])
 const auditOptions = ref<PaperSelectOption[]>([])
+const defaultIntensityCode = ref('balanced')
+const defaultAuditLevelCode = ref('polished')
 const ready = ref(false)
 const loading = ref(false)
 
@@ -28,6 +30,22 @@ function applyFallbackOptions() {
     { value: 'polished', label: '精修' },
     { value: 'strict', label: '严格' },
   ]
+  defaultIntensityCode.value = 'balanced'
+  defaultAuditLevelCode.value = 'polished'
+}
+
+export function applyCatalogIntensityAuditDefaults(target: {
+  intensity: string
+  auditLevel: string
+}) {
+  const i = defaultIntensityCode.value
+  const a = defaultAuditLevelCode.value
+  if (i && intensityOptions.value.some((o) => o.value === i)) {
+    target.intensity = i
+  }
+  if (a && auditOptions.value.some((o) => o.value === a)) {
+    target.auditLevel = a
+  }
 }
 
 /** 每次进入相关模块时重新拉取；失败时用本地 fallback */
@@ -40,6 +58,12 @@ export async function reloadTopicDiscoveryFormOptions(): Promise<void> {
     disciplineSelectOptions.value = opts.disciplineSelectOptions
     intensityOptions.value = opts.intensityOptions
     auditOptions.value = opts.auditOptions
+    if (opts.defaultIntensityCode) {
+      defaultIntensityCode.value = opts.defaultIntensityCode
+    }
+    if (opts.defaultAuditLevelCode) {
+      defaultAuditLevelCode.value = opts.defaultAuditLevelCode
+    }
     if (
       !disciplineSelectOptions.value.length ||
       !intensityOptions.value.length ||
@@ -70,5 +94,8 @@ export function useTopicDiscoveryFormOptions() {
     disciplineSelectOptions: readonly(disciplineSelectOptions),
     intensityOptions: readonly(intensityOptions),
     auditOptions: readonly(auditOptions),
+    defaultIntensityCode: readonly(defaultIntensityCode),
+    defaultAuditLevelCode: readonly(defaultAuditLevelCode),
+    applyCatalogIntensityAuditDefaults,
   }
 }

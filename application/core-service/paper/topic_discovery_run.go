@@ -165,6 +165,36 @@ func (s *TopicDiscoveryRunService) Run(ctx context.Context, userID uint, req req
 	return s.reloadView(ctx, msID, runVersion)
 }
 
+func (s *TopicDiscoveryRunService) defaultExecutionIntensityCode(ctx context.Context) string {
+	rows, err := s.catalog.ListExecutionIntensities(ctx)
+	if err == nil {
+		for _, r := range rows {
+			if r.IsDefault {
+				return r.Code
+			}
+		}
+		if len(rows) > 0 {
+			return rows[0].Code
+		}
+	}
+	return "balanced"
+}
+
+func (s *TopicDiscoveryRunService) defaultAuditLevelCode(ctx context.Context) string {
+	rows, err := s.catalog.ListAuditLevels(ctx)
+	if err == nil {
+		for _, r := range rows {
+			if r.IsDefault {
+				return r.Code
+			}
+		}
+		if len(rows) > 0 {
+			return rows[0].Code
+		}
+	}
+	return "polished"
+}
+
 func (s *TopicDiscoveryRunService) prepareRun(ctx context.Context, userID uint, req request.TopicDiscoveryRunRequest) (uint64, topicRunInput, error) {
 	direction := strings.TrimSpace(req.Direction)
 	if direction == "" {
@@ -175,11 +205,11 @@ func (s *TopicDiscoveryRunService) prepareRun(ctx context.Context, userID uint, 
 	}
 	intensityCode := strings.TrimSpace(req.Intensity)
 	if intensityCode == "" {
-		intensityCode = "balanced"
+		intensityCode = s.defaultExecutionIntensityCode(ctx)
 	}
 	auditCode := strings.TrimSpace(req.AuditLevel)
 	if auditCode == "" {
-		auditCode = "polished"
+		auditCode = s.defaultAuditLevelCode(ctx)
 	}
 	intensity, err := s.catalog.FindExecutionIntensityByCode(ctx, intensityCode)
 	if err != nil || intensity == nil {

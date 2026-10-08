@@ -8,6 +8,7 @@ type PaperRefExecutionIntensity struct {
 	Multiplier decimal.Decimal `gorm:"column:multiplier;type:decimal(4,2);not null"`
 	MaxPapers  uint            `gorm:"column:max_papers;not null"`
 	MaxIdeas   uint            `gorm:"column:max_ideas;not null"`
+	IsDefault  bool            `gorm:"column:is_default;not null;default:0"`
 }
 
 func (PaperRefExecutionIntensity) TableName() string { return "paper_ref_execution_intensity" }

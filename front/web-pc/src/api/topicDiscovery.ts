@@ -12,6 +12,7 @@ export type TopicDiscoveryFormOptionsResponse = {
     multiplier: number
     max_papers: number
     max_ideas: number
+    is_default?: boolean
   }>
   audit_levels: Array<{
     code: string
@@ -20,6 +21,7 @@ export type TopicDiscoveryFormOptionsResponse = {
     claim_strength: number
     kill_argument_strength: number
     audit_rounds: number
+    is_default?: boolean
   }>
 }
 
@@ -106,10 +108,16 @@ export async function fetchCurrentTopicDiscoveryRun(
   return envelope.data ?? null
 }
 
+function pickDefaultCode(items: Array<{ code: string; is_default?: boolean }>): string {
+  return items.find((x) => x.is_default)?.code ?? items[0]?.code ?? ''
+}
+
 export async function fetchTopicDiscoveryFormOptions(): Promise<{
   disciplineSelectOptions: PaperSelectOption[]
   intensityOptions: PaperSelectOption[]
   auditOptions: PaperSelectOption[]
+  defaultIntensityCode: string
+  defaultAuditLevelCode: string
 }> {
   const controller = new AbortController()
   const timer = window.setTimeout(() => controller.abort(), FORM_OPTIONS_TIMEOUT_MS)
@@ -133,5 +141,7 @@ export async function fetchTopicDiscoveryFormOptions(): Promise<{
     disciplineSelectOptions: d.disciplines.map((x) => ({ value: x.code, label: x.label })),
     intensityOptions: d.execution_intensities.map((x) => ({ value: x.code, label: x.label })),
     auditOptions: d.audit_levels.map((x) => ({ value: x.code, label: x.label })),
+    defaultIntensityCode: pickDefaultCode(d.execution_intensities),
+    defaultAuditLevelCode: pickDefaultCode(d.audit_levels),
   }
 }

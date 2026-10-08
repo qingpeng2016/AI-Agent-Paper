@@ -20,6 +20,7 @@ type TopicDiscoveryExecutionIntensityOption struct {
 	Multiplier float64 `json:"multiplier"`
 	MaxPapers  uint    `json:"max_papers"`
 	MaxIdeas   uint    `json:"max_ideas"`
+	IsDefault  bool    `json:"is_default"`
 }
 
 type TopicDiscoveryAuditLevelOption struct {
@@ -29,4 +30,5 @@ type TopicDiscoveryAuditLevelOption struct {
 	ClaimStrength        uint8  `json:"claim_strength"`
 	KillArgumentStrength uint8  `json:"kill_argument_strength"`
 	AuditRounds          uint8  `json:"audit_rounds"`
+	IsDefault            bool   `json:"is_default"`
 }

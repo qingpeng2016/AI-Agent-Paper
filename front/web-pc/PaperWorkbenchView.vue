@@ -197,7 +197,11 @@ const {
   disciplineSelectOptions,
   intensityOptions,
   auditOptions,
+  ready: topicFormOptionsReady,
+  applyCatalogIntensityAuditDefaults,
 } = useTopicDiscoveryFormOptions()
+
+const envPreferenceFromStorage = ref(false)
 
 const manuscripts = ref<PaperManuscriptItem[]>([...DEMO_PAPER_MANUSCRIPTS])
 const activeManuscriptId = ref<string>(DEMO_PAPER_MANUSCRIPTS[0]?.id ?? '')
@@ -206,12 +210,20 @@ function loadEnvFromStorage() {
   try {
     const raw = localStorage.getItem(ENV_PREFERENCE_STORAGE_KEY)
     if (!raw) return
+    envPreferenceFromStorage.value = true
     const data = JSON.parse(raw) as { preference?: EnvironmentPreferenceForm }
     if (data.preference) Object.assign(envPreference, data.preference)
   } catch {
     /* ignore */
   }
 }
+
+watch(topicFormOptionsReady, (ready) => {
+  if (!ready || envPreferenceFromStorage.value) return
+  applyCatalogIntensityAuditDefaults(envPreference)
+  topicForm.intensity = envPreference.intensity
+  topicForm.auditLevel = envPreference.auditLevel
+})
 
 function loadLitReviewFlagsFromStorage() {
   try {

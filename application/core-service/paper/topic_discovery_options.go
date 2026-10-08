@@ -62,6 +62,7 @@ func (s *TopicDiscoveryOptionsService) GetFormOptions(ctx context.Context) (*res
 			Multiplier: mul,
 			MaxPapers:  i.MaxPapers,
 			MaxIdeas:   i.MaxIdeas,
+			IsDefault:  i.IsDefault,
 		})
 	}
 
@@ -73,6 +74,7 @@ func (s *TopicDiscoveryOptionsService) GetFormOptions(ctx context.Context) (*res
 			ClaimStrength:        a.ClaimStrength,
 			KillArgumentStrength: a.KillArgumentStrength,
 			AuditRounds:          a.AuditRounds,
+			IsDefault:            a.IsDefault,
 		})
 	}
 

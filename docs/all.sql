@@ -296,6 +296,7 @@ CREATE TABLE IF NOT EXISTS `paper_ref_execution_intensity` (
   `multiplier`   DECIMAL(4,2) NOT NULL DEFAULT 1.00 COMMENT '相对检索量/迭代轮数系数',
   `max_papers`   INT UNSIGNED NOT NULL DEFAULT 80 COMMENT '检索文献上限（选题/综述等）',
   `max_ideas`    INT UNSIGNED NOT NULL DEFAULT 12 COMMENT '选题候选 idea 上限',
+  `is_default`   TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '前端默认选中项，仅一条应为 1',
   PRIMARY KEY (`code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='执行强度档位';
 
@@ -306,6 +307,7 @@ CREATE TABLE IF NOT EXISTS `paper_ref_audit_level` (
   `claim_strength`         TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '0=关,1-3=论断审计强度',
   `kill_argument_strength` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0=关,1-3=驳论审计强度',
   `audit_rounds`           TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '审计迭代轮数',
+  `is_default`             TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '前端默认选中项，仅一条应为 1',
   PRIMARY KEY (`code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='审计等级';
 
@@ -702,28 +704,30 @@ ON DUPLICATE KEY UPDATE
 -- 10. 种子数据 — Paper（强度、审计、学科、venue、文献源）
 -- ---------------------------------------------------------------------------
 
-INSERT INTO `paper_ref_execution_intensity` (`code`, `name`, `multiplier`, `max_papers`, `max_ideas`) VALUES
-  ('fast',     '更快', 0.60, 30,  6),
-  ('balanced', 'Balanced（平衡）', 1.00, 80,  12),
-  ('deep',     '更深', 1.80, 200, 20)
+INSERT INTO `paper_ref_execution_intensity` (`code`, `name`, `multiplier`, `max_papers`, `max_ideas`, `is_default`) VALUES
+  ('fast',     '更快', 0.60, 30,  6, 0),
+  ('balanced', 'Balanced（平衡）', 1.00, 80,  12, 1),
+  ('deep',     '更深', 1.80, 200, 20, 0)
 ON DUPLICATE KEY UPDATE
   `name` = VALUES(`name`),
   `multiplier` = VALUES(`multiplier`),
   `max_papers` = VALUES(`max_papers`),
-  `max_ideas` = VALUES(`max_ideas`);
+  `max_ideas` = VALUES(`max_ideas`),
+  `is_default` = VALUES(`is_default`);
 
 INSERT INTO `paper_ref_audit_level` (
-  `code`, `name`, `citation_strength`, `claim_strength`, `kill_argument_strength`, `audit_rounds`
+  `code`, `name`, `citation_strength`, `claim_strength`, `kill_argument_strength`, `audit_rounds`, `is_default`
 ) VALUES
-  ('standard', '标准', 1, 1, 0, 1),
-  ('polished', '精修', 2, 2, 1, 2),
-  ('strict',   '严格', 3, 3, 2, 3)
+  ('standard', '标准', 1, 1, 0, 1, 0),
+  ('polished', '精修', 2, 2, 1, 2, 1),
+  ('strict',   '严格', 3, 3, 2, 3, 0)
 ON DUPLICATE KEY UPDATE
   `name` = VALUES(`name`),
   `citation_strength` = VALUES(`citation_strength`),
   `claim_strength` = VALUES(`claim_strength`),
   `kill_argument_strength` = VALUES(`kill_argument_strength`),
-  `audit_rounds` = VALUES(`audit_rounds`);
+  `audit_rounds` = VALUES(`audit_rounds`),
+  `is_default` = VALUES(`is_default`);
 
 INSERT INTO `paper_ref_discipline` (`code`, `name`, `name_en`, `sort`, `literature_source_codes`) VALUES
   ('cs_ai', '计算机/人工智能', 'Computer Science & AI', 10,
@@ -819,5 +823,17 @@ ON DUPLICATE KEY UPDATE
   `stage_name` = VALUES(`stage_name`),
   `template_body` = VALUES(`template_body`),
   `status` = VALUES(`status`);
+
+-- ---------------------------------------------------------------------------
+-- 升级脚本（已有库执行一次即可）
+-- ---------------------------------------------------------------------------
+-- ALTER TABLE `paper_ref_execution_intensity`
+--   ADD COLUMN `is_default` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '前端默认选中项，仅一条应为 1' AFTER `max_ideas`;
+-- ALTER TABLE `paper_ref_audit_level`
+--   ADD COLUMN `is_default` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '前端默认选中项，仅一条应为 1' AFTER `audit_rounds`;
+-- UPDATE `paper_ref_execution_intensity` SET `is_default` = 0;
+-- UPDATE `paper_ref_execution_intensity` SET `is_default` = 1 WHERE `code` = 'balanced';
+-- UPDATE `paper_ref_audit_level` SET `is_default` = 0;
+-- UPDATE `paper_ref_audit_level` SET `is_default` = 1 WHERE `code` = 'polished';
 
 SET FOREIGN_KEY_CHECKS = 1;
