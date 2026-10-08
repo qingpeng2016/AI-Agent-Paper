@@ -77,16 +77,19 @@ async function saveEnvironment() {
         <label class="pc-field">
           <span class="pc-label">默认目标会议/期刊</span>
           <input v-model="envPreference.defaultVenueText" type="text" class="pc-input" />
+          <span class="pc-hint">用于约束贡献类型、实验标准和写作风格。</span>
         </label>
 
         <label class="pc-field">
           <span class="pc-label">默认执行强度</span>
           <PaperSelect v-model="envPreference.intensity" :options="intensityOptions" />
+          <span class="pc-hint">控制检索数量、迭代轮数和输出深度。</span>
         </label>
 
         <label class="pc-field">
           <span class="pc-label">默认审计等级</span>
           <PaperSelect v-model="envPreference.auditLevel" :options="auditOptions" />
+          <span class="pc-hint">控制 citation audit、claim audit、kill argument 等门禁强度。</span>
         </label>
       </div>
 
@@ -102,6 +105,7 @@ async function saveEnvironment() {
             <span>{{ src.label }}</span>
           </label>
         </div>
+        <span class="pc-hint">所有结果必须进入真实文献验证流程。</span>
       </div>
 
       <label class="pc-check">

@@ -879,7 +879,7 @@ async function onPrimaryAction() {
             v-model="topicForm.direction"
             class="paper-textarea"
             rows="4"
-            placeholder="输入要探索的研究主题、问题或关键词（也作为检索 query 依据）。"
+            placeholder="输入要探索的研究主题、问题或关键词。"
           />
         </label>
 
@@ -893,19 +893,19 @@ async function onPrimaryAction() {
           <label class="paper-field">
             <span class="paper-label">目标会议/期刊</span>
             <input v-model="topicForm.venue" type="text" class="paper-input" />
-            <span class="paper-hint">贡献类型、实验门槛、写作调性</span>
+            <span class="paper-hint">用于约束贡献类型、实验标准和写作风格。</span>
           </label>
 
           <label class="paper-field">
             <span class="paper-label">执行强度</span>
             <PaperSelect v-model="topicForm.intensity" :options="intensityOptions" />
-            <span class="paper-hint">检索条数、脑暴轮数、计划深度</span>
+            <span class="paper-hint">控制检索数量、迭代轮数和输出深度。</span>
           </label>
 
           <label class="paper-field">
             <span class="paper-label">审计等级</span>
             <PaperSelect v-model="topicForm.auditLevel" :options="auditOptions" />
-            <span class="paper-hint">检索校验、选题断言、kill argument</span>
+            <span class="paper-hint">控制 citation audit、claim audit、kill argument 等门禁强度。</span>
           </label>
         </div>
 
@@ -925,6 +925,7 @@ async function onPrimaryAction() {
               <span>{{ src.label }}</span>
             </label>
           </div>
+          <span class="paper-hint">所有结果必须进入真实文献验证流程。</span>
         </div>
 
         <label class="paper-check">

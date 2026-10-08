@@ -285,6 +285,7 @@ defineExpose({ runModule })
         <label class="wf-field">
           <span class="wf-label">执行强度</span>
           <PaperSelect v-model="planForm.intensity" :options="intensityOptions" />
+          <span class="wf-hint">控制检索数量、迭代轮数和输出深度。</span>
         </label>
         <label class="wf-field wf-field--span2">
           <span class="wf-label">基线（逗号或换行）</span>
@@ -329,6 +330,7 @@ defineExpose({ runModule })
         <label class="wf-field">
           <span class="wf-label">审计等级</span>
           <PaperSelect v-model="reviewForm.auditLevel" :options="auditOptions" />
+          <span class="wf-hint">控制 citation audit、claim audit、kill argument 等门禁强度。</span>
         </label>
         <label class="wf-check wf-check--solo">
           <input v-model="reviewForm.strictKill" type="checkbox" />
