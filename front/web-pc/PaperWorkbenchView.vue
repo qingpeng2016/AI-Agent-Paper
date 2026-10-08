@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { fetchTopicDiscoveryFormOptions } from './api/topicDiscovery'
 import { ElMessage } from 'element-plus'
 import {
   DEFAULT_ENV_PREFERENCE,
@@ -329,7 +330,8 @@ const topicDiscoveryArtifact = computed((): TopicDiscoveryArtifactSnapshot => {
     run.status === 'checkpoint' ||
     runCompleted
   const disciplineLabel =
-    DISCIPLINE_OPTIONS.find((d) => d.code === topicForm.disciplineCode)?.label ?? topicForm.disciplineCode
+    disciplineSelectOptions.value.find((d) => d.value === topicForm.disciplineCode)?.label ??
+    topicForm.disciplineCode
 
   return {
     runStatus: run.status,
@@ -649,22 +651,35 @@ watch(activeManuscriptId, () => {
 
 const currentMeta = computed(() => getPaperModuleMeta(activeModule.value))
 
-const intensityOptions = [
+const intensityOptions = ref([
   { value: 'fast', label: '更快' },
   { value: 'balanced', label: 'Balanced（平衡）' },
   { value: 'deep', label: '更深' },
-]
+])
 
-const auditOptions = [
+const auditOptions = ref([
   { value: 'standard', label: 'Standard' },
   { value: 'polished', label: 'Polished（精修）' },
   { value: 'strict', label: 'Strict' },
-]
+])
 
-const disciplineSelectOptions = DISCIPLINE_OPTIONS.map((d) => ({
-  value: d.code,
-  label: d.label,
-}))
+const disciplineSelectOptions = ref(
+  DISCIPLINE_OPTIONS.map((d) => ({
+    value: d.code,
+    label: d.label,
+  })),
+)
+
+onMounted(async () => {
+  try {
+    const opts = await fetchTopicDiscoveryFormOptions()
+    if (opts.disciplineSelectOptions.length) disciplineSelectOptions.value = opts.disciplineSelectOptions
+    if (opts.intensityOptions.length) intensityOptions.value = opts.intensityOptions
+    if (opts.auditOptions.length) auditOptions.value = opts.auditOptions
+  } catch {
+    /* 保留本地 fallback */
+  }
+})
 
 function toggleTopicSource(code: string, checked: boolean) {
   const set = new Set(topicForm.sourceCodes)

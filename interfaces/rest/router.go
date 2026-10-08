@@ -22,7 +22,8 @@ type Router struct {
 	inviteRebateHandler    *handler.InviteRebateHandler
 	couponHandler          *handler.CouponHandler
 	trackingHandler        *handler.TrackingHandler
-	paperLiteratureHandler *handler.PaperLiteratureHandler
+	paperLiteratureHandler    *handler.PaperLiteratureHandler
+	paperTopicDiscoveryHandler *handler.PaperTopicDiscoveryHandler
 }
 
 func NewRouter(
@@ -32,14 +33,16 @@ func NewRouter(
 	couponHandler *handler.CouponHandler,
 	trackingHandler *handler.TrackingHandler,
 	paperLiteratureHandler *handler.PaperLiteratureHandler,
+	paperTopicDiscoveryHandler *handler.PaperTopicDiscoveryHandler,
 ) *Router {
 	return &Router{
-		setting:                setting,
-		userHandler:            userHandler,
-		inviteRebateHandler:    inviteRebateHandler,
-		couponHandler:          couponHandler,
-		trackingHandler:        trackingHandler,
-		paperLiteratureHandler: paperLiteratureHandler,
+		setting:                    setting,
+		userHandler:                userHandler,
+		inviteRebateHandler:        inviteRebateHandler,
+		couponHandler:              couponHandler,
+		trackingHandler:            trackingHandler,
+		paperLiteratureHandler:     paperLiteratureHandler,
+		paperTopicDiscoveryHandler: paperTopicDiscoveryHandler,
 	}
 }
 
@@ -54,6 +57,11 @@ func (r *Router) setupRouters() *gin.Engine {
 		v1.POST("/users/logout", r.userHandler.Logout)
 		v1.GET("/coupon-campaigns/register-promo", r.couponHandler.RegisterPromo)
 		v1.POST("/tracking/events", r.trackingHandler.ReportEvents)
+
+		paper := v1.Group("/paper")
+		{
+			paper.GET("/topic-discovery/form-options", r.paperTopicDiscoveryHandler.GetFormOptions)
+		}
 	}
 
 	userAuth := engine.Group("/api/v1", ginMiddleware.RequireAuth)
