@@ -326,27 +326,47 @@ export type TopicDiscoveryForm = {
   disciplineCode: string
   direction: string
   venue: string
-  /** 多源检索（写入 paper_manuscript_literature_hit） */
+  /** 多源检索（写入 paper_output_literature_hit） */
   sourceCodes: string[]
   intensity: ExecutionIntensity
   auditLevel: AuditLevel
   humanCheckpoint: boolean
 }
 
-/** 选题发现模块内阶段（产品/Agent 约定 stage_code） */
-export type TopicCheckpointKey = 'ideas_ready'
+/** 选题发现每步完成后的人工确认点（与 stage 一一对应） */
+export type TopicCheckpointKey =
+  | 'retrieve_ready'
+  | 'generate_ideas_ready'
+  | 'novelty_ready'
+  | 'audit_ready'
 
 export type TopicFlowStepDef = {
   stageCode: string
   label: string
-  checkpointKey?: TopicCheckpointKey
+  checkpointKey: TopicCheckpointKey
 }
 
 export const TOPIC_DISCOVERY_FLOW_STEPS: TopicFlowStepDef[] = [
-  { stageCode: 'retrieve', label: '多源文献检索与校验入库' },
-  { stageCode: 'generate_ideas', label: '脑暴候选选题' },
-  { stageCode: 'novelty', label: '新颖性检查', checkpointKey: 'ideas_ready' },
-  { stageCode: 'audit', label: '选题断言初 audit' },
+  {
+    stageCode: 'retrieve',
+    label: '多源文献检索与校验入库',
+    checkpointKey: 'retrieve_ready',
+  },
+  {
+    stageCode: 'generate_ideas',
+    label: '脑暴候选选题',
+    checkpointKey: 'generate_ideas_ready',
+  },
+  {
+    stageCode: 'novelty',
+    label: '新颖性检查',
+    checkpointKey: 'novelty_ready',
+  },
+  {
+    stageCode: 'audit',
+    label: '选题断言初 audit',
+    checkpointKey: 'audit_ready',
+  },
 ]
 
 export type TopicFlowStepStatus =

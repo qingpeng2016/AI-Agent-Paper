@@ -64,12 +64,36 @@ function createIdleTopicRun(): TopicRunDemo {
 }
 
 const CHECKPOINT_COPY: Record<TopicCheckpointKey, Omit<TopicCheckpointView, 'key'>> = {
-  ideas_ready: {
-    title: '候选选题与新颖性结论',
+  retrieve_ready: {
+    title: '检索与验真入库结果',
     lines: [
-      'Idea A：稀疏注意力 + 动态路由 — 新颖性：与 Static Sparse 系列有明确区分（中等风险）',
-      'Idea B：层级 KV 压缩 — 新颖性：需加强与 H2O / SnapKV 对比（偏高风险）',
-      'Idea C：训练无关的 token 合并 — 新颖性：检索命中较少（低风险，建议深检索）',
+      '命中 86 篇 · 验真通过 79 篇 · 待补全 7 篇（演示）',
+      '来源：arXiv / OpenAlex / Semantic Scholar 已去重',
+      '覆盖缺口：2025 Q1 同方向预印本偏少，可加深检索或补 Crossref',
+    ],
+  },
+  generate_ideas_ready: {
+    title: '候选选题（脑暴）',
+    lines: [
+      'Idea A：稀疏注意力 + 动态路由 — 一句话 claim + 12 条 reference keys',
+      'Idea B：层级 KV 压缩 — 可测指标：吞吐 / 困惑度',
+      'Idea C：训练无关 token 合并 — 偏系统向，需补实验资源说明',
+    ],
+  },
+  novelty_ready: {
+    title: '新颖性检查结论',
+    lines: [
+      'Idea A：与 Static Sparse 系列有明确区分（中等风险）',
+      'Idea B：需加强与 H2O / SnapKV 对比（偏高风险）',
+      'Idea C：检索命中较少（低风险，建议深检索）',
+    ],
+  },
+  audit_ready: {
+    title: '选题审计摘要',
+    lines: [
+      'Idea A：minor ×1（基线描述可更具体）— 可进入下游',
+      'Idea B：major ×1（claim 与文献 key 不完全对齐）— 建议修订后复审',
+      'Idea C：blocker ×1（贡献边界模糊）— 不建议进入文献综述',
     ],
   },
 }
@@ -381,8 +405,8 @@ const topicDiscoveryArtifact = computed((): TopicDiscoveryArtifactSnapshot => {
     sourceLabels,
     literatureHitCount: corpusReady ? 86 : 0,
     verifiedHitCount: corpusReady ? 79 : 0,
-    candidateIdeas: noveltyReady ? [...CHECKPOINT_COPY.ideas_ready.lines] : [],
-    noveltyLines: noveltyReady ? [...CHECKPOINT_COPY.ideas_ready.lines] : [],
+    candidateIdeas: noveltyReady ? [...CHECKPOINT_COPY.generate_ideas_ready.lines] : [],
+    noveltyLines: noveltyReady ? [...CHECKPOINT_COPY.novelty_ready.lines] : [],
     experimentPlanLines: experimentPlanDoneForManuscript.value ? buildDemoExperimentPlanLines() : [],
   }
 })
@@ -459,6 +483,18 @@ function checkpointView(key: TopicCheckpointKey): TopicCheckpointView {
   return { key, title: copy.title, lines: [...copy.lines] }
 }
 
+function finalizeTopicDiscoveryRun(msId: string) {
+  const run = {
+    ...currentTopicRun.value,
+    status: 'completed' as const,
+    checkpoint: null,
+    steps: currentTopicRun.value.steps.map((s) => ({ ...s })),
+  }
+  persistTopicRun(msId, run)
+  recordModuleOperationLog('topic-discovery', '运行工作流（retrieve → ideas → novelty → audit）')
+  ElMessage.success('选题发现已完成：可点顶栏「生成文献综述」继续')
+}
+
 async function executeTopicFlow(fromIndex: number, token: number) {
   const msId = activeManuscriptId.value
   if (!msId) return
@@ -485,21 +521,16 @@ async function executeTopicFlow(fromIndex: number, token: number) {
     step.status = 'completed'
     persistTopicRun(msId, { ...run })
 
-    const cpKey = step.checkpointKey
-    if (humanOn && cpKey) {
+    if (humanOn && step.checkpointKey) {
       run.status = 'checkpoint'
-      run.checkpoint = checkpointView(cpKey)
+      run.checkpoint = checkpointView(step.checkpointKey)
       persistTopicRun(msId, { ...run })
-      ElMessage.info('流程已暂停：请确认检查点内容后再继续')
+      ElMessage.info(`流程已暂停：请确认「${step.label}」结果后再继续`)
       return
     }
   }
 
-  run.status = 'completed'
-  run.checkpoint = null
-  persistTopicRun(msId, run)
-  recordModuleOperationLog('topic-discovery', '运行工作流（retrieve → ideas → novelty → audit）')
-  ElMessage.success('选题发现已完成：可点顶栏「生成文献综述」继续')
+  finalizeTopicDiscoveryRun(msId)
 }
 
 function resetTopicRunForAction(msId: string) {
@@ -586,7 +617,7 @@ async function runLiteratureReviewFromTopic() {
   const msId = activeManuscriptId.value
   if (!msId) return
   if (currentTopicRun.value.status !== 'completed') {
-    ElMessage.warning('请先完成选题发现（至新颖性检查）')
+    ElMessage.warning('请先完成选题发现（四步含审计）')
     return
   }
 
@@ -633,8 +664,6 @@ function continueTopicAfterCheckpoint() {
   if (!msId || currentTopicRun.value.status !== 'checkpoint') return
 
   const nextIndex = currentTopicRun.value.steps.findIndex((s) => s.status === 'pending')
-  if (nextIndex < 0) return
-
   const token = topicRunToken.value
   running.value = true
   persistTopicRun(msId, {
@@ -643,6 +672,12 @@ function continueTopicAfterCheckpoint() {
     checkpoint: null,
     steps: currentTopicRun.value.steps.map((s) => ({ ...s })),
   })
+
+  if (nextIndex < 0) {
+    finalizeTopicDiscoveryRun(msId)
+    running.value = false
+    return
+  }
 
   executeTopicFlow(nextIndex, token).finally(() => {
     if (token === topicRunToken.value) running.value = false
@@ -937,7 +972,7 @@ async function onPrimaryAction() {
           <span>
             <strong>人工检查点</strong>
             <span class="paper-hint paper-hint--inline">
-              开启后会在 <em>新颖性检查</em> 完成后暂停，确认后再执行选题 audit
+              开启后四步各暂停一次：检索入库 → 脑暴 idea → 新颖性 → 审计，每步需确认并继续
             </span>
           </span>
         </label>
