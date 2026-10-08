@@ -13,7 +13,7 @@
 -- | ref        | paper_ref_* |
 -- | manuscript | paper_manuscript（我的论文）, paper_manuscript_runtime, |
 -- |            | paper_manuscript_citation_gate, paper_manuscript_review |
--- | output     | paper_output_*（各模块业务产出，均含 manuscript_id；含 paper_output_literature_hit） |
+-- | output     | paper_output_*（各模块业务产出，均含 manuscript_id） |
 -- | user       | paper_user_preference, paper_user_literature |
 -- | model      | paper_llm_model_config, paper_llm_workflow_binding, paper_llm_prompt_template |
 -- | llm        | paper_llm_call_logs |
@@ -419,7 +419,7 @@ CREATE TABLE IF NOT EXISTS `paper_manuscript_runtime` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='稿件平台运行时绑定（内部）';
 
 -- ---------------------------------------------------------------------------
--- 4. 引用门禁（检索命中文献见 paper_output_literature_hit）
+-- 4. 引用门禁（选题检索命中文献见 paper_output_topic_step retrieve 步 result）
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS `paper_manuscript_citation_gate` (
@@ -428,7 +428,7 @@ CREATE TABLE IF NOT EXISTS `paper_manuscript_citation_gate` (
   `stage_code`          VARCHAR(64)  DEFAULT NULL COMMENT '校验发生时的环节键',
   `target_id`           BIGINT UNSIGNED DEFAULT NULL COMMENT '如 paper_manuscript.id 或其它 paper_output_*',
   `source_id`           BIGINT UNSIGNED DEFAULT NULL COMMENT '门禁关联文献源',
-  `external_key`        VARCHAR(256) DEFAULT NULL COMMENT '与 paper_output_literature_hit 同源键',
+  `external_key`        VARCHAR(256) DEFAULT NULL COMMENT '文献外部键 arxiv:… / doi:…（与 retrieve 步 result 内 hits 一致）',
   `cited_key`           VARCHAR(256) DEFAULT NULL COMMENT '正文中的 cite key',
   `gate_type`           VARCHAR(32)  NOT NULL COMMENT '门禁类型：引用/引用审计/论断审计/驳论',
   `status`              VARCHAR(16)  NOT NULL COMMENT 'verified|rejected|pending|waived',
@@ -442,57 +442,28 @@ CREATE TABLE IF NOT EXISTS `paper_manuscript_citation_gate` (
 -- 5. 各模块业务产出 paper_output_*（均关联 paper_manuscript.id）
 -- ---------------------------------------------------------------------------
 
-CREATE TABLE IF NOT EXISTS `paper_output_topic` (
-  `id`                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '选题 run ID',
+-- 选题发现：一轮 run 固定四步，每步一行（stage_code 见 paper_llm_workflow_binding）
+CREATE TABLE IF NOT EXISTS `paper_output_topic_step` (
+  `id`                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '记录 ID',
   `manuscript_id`     BIGINT UNSIGNED NOT NULL COMMENT '论文 ID',
   `user_id`           BIGINT UNSIGNED NOT NULL COMMENT '用户 ID',
-  `version`           INT          NOT NULL DEFAULT 1 COMMENT '版本号',
-  `is_current`        TINYINT(1)   NOT NULL DEFAULT 1 COMMENT '本篇当前生效版本',
-  `status`            VARCHAR(16)  NOT NULL DEFAULT 'completed' COMMENT 'running|completed|failed',
-  `direction`         TEXT         DEFAULT NULL COMMENT '研究方向/检索主题',
-  `venue_label`       VARCHAR(256) DEFAULT NULL COMMENT '目标会议/期刊文案',
-  `literature_hit_count` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '检索命中篇数',
-  `verified_hit_count`   INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '验真通过篇数',
-  `novelty_report`    MEDIUMTEXT   DEFAULT NULL COMMENT '新颖性阶段报告',
-  `audit_summary`     TEXT         DEFAULT NULL COMMENT '选题审计摘要',
-  `input_params`      JSON         DEFAULT NULL COMMENT '本轮表单参数快照',
-  `meta`              JSON         DEFAULT NULL COMMENT '扩展元数据',
-  `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `run_version`       INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '本篇选题第几轮（同轮四步相同）',
+  `is_current_run`    TINYINT(1)   NOT NULL DEFAULT 1 COMMENT '是否本篇当前生效的一轮',
+  `stage_code`        VARCHAR(32)  NOT NULL COMMENT 'retrieve|generate_ideas|novelty|audit',
+  `status`            VARCHAR(16)  NOT NULL DEFAULT 'pending' COMMENT 'pending|running|completed|failed',
+  `result`            JSON         DEFAULT NULL COMMENT '本步产出：retrieve→literature_hits[]；generate_ideas→ideas[]；novelty/audit→报告结构',
+  `summary_text`      MEDIUMTEXT   DEFAULT NULL COMMENT '本步可读摘要/报告',
+  `input_params`      JSON         DEFAULT NULL COMMENT '本轮表单快照（通常写在 retrieve 步）',
+  `meta`              JSON         DEFAULT NULL COMMENT '扩展（token、耗时；retrieve 可存 hit_count 等）',
+  `started_at`        DATETIME     DEFAULT NULL COMMENT '本步开始时间',
+  `completed_at`      DATETIME     DEFAULT NULL COMMENT '本步结束时间',
+  `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '入库时间',
   `updated_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
-  KEY `idx_paper_output_topic_ms` (`manuscript_id`, `is_current`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='选题发现 · 本轮汇总';
-
-CREATE TABLE IF NOT EXISTS `paper_output_literature_hit` (
-  `manuscript_id`       BIGINT UNSIGNED NOT NULL COMMENT 'paper_manuscript.id',
-  `source_id`           BIGINT UNSIGNED NOT NULL COMMENT 'paper_ref_literature_source.id',
-  `external_key`        VARCHAR(256) NOT NULL COMMENT 'arxiv:2401.12345 / doi:… / s2:…',
-  `stage_code`          VARCHAR(64)  DEFAULT NULL COMMENT '写入时的环节键，如 retrieve',
-  `relevance_score`     DECIMAL(6,4) DEFAULT NULL COMMENT '相关度分数',
-  `query_text`          VARCHAR(512) DEFAULT NULL COMMENT '检索 query 快照',
-  `meta`                JSON         DEFAULT NULL COMMENT 'title、authors、doi 等快照',
-  `created_at`          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '入库时间',
-  PRIMARY KEY (`manuscript_id`, `source_id`, `external_key`),
-  KEY `idx_paper_output_lit_hit_ext` (`external_key`(64))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='选题等模块 · 检索验真入库的文献命中';
-
-CREATE TABLE IF NOT EXISTS `paper_output_topic_idea` (
-  `id`                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'idea ID',
-  `manuscript_id`     BIGINT UNSIGNED NOT NULL COMMENT '论文 ID',
-  `topic_id`          BIGINT UNSIGNED DEFAULT NULL COMMENT 'paper_output_topic.id',
-  `rank_no`           INT          NOT NULL DEFAULT 0 COMMENT '排序序号',
-  `title`             VARCHAR(512) NOT NULL COMMENT '选题标题',
-  `problem`           TEXT         DEFAULT NULL COMMENT '问题陈述',
-  `approach`          TEXT         DEFAULT NULL COMMENT '方法路线',
-  `contribution`      TEXT         DEFAULT NULL COMMENT '贡献点',
-  `novelty_summary`   TEXT         DEFAULT NULL COMMENT '新颖性结论',
-  `novelty_risk`      VARCHAR(16)  DEFAULT NULL COMMENT 'low|medium|high',
-  `status`            VARCHAR(16)  NOT NULL DEFAULT 'candidate' COMMENT 'candidate|selected|rejected',
-  `meta`              JSON         DEFAULT NULL COMMENT '扩展字段',
-  `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  PRIMARY KEY (`id`),
-  KEY `idx_paper_output_topic_idea_ms` (`manuscript_id`, `rank_no`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='选题发现 · 结构化 idea';
+  UNIQUE KEY `uk_paper_output_topic_step_run` (`manuscript_id`, `run_version`, `stage_code`),
+  KEY `idx_paper_output_topic_step_ms` (`manuscript_id`, `is_current_run`, `stage_code`),
+  KEY `idx_paper_output_topic_step_user` (`user_id`, `created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='选题发现 · 四步各一行（含检索文献 hits）';
 
 CREATE TABLE IF NOT EXISTS `paper_output_literature_review` (
   `id`                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '综述 ID',

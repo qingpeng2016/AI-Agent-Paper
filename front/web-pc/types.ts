@@ -326,7 +326,7 @@ export type TopicDiscoveryForm = {
   disciplineCode: string
   direction: string
   venue: string
-  /** 多源检索（写入 paper_output_literature_hit） */
+  /** 多源检索（写入 paper_output_topic_step retrieve 步 result.literature_hits） */
   sourceCodes: string[]
   intensity: ExecutionIntensity
   auditLevel: AuditLevel
