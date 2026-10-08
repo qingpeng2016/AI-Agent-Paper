@@ -239,7 +239,16 @@ watch(walletFlowsPage, () => {
   if (activeTab.value === 'wallet-records') void loadWalletFlows()
 })
 
-defineExpose({ reloadLogs })
+async function reloadFromMenu() {
+  profileRefreshTick.value += 1
+  if (activeTab.value === 'wallet-records') {
+    walletFlowsPage.value = 1
+    await loadWalletFlows()
+  }
+  operationLogRef.value?.reload()
+}
+
+defineExpose({ reloadLogs, reloadFromMenu })
 </script>
 
 <template>

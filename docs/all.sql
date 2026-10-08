@@ -744,9 +744,9 @@ ON DUPLICATE KEY UPDATE
 INSERT INTO `paper_ref_audit_level` (
   `code`, `name`, `citation_strength`, `claim_strength`, `kill_argument_strength`, `audit_rounds`
 ) VALUES
-  ('standard', 'Standard', 1, 1, 0, 1),
-  ('polished', 'Polished（精修）', 2, 2, 1, 2),
-  ('strict',   'Strict', 3, 3, 2, 3)
+  ('standard', '标准', 1, 1, 0, 1),
+  ('polished', '精修', 2, 2, 1, 2),
+  ('strict',   '严格', 3, 3, 2, 3)
 ON DUPLICATE KEY UPDATE
   `name` = VALUES(`name`),
   `citation_strength` = VALUES(`citation_strength`),

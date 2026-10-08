@@ -27,12 +27,23 @@ type ApiEnvelope<T> = { code: number; message?: string; data: T }
 
 export type PaperSelectOption = { value: string; label: string }
 
+const FORM_OPTIONS_TIMEOUT_MS = 8_000
+
 export async function fetchTopicDiscoveryFormOptions(): Promise<{
   disciplineSelectOptions: PaperSelectOption[]
   intensityOptions: PaperSelectOption[]
   auditOptions: PaperSelectOption[]
 }> {
-  const res = await fetch('/api/v1/paper/topic-discovery/form-options')
+  const controller = new AbortController()
+  const timer = window.setTimeout(() => controller.abort(), FORM_OPTIONS_TIMEOUT_MS)
+  let res: Response
+  try {
+    res = await fetch('/api/v1/paper/topic-discovery/form-options', {
+      signal: controller.signal,
+    })
+  } finally {
+    window.clearTimeout(timer)
+  }
   if (!res.ok) {
     throw new Error(`form-options http ${res.status}`)
   }

@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
-import { fetchTopicDiscoveryFormOptions } from './api/topicDiscovery'
+import { computed, nextTick, reactive, ref, watch } from 'vue'
+import { loadWorkbenchModuleContent } from '@/composables/loadWorkbenchModule'
+import { useTopicDiscoveryFormOptions } from '@/composables/useTopicDiscoveryFormOptions'
 import { ElMessage } from 'element-plus'
 import {
   DEFAULT_ENV_PREFERENCE,
   ENV_PREFERENCE_STORAGE_KEY,
   DEFAULT_TOPIC_DISCOVERY,
   DEMO_PAPER_MANUSCRIPTS,
-  DISCIPLINE_OPTIONS,
   LITERATURE_SOURCE_OPTIONS,
   PAPER_MODULE_GROUPS,
   getLiteratureSourceLabel,
@@ -92,9 +92,41 @@ const LEGACY_PROJECTS_STORAGE_KEY = 'atm:paper:projects:v1'
 
 const activeModule = ref<PaperModuleId>('topic-discovery')
 
+const moduleContentLoading = ref(false)
+const moduleContentKey = ref(0)
+let moduleSwitchSeq = 0
+
+async function prepareModuleContent(moduleId: PaperModuleId) {
+  const seq = ++moduleSwitchSeq
+  moduleContentLoading.value = true
+  try {
+    await loadWorkbenchModuleContent(moduleId, {
+      reloadManuscriptsFromStorage: loadManuscriptsFromStorage,
+    })
+  } finally {
+    if (seq === moduleSwitchSeq) {
+      moduleContentKey.value++
+      moduleContentLoading.value = false
+    }
+  }
+  if (seq !== moduleSwitchSeq) return
+  await nextTick()
+  if (moduleId === 'personal-center') {
+    await personalCenterPanelRef.value?.reloadFromMenu?.()
+  }
+}
+
 function selectModule(id: PaperModuleId) {
   activeModule.value = id
 }
+
+watch(
+  activeModule,
+  (id) => {
+    void prepareModuleContent(id)
+  },
+  { immediate: true },
+)
 
 const running = ref(false)
 const topicRunToken = ref(0)
@@ -108,6 +140,12 @@ const topicFlowPanelRef = ref<HTMLElement | null>(null)
 
 const topicForm = reactive<TopicDiscoveryForm>({ ...DEFAULT_TOPIC_DISCOVERY })
 const envPreference = reactive<EnvironmentPreferenceForm>({ ...DEFAULT_ENV_PREFERENCE })
+
+const {
+  disciplineSelectOptions,
+  intensityOptions,
+  auditOptions,
+} = useTopicDiscoveryFormOptions()
 
 const manuscripts = ref<PaperManuscriptItem[]>([...DEMO_PAPER_MANUSCRIPTS])
 const activeManuscriptId = ref<string>(DEMO_PAPER_MANUSCRIPTS[0]?.id ?? '')
@@ -651,36 +689,6 @@ watch(activeManuscriptId, () => {
 
 const currentMeta = computed(() => getPaperModuleMeta(activeModule.value))
 
-const intensityOptions = ref([
-  { value: 'fast', label: '更快' },
-  { value: 'balanced', label: 'Balanced（平衡）' },
-  { value: 'deep', label: '更深' },
-])
-
-const auditOptions = ref([
-  { value: 'standard', label: 'Standard' },
-  { value: 'polished', label: 'Polished（精修）' },
-  { value: 'strict', label: 'Strict' },
-])
-
-const disciplineSelectOptions = ref(
-  DISCIPLINE_OPTIONS.map((d) => ({
-    value: d.code,
-    label: d.label,
-  })),
-)
-
-onMounted(async () => {
-  try {
-    const opts = await fetchTopicDiscoveryFormOptions()
-    if (opts.disciplineSelectOptions.length) disciplineSelectOptions.value = opts.disciplineSelectOptions
-    if (opts.intensityOptions.length) intensityOptions.value = opts.intensityOptions
-    if (opts.auditOptions.length) auditOptions.value = opts.auditOptions
-  } catch {
-    /* 保留本地 fallback */
-  }
-})
-
 function toggleTopicSource(code: string, checked: boolean) {
   const set = new Set(topicForm.sourceCodes)
   if (checked) set.add(code)
@@ -852,6 +860,16 @@ async function onPrimaryAction() {
       </div>
 
       <div class="paper-module-body">
+      <div
+        v-if="moduleContentLoading"
+        class="paper-module-loading"
+        role="status"
+        aria-live="polite"
+      >
+        <div class="paper-module-loading-spinner" aria-hidden="true" />
+        <p class="paper-module-loading-text">加载中…</p>
+      </div>
+      <template v-else>
       <!-- 选题发现（与运行进度同属一块，避免 v-else-if 链误绑） -->
       <template v-if="activeModule === 'topic-discovery'">
       <section class="paper-panel">
@@ -1008,16 +1026,21 @@ async function onPrimaryAction() {
 
       <PaperMyManuscriptsPanel
         v-else-if="activeModule === 'my-manuscripts'"
+        :key="`my-manuscripts-${moduleContentKey}`"
         :manuscripts="manuscripts"
         :active-manuscript-id="activeManuscriptId"
         @select="onManuscriptChange"
         @update-manuscripts="onManuscriptsListUpdate"
       />
 
-      <PaperInviteRebatePanel v-else-if="activeModule === 'invite-rebate'" />
+      <PaperInviteRebatePanel
+        v-else-if="activeModule === 'invite-rebate'"
+        :key="`invite-rebate-${moduleContentKey}`"
+      />
 
       <PaperPersonalCenterPanel
         v-else-if="activeModule === 'personal-center'"
+        :key="`personal-center-${moduleContentKey}`"
         ref="personalCenterPanelRef"
         :manuscript-id="activeManuscriptId"
         :manuscript-title="currentManuscript?.title ?? '未命名'"
@@ -1027,7 +1050,7 @@ async function onPrimaryAction() {
 
       <PaperWorkflowPanels
         v-else-if="isSecondaryWorkflowModule"
-        :key="activeModule"
+        :key="`${activeModule}-${moduleContentKey}`"
         ref="workflowPanelsRef"
         v-model:figure-tab="figureManagementTab"
         :module-id="activeModule"
@@ -1035,6 +1058,7 @@ async function onPrimaryAction() {
         :manuscript-title="currentManuscript?.title ?? '未命名'"
         :topic-artifact="topicDiscoveryArtifact"
       />
+      </template>
       </div>
     </main>
   </div>
@@ -1253,6 +1277,38 @@ async function onPrimaryAction() {
   display: flex;
   flex-direction: column;
   gap: 18px;
+  min-height: 200px;
+}
+
+.paper-module-loading {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 14px;
+  align-items: center;
+  justify-content: center;
+  min-height: 240px;
+  color: var(--atm-text-muted, #64748b);
+}
+
+.paper-module-loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(124, 58, 237, 0.12);
+  border-top-color: var(--atm-primary, #7c3aed);
+  border-radius: 50%;
+  animation: paper-module-spin 0.75s linear infinite;
+}
+
+.paper-module-loading-text {
+  margin: 0;
+  font-size: 14px;
+}
+
+@keyframes paper-module-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .paper-main-head {

@@ -1,32 +1,25 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
-  createInviteRebateApi,
   formatCny,
   parseMoney,
   type InviteCommissionRecord,
-  type InvitePayoutConfig,
   type InviteRebateMember,
-  type InviteRebateOverview,
   type InviteWithdrawalRecord,
 } from '@ai-agent-paper/shared'
+import {
+  inviteRebateApi,
+  inviteRebateCommissionAvailable,
+  inviteRebateOverview,
+  inviteRebateOverviewLoaded,
+  inviteRebatePayoutQr,
+  inviteRebatePayoutQrConfigured,
+  reloadInviteRebateModuleData,
+  applyInviteRebatePayoutConfig,
+} from '@/composables/useInviteRebateModuleData'
 
 type PanelTabId = 'details' | 'withdrawals' | 'members' | 'rebates'
-
-const AUTH_TOKEN_COOKIE = 'atm_token'
-
-function getAuthToken(): string | null {
-  if (typeof document === 'undefined') return null
-  const match = document.cookie.match(new RegExp(`(?:^|;\\s*)${AUTH_TOKEN_COOKIE}=([^;]*)`))
-  return match ? decodeURIComponent(match[1]) : null
-}
-
-const baseURL = import.meta.env.VITE_API_BASE_URL ?? ''
-const inviteRebateApi = createInviteRebateApi({
-  baseURL,
-  getToken: () => getAuthToken(),
-})
 
 const tabs: { id: PanelTabId; label: string }[] = [
   { id: 'details', label: '返佣详情' },
@@ -36,9 +29,8 @@ const tabs: { id: PanelTabId; label: string }[] = [
 ]
 
 const activeTab = ref<PanelTabId>('details')
-const loaded = ref(false)
-const overview = ref<InviteRebateOverview | null>(null)
-const commissionAvailable = ref(0)
+const overview = inviteRebateOverview
+const commissionAvailable = inviteRebateCommissionAvailable
 const inviteMembers = ref<InviteRebateMember[]>([])
 const commissionRecords = ref<InviteCommissionRecord[]>([])
 const commissionRecordsPage = ref(1)
@@ -57,8 +49,8 @@ const inviteRebateDisplayNotes = [
   '佣金可划转到余额或者提现。',
 ]
 
-const payoutQr = reactive({ alipay: '', wechat: '' })
-const payoutQrConfigured = reactive({ alipay: false, wechat: false })
+const payoutQr = inviteRebatePayoutQr
+const payoutQrConfigured = inviteRebatePayoutQrConfigured
 
 const exclusivePromoDomain = computed(() => overview.value?.promo_domain_url?.trim() ?? '')
 
@@ -115,22 +107,6 @@ async function copyPromoDomain() {
   else ElMessage.warning('复制失败，请手动复制')
 }
 
-function applyPayoutConfig(payout: InvitePayoutConfig) {
-  payoutQr.alipay = payout.alipay_qr_data_url ?? ''
-  payoutQr.wechat = payout.wechat_qr_data_url ?? ''
-  payoutQrConfigured.alipay = Boolean(payout.alipay_configured ?? payoutQr.alipay)
-  payoutQrConfigured.wechat = Boolean(payout.wechat_configured ?? payoutQr.wechat)
-}
-
-async function fetchOverviewBundle() {
-  const ov = await inviteRebateApi.overview()
-  overview.value = ov
-  commissionAvailable.value = parseMoney(ov.commission_balance)
-  const payout = await inviteRebateApi.payoutConfig()
-  applyPayoutConfig(payout)
-  loaded.value = true
-}
-
 async function fetchMembers() {
   const data = await inviteRebateApi.members()
   inviteMembers.value = data.items
@@ -160,10 +136,15 @@ async function fetchWithdrawals() {
 
 async function loadForTab(tab: PanelTabId) {
   try {
-    if (!loaded.value) await fetchOverviewBundle()
+    if (!inviteRebateOverviewLoaded.value) await reloadInviteRebateModuleData()
     if (tab === 'members') await fetchMembers()
-    else if (tab === 'rebates') await fetchCommissionRecords()
-    else if (tab === 'withdrawals') await fetchWithdrawals()
+    else if (tab === 'rebates') {
+      commissionRecordsLoaded.value = false
+      await fetchCommissionRecords()
+    } else if (tab === 'withdrawals') {
+      withdrawalsLoaded.value = false
+      await fetchWithdrawals()
+    }
   } catch (e) {
     authError(e, '邀请返利加载失败')
   }
@@ -322,7 +303,7 @@ async function confirmPayoutQr() {
   }
   try {
     const cfg = await inviteRebateApi.uploadPayoutQr(payoutModalChannel.value, payoutFile.value)
-    applyPayoutConfig(cfg)
+    applyInviteRebatePayoutConfig(cfg)
     closePayoutModal()
     ElMessage.success('收款码已保存')
   } catch (e) {
@@ -440,7 +421,7 @@ defineExpose({
             </tbody>
           </table>
         </div>
-        <p v-else-if="loaded" class="pc-empty">暂无邀请成员，请分享您的专属推广域名。</p>
+        <p v-else-if="inviteRebateOverviewLoaded" class="pc-empty">暂无邀请成员，请分享您的专属推广域名。</p>
       </div>
 
       <div v-show="activeTab === 'rebates'" class="pc-pane" role="tabpanel">

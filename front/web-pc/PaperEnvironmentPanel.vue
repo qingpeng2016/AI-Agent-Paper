@@ -2,8 +2,8 @@
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import PaperSelect from './PaperSelect.vue'
+import { useTopicDiscoveryFormOptions } from '@/composables/useTopicDiscoveryFormOptions'
 import {
-  DISCIPLINE_OPTIONS,
   ENV_PREFERENCE_STORAGE_KEY,
   LITERATURE_SOURCE_OPTIONS,
   type EnvironmentPreferenceForm,
@@ -24,22 +24,11 @@ const emit = defineEmits<{
 
 const envSaving = ref(false)
 
-const intensityOptions = [
-  { value: 'fast', label: '更快' },
-  { value: 'balanced', label: 'Balanced（平衡）' },
-  { value: 'deep', label: '更深' },
-]
-
-const auditOptions = [
-  { value: 'standard', label: 'Standard' },
-  { value: 'polished', label: 'Polished（精修）' },
-  { value: 'strict', label: 'Strict' },
-]
-
-const disciplineSelectOptions = DISCIPLINE_OPTIONS.map((d) => ({
-  value: d.code,
-  label: d.label,
-}))
+const {
+  disciplineSelectOptions,
+  intensityOptions,
+  auditOptions,
+} = useTopicDiscoveryFormOptions()
 
 function isLiteratureSourceChecked(code: string) {
   return props.envPreference.literatureSourceCodes.includes(code)
