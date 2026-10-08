@@ -2,6 +2,7 @@ package mysql
 
 import (
 	"context"
+	"errors"
 
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/repository"
@@ -39,4 +40,28 @@ func (r *PaperRefCatalogImpl) ListAuditLevels(ctx context.Context) ([]entity.Pap
 		Order("FIELD(code, 'standard', 'polished', 'strict'), code ASC").
 		Find(&rows).Error
 	return rows, err
+}
+
+func (r *PaperRefCatalogImpl) FindExecutionIntensityByCode(ctx context.Context, code string) (*entity.PaperRefExecutionIntensity, error) {
+	var row entity.PaperRefExecutionIntensity
+	err := r.db.WithContext(ctx).Where("code = ?", code).First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *PaperRefCatalogImpl) FindAuditLevelByCode(ctx context.Context, code string) (*entity.PaperRefAuditLevel, error) {
+	var row entity.PaperRefAuditLevel
+	err := r.db.WithContext(ctx).Where("code = ?", code).First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
 }

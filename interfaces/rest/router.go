@@ -64,6 +64,12 @@ func (r *Router) setupRouters() *gin.Engine {
 		}
 	}
 
+	paperAuth := engine.Group("/api/v1/paper", ginMiddleware.RequireAuth)
+	{
+		paperAuth.POST("/topic-discovery/run", r.paperTopicDiscoveryHandler.PostRun)
+		paperAuth.GET("/topic-discovery/run/current", r.paperTopicDiscoveryHandler.GetCurrentRun)
+	}
+
 	userAuth := engine.Group("/api/v1", ginMiddleware.RequireAuth)
 	{
 		userAuth.GET("/users/me", r.userHandler.Me)

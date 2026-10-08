@@ -27,6 +27,16 @@ func (c *Client) PostForm(ctx context.Context, url string, form map[string]strin
 	return req.Post(url)
 }
 
+func (c *Client) PostJSON(ctx context.Context, url string, body any, headers map[string]string) (*resty.Response, error) {
+	req := c.rc.R().SetContext(ctx).SetBody(body)
+	for k, v := range headers {
+		req.SetHeader(k, v)
+	}
+	req.SetHeader(trace.HeaderTraceID, trace.GetTraceIdByCtx(ctx))
+	req.SetHeader("Content-Type", "application/json")
+	return req.Post(url)
+}
+
 func (c *Client) Get(ctx context.Context, url string, query map[string]string, headers map[string]string) (*resty.Response, error) {
 	req := c.rc.R().SetContext(ctx)
 	if query != nil {
