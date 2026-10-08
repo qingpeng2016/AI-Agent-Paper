@@ -378,63 +378,46 @@ CREATE TABLE IF NOT EXISTS `paper_llm_model_config` (
 
 CREATE TABLE IF NOT EXISTS `paper_llm_workflow_binding` (
   `id`                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `user_id`           BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0=平台默认；否则用户覆盖',
-  `manuscript_id`     BIGINT UNSIGNED DEFAULT NULL COMMENT '非空=仅本篇 override',
   `module_code`       VARCHAR(32)  NOT NULL COMMENT
     'topic_discovery|literature_review|experiment_planning|auto_review|paper_writing|figure_generation|manuscript_analysis|*',
   `stage_code`        VARCHAR(64)  DEFAULT NULL COMMENT
     'topic: retrieve|generate_ideas|novelty|audit；NULL=整模块默认',
   `llm_role`          VARCHAR(32)  NOT NULL COMMENT
     'executor|reviewer|ingest|system|citation_audit|claim_audit|kill_argument',
-  `intensity_code`    VARCHAR(16)  DEFAULT NULL COMMENT 'fast|balanced|deep；NULL=全部',
-  `audit_level_code`  VARCHAR(16)  DEFAULT NULL COMMENT 'standard|polished|strict；NULL=全部',
-  `model_config_id`   BIGINT UNSIGNED NOT NULL,
+  `model_config_id`   BIGINT UNSIGNED NOT NULL COMMENT 'paper_llm_model_config.id',
   `priority`          INT          NOT NULL DEFAULT 100 COMMENT '同键多条时越小越优先',
   `status`            VARCHAR(16)  NOT NULL DEFAULT 'active' COMMENT 'active|disabled',
-  `note`              VARCHAR(256) DEFAULT NULL,
   `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  KEY `idx_paper_llm_bind_lookup` (`user_id`, `module_code`, `stage_code`, `llm_role`, `status`, `priority`),
-  KEY `idx_paper_llm_bind_ms` (`manuscript_id`, `module_code`),
+  KEY `idx_paper_llm_bind_lookup` (`module_code`, `stage_code`, `llm_role`, `status`, `priority`),
   KEY `idx_paper_llm_bind_model` (`model_config_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='环节/阶段/角色 → LLM 配置';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='平台：环节/阶段/角色 → model_config';
 
 CREATE TABLE IF NOT EXISTS `paper_llm_prompt_template` (
   `id`                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `user_id`           BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0=平台默认；否则用户覆盖',
-  `manuscript_id`     BIGINT UNSIGNED DEFAULT NULL COMMENT '非空=仅本篇 override',
   `module_code`       VARCHAR(32)  NOT NULL COMMENT
     'topic_discovery|literature_review|experiment_planning|auto_review|paper_writing|figure_generation|manuscript_analysis|*',
   `stage_code`        VARCHAR(64)  DEFAULT NULL COMMENT
     'topic: retrieve|generate_ideas|novelty|audit；NULL=整模块默认',
   `llm_role`          VARCHAR(32)  NOT NULL COMMENT
     'executor|reviewer|ingest|system|citation_audit|claim_audit|kill_argument',
-  `intensity_code`    VARCHAR(16)  DEFAULT NULL COMMENT 'fast|balanced|deep；NULL=全部',
-  `audit_level_code`  VARCHAR(16)  DEFAULT NULL COMMENT 'standard|polished|strict；NULL=全部',
   `message_role`      VARCHAR(16)  NOT NULL DEFAULT 'system' COMMENT 'system|user|assistant（拼 chat messages）',
-  `label`             VARCHAR(128) DEFAULT NULL COMMENT '运营展示名',
-  `version`           INT          NOT NULL DEFAULT 1 COMMENT '同键多版时取最大 active 或按 priority',
-  `template_body`     MEDIUMTEXT   NOT NULL COMMENT '话术正文；占位符 {{var_name}}，由代码渲染后请求模型',
-  `variables`         JSON         DEFAULT NULL COMMENT
-    '[{"name":"direction","required":true,"description":"…","source_hint":"input_params.direction"}]',
+  `template_body`     MEDIUMTEXT   NOT NULL COMMENT '话术正文；占位符 {{var_name}}，由代码渲染',
   `priority`          INT          NOT NULL DEFAULT 100 COMMENT '同键多条时越小越优先',
   `status`            VARCHAR(16)  NOT NULL DEFAULT 'active' COMMENT 'active|disabled',
-  `note`              VARCHAR(256) DEFAULT NULL,
   `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `idx_paper_llm_prompt_lookup` (
-    `user_id`,
     `module_code`,
     `stage_code`,
     `llm_role`,
     `message_role`,
     `status`,
     `priority`
-  ),
-  KEY `idx_paper_llm_prompt_ms` (`manuscript_id`, `module_code`, `stage_code`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='环节/阶段/角色 → 话术模板（与 binding 同维解析）';
+  )
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='平台话术模板（module×stage×role×message_role）';
 
 CREATE TABLE IF NOT EXISTS `paper_manuscript_runtime` (
   `id`                    BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -767,7 +750,7 @@ ON DUPLICATE KEY UPDATE
 -- ---------------------------------------------------------------------------
 -- 10. 种子数据 — Paper（强度、审计、示例学科与 venue、文献源）
 -- ---------------------------------------------------------------------------
--- paper_llm_workflow_binding / paper_llm_prompt_template 不在此 INSERT；接入后写入 platform default（user_id=0）
+-- paper_llm_workflow_binding / paper_llm_prompt_template 不在此 INSERT；见 docs/migrations/
 
 INSERT INTO `paper_ref_execution_intensity` (`code`, `name`, `multiplier`, `max_papers`, `max_ideas`) VALUES
   ('fast',     '更快', 0.60, 30,  6),

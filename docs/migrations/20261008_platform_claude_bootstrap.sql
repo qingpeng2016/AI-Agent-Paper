@@ -66,11 +66,8 @@ INSERT INTO `paper_llm_model_config` (
 SET @claude_model_id = LAST_INSERT_ID();
 
 INSERT INTO `paper_llm_workflow_binding` (
-  `user_id`, `manuscript_id`, `module_code`, `stage_code`, `llm_role`,
-  `intensity_code`, `audit_level_code`, `model_config_id`, `priority`, `status`, `note`
+  `module_code`, `stage_code`, `llm_role`, `model_config_id`, `priority`, `status`
 ) VALUES
-  (0, NULL, '*', NULL, 'executor', NULL, NULL, @claude_model_id, 10, 'active', 'platform Claude'),
-  (0, NULL, '*', NULL, 'reviewer', NULL, NULL, @claude_model_id, 10, 'active', 'platform Claude'),
-  (0, NULL, '*', NULL, 'system', NULL, NULL, @claude_model_id, 10, 'active', 'platform Claude');
+  ('*', NULL, 'executor', @claude_model_id, 10, 'active');
 
 -- 话术模板见: docs/migrations/20261008_paper_llm_prompt_template.sql
