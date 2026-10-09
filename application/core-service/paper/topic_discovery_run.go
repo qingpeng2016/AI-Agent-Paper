@@ -399,8 +399,12 @@ func (s *TopicDiscoveryRunService) executeStage(ctx context.Context, userID uint
 	step.CompletedAt = &done
 	if execErr != nil {
 		step.Status = "failed"
-		meta := map[string]any{"error": execErr.Error()}
-		step.Meta = mustJSON(meta)
+		stepMeta := map[string]any{}
+		if len(step.Meta) > 0 {
+			_ = json.Unmarshal(step.Meta, &stepMeta)
+		}
+		stepMeta["error"] = execErr.Error()
+		step.Meta = mustJSON(stepMeta)
 		_ = s.steps.SaveStep(ctx, step)
 		return execErr
 	}
@@ -516,7 +520,7 @@ func (s *TopicDiscoveryRunService) stageRetrieve(ctx context.Context, step *enti
 		contextBlock = "(no literature hits from configured sources)"
 	}
 
-	summary, usage, err := s.callStageLLM(ctx, step.ManuscriptID, "retrieve", map[string]string{
+	summary, usage, err := s.callStageLLM(ctx, step, "retrieve", map[string]string{
 		"direction": input.Direction,
 		"venue":     input.Venue,
 	}, contextBlock+"\n\nSummarize coverage and gaps in concise Chinese.")
@@ -541,7 +545,7 @@ Corpus:
 Return ONLY valid JSON: {"ideas":[{"title":"","problem":"","approach":"","contribution":""}]}
 Use Chinese for text fields.`, input.Direction, input.Venue, input.MaxIdeas, ctxBlock)
 
-	text, usage, err := s.callStageLLM(ctx, step.ManuscriptID, "generate_ideas", map[string]string{
+	text, usage, err := s.callStageLLM(ctx, step, "generate_ideas", map[string]string{
 		"direction": input.Direction,
 		"max_ideas": fmt.Sprintf("%d", input.MaxIdeas),
 	}, userMsg)
@@ -565,7 +569,7 @@ Prior steps:
 Return ONLY valid JSON: {"lines":["..."],"risks":[{"idea_title":"","risk":"low|medium|high","note":""}]}
 Use Chinese.`, input.Direction, ctxBlock)
 
-	text, usage, err := s.callStageLLM(ctx, step.ManuscriptID, "novelty", map[string]string{"direction": input.Direction}, userMsg)
+	text, usage, err := s.callStageLLM(ctx, step, "novelty", map[string]string{"direction": input.Direction}, userMsg)
 	if err != nil {
 		return err
 	}
@@ -593,7 +597,7 @@ Context:
 
 Return ONLY valid JSON: {"issues":[{"severity":"blocker|major|minor","claim":"","fix":""}],"summary":""}
 Use Chinese.`, r, rounds, input.Venue, input.AuditLevel, ctxBlock)
-		text, usage, err := s.callStageLLM(ctx, step.ManuscriptID, "audit", map[string]string{"direction": input.Direction}, userMsg)
+		text, usage, err := s.callStageLLM(ctx, step, "audit", map[string]string{"direction": input.Direction}, userMsg)
 		if err != nil {
 			return err
 		}
@@ -641,19 +645,64 @@ type stageLLMResolve struct {
 	userPrefix     string
 }
 
-func (s *TopicDiscoveryRunService) callStageLLM(ctx context.Context, manuscriptID uint64, stageCode string, vars map[string]string, userExtra string) (string, LLMUsage, error) {
+func (s *TopicDiscoveryRunService) callStageLLM(
+	ctx context.Context,
+	step *entity.PaperOutputTopicStep,
+	stageCode string,
+	vars map[string]string,
+	userExtra string,
+) (string, LLMUsage, error) {
 	resolved, err := s.resolveStageLLM(ctx, stageCode, vars)
 	if err != nil {
+		attachLLMRequestMeta(step, stageCode, "", llmUserMessage("", userExtra), "")
 		return "", LLMUsage{}, err
 	}
-	user := resolved.userPrefix
-	if strings.TrimSpace(userExtra) != "" {
-		user = resolved.userPrefix + "\n\n" + userExtra
-	}
+	user := llmUserMessage(resolved.userPrefix, userExtra)
 	start := time.Now()
 	text, usage, err := s.llm.Complete(ctx, resolved.model, resolved.system, user)
-	s.persistLLMCallLog(ctx, manuscriptID, stageCode, resolved, usage, int(time.Since(start).Milliseconds()), err)
+	s.persistLLMCallLog(ctx, step.ManuscriptID, stageCode, resolved, usage, int(time.Since(start).Milliseconds()), err)
+	if err != nil {
+		modelName := ""
+		if resolved.model != nil {
+			modelName = resolved.model.ModelName
+		}
+		attachLLMRequestMeta(step, stageCode, resolved.system, user, modelName)
+	}
 	return text, usage, err
+}
+
+func llmUserMessage(userPrefix, userExtra string) string {
+	user := strings.TrimSpace(userPrefix)
+	extra := strings.TrimSpace(userExtra)
+	if user == "" {
+		return extra
+	}
+	if extra == "" {
+		return user
+	}
+	return user + "\n\n" + extra
+}
+
+// attachLLMRequestMeta 失败时写入发给模型的完整输入，供排错与重试对照。
+func attachLLMRequestMeta(step *entity.PaperOutputTopicStep, stageCode, system, user, modelName string) {
+	if step == nil {
+		return
+	}
+	meta := map[string]any{}
+	if len(step.Meta) > 0 {
+		_ = json.Unmarshal(step.Meta, &meta)
+	}
+	meta["llm_stage_code"] = stageCode
+	if strings.TrimSpace(system) != "" {
+		meta["llm_system"] = system
+	}
+	if strings.TrimSpace(user) != "" {
+		meta["llm_user"] = user
+	}
+	if strings.TrimSpace(modelName) != "" {
+		meta["llm_model_name"] = modelName
+	}
+	step.Meta = mustJSON(meta)
 }
 
 func (s *TopicDiscoveryRunService) persistLLMCallLog(
@@ -726,12 +775,17 @@ func (s *TopicDiscoveryRunService) resolveStageLLM(ctx context.Context, stageCod
 	if binding == nil {
 		binding, err = s.llmRepo.GetActiveBindingByStage(ctx, "default")
 		if err != nil || binding == nil {
-			return nil, errorx.ErrLLMNotConfigured
+			return nil, errorx.ErrLLMNotConfigured.WithDetail(
+				"缺少 paper_llm_workflow_binding（stage=" + stageCode + " 或 default）",
+			)
 		}
 	}
 	model, err := s.llmRepo.GetActiveModelByID(ctx, binding.ModelConfigID)
 	if err != nil || model == nil {
-		return nil, errorx.ErrLLMNotConfigured
+		return nil, errorx.ErrLLMNotConfigured.WithDetail(
+			"paper_llm_model_config 不存在或未 active（binding model_config_id=" +
+				fmt.Sprintf("%d", binding.ModelConfigID) + "）",
+		)
 	}
 	defPrompt, _ := s.llmRepo.GetActivePromptByStage(ctx, "default")
 	stagePrompt, _ := s.llmRepo.GetActivePromptByStage(ctx, stageCode)
