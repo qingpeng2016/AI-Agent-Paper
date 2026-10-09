@@ -86,6 +86,7 @@ const litReviewGenerateSubmitting = ref(false)
 let litReviewPollTimer: ReturnType<typeof setInterval> | null = null
 
 const expPlanItems = ref<PaperExperimentPlanItem[]>([])
+const expPlansLoading = ref(false)
 const expPlanViewItem = ref<PaperExperimentPlanItem | null>(null)
 const expPlanLitReviewLoading = ref(false)
 let expPlanReloadSeq = 0
@@ -222,10 +223,11 @@ async function reloadExperimentPlans(opts?: { silent?: boolean }) {
   const silent = opts?.silent === true
   const ms = manuscriptId.value
   if (!ms || !/^\d+$/.test(ms)) {
-    expPlanItems.value = []
+    if (!silent) expPlanItems.value = []
     return
   }
   const seq = ++expPlanReloadSeq
+  if (!silent) expPlansLoading.value = true
   try {
     const data = await fetchExperimentPlans(ms)
     if (seq !== expPlanReloadSeq) return
@@ -237,9 +239,15 @@ async function reloadExperimentPlans(opts?: { silent?: boolean }) {
       const msg = e instanceof Error ? e.message : '加载实验方案失败'
       ElMessage.error(msg)
     }
+  } finally {
+    if (seq === expPlanReloadSeq && !silent) {
+      expPlansLoading.value = false
+      void tryOpenPendingExperimentPlan()
+    }
   }
 }
 
+/** 进入实验方案 / 切换当前论文 / 刷新：同文献综述，模块内 loading（不走顶栏 generic loading） */
 watch(
   () => [moduleId.value, manuscriptId.value] as const,
   ([mod, ms]) => {
@@ -248,7 +256,7 @@ watch(
       expPlanItems.value = []
       return
     }
-    void reloadExperimentPlans({ silent: true }).then(() => tryOpenPendingExperimentPlan())
+    void reloadExperimentPlans()
   },
   { immediate: true },
 )
@@ -420,7 +428,7 @@ async function runModule(id: PaperModuleId): Promise<boolean> {
     return true
   }
   if (id === 'experiment-planning') {
-    await reloadExperimentPlans({ silent: true })
+    await reloadExperimentPlans()
     if (!expPlanItems.value.length) {
       ElMessage.warning('暂无实验方案，请先在「文献综述」生成实验方案')
       return false
@@ -453,7 +461,7 @@ defineExpose({ runModule, reloadLiteratureReviews, reloadExperimentPlans })
     </section>
 
     <section v-else-if="!litReviewItems.length" class="wf-panel">
-      <h2 class="wf-title">文献综述</h2>
+      <h2 class="wf-title wf-title--module-head">文献综述</h2>
       <p class="wf-lead">
         当前论文尚无文献综述。请先在「选题发现」完成审计步骤（第三步会自动生成并入库）。
       </p>
@@ -476,7 +484,7 @@ defineExpose({ runModule, reloadLiteratureReviews, reloadExperimentPlans })
                     aria-hidden="true"
                     class="paper-btn-primary paper-btn--compact wf-lit-width-ruler"
                   >
-                    查看
+                    查看文献综述
                   </button>
                   <span class="wf-lit-col-head-label">操作</span>
                 </span>
@@ -513,7 +521,7 @@ defineExpose({ runModule, reloadLiteratureReviews, reloadExperimentPlans })
                   class="paper-btn-primary paper-btn--compact"
                   @click="openLitReviewView(item)"
                 >
-                  查看
+                  查看文献综述
                 </button>
                 <button
                   v-if="literatureReviewHasExperimentPlan(item)"
@@ -654,8 +662,12 @@ defineExpose({ runModule, reloadLiteratureReviews, reloadExperimentPlans })
 
   <!-- 实验方案：paper_output_experiment_plan -->
   <div v-else-if="moduleId === 'experiment-planning'" class="wf-stack">
-    <section v-if="!expPlanItems.length" class="wf-panel">
-      <h2 class="wf-title">实验方案</h2>
+    <section v-if="expPlansLoading" class="wf-panel">
+      <p class="wf-meta">正在加载实验方案…</p>
+    </section>
+
+    <section v-else-if="!expPlanItems.length" class="wf-panel">
+      <h2 class="wf-title wf-title--module-head">实验方案</h2>
       <p class="wf-lead">
         当前论文尚无实验方案。请先在「文献综述」中对已完成综述点击「生成实验方案」。
       </p>
@@ -678,7 +690,7 @@ defineExpose({ runModule, reloadLiteratureReviews, reloadExperimentPlans })
                     aria-hidden="true"
                     class="paper-btn-primary paper-btn--compact wf-lit-width-ruler"
                   >
-                    查看实验方案
+                    查看文献综述
                   </button>
                   <span class="wf-lit-col-head-label">操作</span>
                 </span>
@@ -688,7 +700,15 @@ defineExpose({ runModule, reloadLiteratureReviews, reloadExperimentPlans })
                   aria-hidden="true"
                   class="paper-btn-primary paper-btn--compact wf-lit-width-ruler"
                 >
-                  查看文献综述
+                  查看实验方案
+                </button>
+                <button
+                  type="button"
+                  tabindex="-1"
+                  aria-hidden="true"
+                  class="paper-btn-danger paper-btn--compact wf-lit-width-ruler"
+                >
+                  删除
                 </button>
               </div>
             </th>
@@ -717,6 +737,15 @@ defineExpose({ runModule, reloadLiteratureReviews, reloadExperimentPlans })
                 >
                   查看文献综述
                 </button>
+                <!-- 与文献综述三列操作区等宽（占位，不展示） -->
+                <button
+                  type="button"
+                  tabindex="-1"
+                  aria-hidden="true"
+                  class="paper-btn-danger paper-btn--compact wf-lit-action-placeholder"
+                >
+                  删除
+                </button>
               </div>
             </td>
           </tr>
@@ -725,7 +754,7 @@ defineExpose({ runModule, reloadLiteratureReviews, reloadExperimentPlans })
     </section>
   </div>
 
-  <!-- 结果审查（写前） -->
+  <!-- 实验数据 -->
   <div v-else-if="moduleId === 'auto-review'" class="wf-stack">
     <section class="wf-panel">
       <h2 class="wf-title">参数</h2>
@@ -980,9 +1009,12 @@ defineExpose({ runModule, reloadLiteratureReviews, reloadExperimentPlans })
     >
       <div class="paper-message-box paper-message-box--default paper-modal-panel wf-lit-view-panel" @click.stop>
         <header class="paper-modal-header wf-lit-view-header">
-          <h2 id="wf-lit-view-title" class="paper-modal-title wf-lit-view-title">
-            {{ litReviewRowTitle(litReviewViewItem) }}
-          </h2>
+          <div class="wf-lit-view-heading">
+            <p class="wf-lit-view-kind">文献综述</p>
+            <h2 id="wf-lit-view-title" class="paper-modal-title wf-lit-view-title">
+              {{ litReviewRowTitle(litReviewViewItem) }}
+            </h2>
+          </div>
           <button type="button" class="paper-modal-close" aria-label="关闭" @click="closeLitReviewView">
             ×
           </button>
@@ -1025,9 +1057,12 @@ defineExpose({ runModule, reloadLiteratureReviews, reloadExperimentPlans })
     >
       <div class="paper-message-box paper-message-box--default paper-modal-panel wf-lit-view-panel" @click.stop>
         <header class="paper-modal-header wf-lit-view-header">
-          <h2 id="wf-exp-plan-view-title" class="paper-modal-title wf-lit-view-title">
-            {{ experimentPlanRowTitle(expPlanViewItem) }}
-          </h2>
+          <div class="wf-lit-view-heading">
+            <p class="wf-lit-view-kind">实验方案</p>
+            <h2 id="wf-exp-plan-view-title" class="paper-modal-title wf-lit-view-title">
+              {{ experimentPlanRowTitle(expPlanViewItem) }}
+            </h2>
+          </div>
           <button type="button" class="paper-modal-close" aria-label="关闭" @click="closeExpPlanView">
             ×
           </button>
@@ -1167,16 +1202,30 @@ defineExpose({ runModule, reloadLiteratureReviews, reloadExperimentPlans })
   margin-bottom: 8px;
 }
 
+.wf-title--module-head {
+  font-size: 20px;
+}
+
 .wf-lit-list-panel {
   padding: 20px 22px 24px;
 }
 
 .wf-lit-table {
   margin: 0;
+  font-size: 14px;
+}
+
+.wf-table.wf-lit-table th,
+.wf-table.wf-lit-table td {
+  padding: 13px 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  vertical-align: middle;
 }
 
 .wf-lit-col-title {
   max-width: min(420px, 40vw);
+  font-size: 14px;
   font-weight: 600;
   color: #1e1b4b;
 }
@@ -1192,6 +1241,12 @@ defineExpose({ runModule, reloadLiteratureReviews, reloadExperimentPlans })
   justify-content: flex-end;
 }
 
+.wf-lit-list-panel .wf-lit-actions .paper-btn-primary.paper-btn--compact,
+.wf-lit-list-panel .wf-lit-actions .paper-btn-danger.paper-btn--compact {
+  padding: 6px 11px;
+  font-size: 13px;
+}
+
 .wf-lit-head-slot {
   position: relative;
   display: inline-flex;
@@ -1202,13 +1257,19 @@ defineExpose({ runModule, reloadLiteratureReviews, reloadExperimentPlans })
   pointer-events: none;
 }
 
+.wf-lit-action-placeholder {
+  visibility: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+
 .wf-lit-col-head-label {
   position: absolute;
   inset: 0;
   display: flex;
   align-items: center;
   padding: 6px 12px;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 700;
   color: #64748b;
   pointer-events: none;
@@ -1260,10 +1321,27 @@ defineExpose({ runModule, reloadLiteratureReviews, reloadExperimentPlans })
   justify-content: space-between;
 }
 
+.wf-lit-view-heading {
+  flex: 1;
+  min-width: 0;
+}
+
+.wf-lit-view-kind {
+  margin: 0 0 8px;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--atm-text, #1e1b4b);
+  line-height: 1.35;
+}
+
 .wf-lit-view-title {
   margin: 0;
-  font-size: 16px;
-  line-height: 1.45;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--atm-text, #1e1b4b);
+  line-height: 1.35;
 }
 
 .wf-lit-view-body {

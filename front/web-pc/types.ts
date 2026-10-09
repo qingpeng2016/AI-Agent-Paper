@@ -36,8 +36,8 @@ export const PAPER_MODULES: PaperModuleMeta[] = [
   },
   {
     id: 'auto-review',
-    label: '结果审查',
-    description: '写作前：审查实验方案与上传数据，模拟审稿人挑 plan / 证据硬伤',
+    label: '实验数据',
+    description: '上传与管理实验数据，并与实验方案对齐（写作前证据链）',
   },
   {
     id: 'paper-writing',

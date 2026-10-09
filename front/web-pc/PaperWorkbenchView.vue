@@ -152,7 +152,8 @@ const showGenericModuleLoading = computed(
   () =>
     moduleContentLoading.value &&
     activeModule.value !== 'topic-discovery' &&
-    activeModule.value !== 'literature-review',
+    activeModule.value !== 'literature-review' &&
+    activeModule.value !== 'experiment-planning',
 )
 
 const topicDiscoveryPageLoading = computed(

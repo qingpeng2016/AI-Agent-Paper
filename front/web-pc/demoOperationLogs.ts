@@ -58,7 +58,7 @@ export const DEMO_OPERATION_LOG_SEED: PaperOperationLogEntry[] = [
     id: 'op-seed-4',
     occurredAt: '2026-10-06T16:05:02.000Z',
     moduleId: 'auto-review',
-    moduleLabel: '结果审查',
+    moduleLabel: '实验数据',
     action: '运行审查（实验数据未上传）',
     tokensPrompt: 0,
     tokensCompletion: 0,
