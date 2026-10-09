@@ -409,9 +409,16 @@ func (s *TopicDiscoveryRunService) executeStage(ctx context.Context, userID uint
 	case "retrieve":
 		execErr = s.stageRetrieve(ctx, step, input)
 	case "generate_ideas":
-		execErr = s.stageGenerateIdeas(ctx, userID, runVersion, step, input)
+		execErr = s.stageIdeasAndNovelty(ctx, userID, runVersion, step, input)
 	case "novelty":
-		execErr = s.stageNovelty(ctx, userID, runVersion, step, input)
+		if step.Status == "completed" {
+			return nil
+		}
+		if len(step.Result) > 0 {
+			execErr = s.stageNoveltyAck(ctx, step)
+		} else {
+			execErr = s.stageNoveltyLegacy(ctx, userID, runVersion, step, input)
+		}
 	case "audit":
 		execErr = s.stageAudit(ctx, userID, runVersion, step, input)
 	default:
@@ -630,33 +637,8 @@ func relIfExists(pdfURL, externalKey string) string {
 	return ""
 }
 
-func (s *TopicDiscoveryRunService) stageGenerateIdeas(ctx context.Context, userID uint, runVersion int, step *entity.PaperOutputTopicStep, input topicRunInput) error {
-	ctxBlock, _ := s.stageContext(ctx, userID, runVersion)
-	userMsg := fmt.Sprintf(`Research direction: %s
-Target venue: %s
-Max ideas: %d
-
-Corpus:
-%s
-
-Return ONLY valid JSON: {"ideas":[{"title":"","problem":"","approach":"","contribution":""}]}
-Use Chinese for text fields.`, input.Direction, input.Venue, input.MaxIdeas, ctxBlock)
-
-	text, usage, err := s.callStageLLM(ctx, step, "generate_ideas", map[string]string{
-		"direction": input.Direction,
-		"max_ideas": fmt.Sprintf("%d", input.MaxIdeas),
-	}, userMsg)
-	if err != nil {
-		return err
-	}
-	result, summary := parseJSONOrWrap(text, "ideas")
-	step.Result = mustJSON(result)
-	step.SummaryText = ptrString(summary)
-	appendUsageMeta(step, usage)
-	return nil
-}
-
-func (s *TopicDiscoveryRunService) stageNovelty(ctx context.Context, userID uint, runVersion int, step *entity.PaperOutputTopicStep, input topicRunInput) error {
+// stageNoveltyLegacy 旧 run：generate_ideas 已单独完成时，仅补跑新颖性。
+func (s *TopicDiscoveryRunService) stageNoveltyLegacy(ctx context.Context, userID uint, runVersion int, step *entity.PaperOutputTopicStep, input topicRunInput) error {
 	ctxBlock, _ := s.stageContext(ctx, userID, runVersion)
 	userMsg := fmt.Sprintf(`Perform novelty analysis for direction: %s
 

@@ -357,7 +357,7 @@ export const TOPIC_DISCOVERY_FLOW_STEPS: TopicFlowStepDef[] = [
   },
   {
     stageCode: 'generate_ideas',
-    label: '脑暴候选选题',
+    label: '脑暴候选选题（含新颖性预生成）',
     checkpointKey: 'generate_ideas_ready',
   },
   {

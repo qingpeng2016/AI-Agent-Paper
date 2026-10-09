@@ -114,6 +114,48 @@ func allowedRefIDsFromBrief(brief map[string]any) []string {
 	return out
 }
 
+// formatRetrieveCorpusFilesBlock 列出 retrieve 步已落盘 PDF，供 generate_ideas 与 ref_id 对齐。
+func (s *TopicDiscoveryRunService) formatRetrieveCorpusFilesBlock(ctx context.Context, userID uint, runVersion int) string {
+	st, err := s.steps.GetStep(ctx, uint64(userID), runVersion, "retrieve")
+	if err != nil || st == nil {
+		return "(无 CorpusFiles：retrieve 未完成或未落盘 PDF)"
+	}
+	seen := map[string]struct{}{}
+	var lines []string
+	for _, f := range LoadStepFiles(st) {
+		if f.Kind != stepFileKindLiteraturePDF {
+			continue
+		}
+		key := strings.TrimSpace(f.Path) + "|" + strings.TrimSpace(f.ExternalKey)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		lines = append(lines, fmt.Sprintf("- external_key: %s\n  local_path: %s",
+			strings.TrimSpace(f.ExternalKey), strings.TrimSpace(f.Path)))
+	}
+	if len(lines) == 0 {
+		items := ParseLiteratureDownloads(st.Extra)
+		for _, it := range items {
+			rel := strings.TrimSpace(it.LocalPath)
+			if rel == "" {
+				continue
+			}
+			key := rel + "|" + it.ExternalKey
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			lines = append(lines, fmt.Sprintf("- external_key: %s\n  local_path: %s",
+				strings.TrimSpace(it.ExternalKey), rel))
+		}
+	}
+	if len(lines) == 0 {
+		return "(无 CorpusFiles：尚无 local_path；仅可依据 Corpus 中的标题/摘要)"
+	}
+	return strings.Join(lines, "\n")
+}
+
 func formatLiteratureBriefForPrompt(brief map[string]any) string {
 	if brief == nil {
 		return "(无文献简报)"

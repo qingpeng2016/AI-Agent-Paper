@@ -515,10 +515,7 @@ const topicDiscoveryArtifact = computed((): TopicDiscoveryArtifactSnapshot => {
     formatTopicDirectionText(topicForm).trim() ||
     (corpusReady ? '（本次 run 未保留方向文案 · 演示）' : '（尚未填写研究方向）')
 
-  const noveltyReady =
-    novelty?.status === 'completed' ||
-    run.status === 'checkpoint' ||
-    runCompleted
+  const ideasDone = run.steps.find((s) => s.stageCode === 'generate_ideas')?.status === 'completed'
   const disciplineLabel =
     disciplineSelectOptions.value.find((d) => d.value === topicForm.disciplineCode)?.label ??
     topicForm.disciplineCode
@@ -551,8 +548,11 @@ const topicDiscoveryArtifact = computed((): TopicDiscoveryArtifactSnapshot => {
     sourceLabels,
     literatureHitCount: corpusReady ? hitCount : 0,
     verifiedHitCount: corpusReady ? verifiedCount : 0,
-    candidateIdeas: noveltyReady ? linesFromApiStep(ideasStep) : [],
-    noveltyLines: noveltyReady ? linesFromApiStep(noveltyStep) : [],
+    candidateIdeas: ideasDone ? linesFromApiStep(ideasStep) : [],
+    noveltyLines:
+      novelty?.status === 'completed' || noveltyStepHasPrefill(noveltyStep)
+        ? linesFromApiStep(noveltyStep)
+        : [],
     experimentPlanLines: experimentPlanDoneForManuscript.value ? buildDemoExperimentPlanLines() : [],
   }
 })
@@ -644,8 +644,8 @@ function stepStatusFromApi(raw: string): TopicFlowStepStatus {
 
 const TOPIC_STEP_RUNNING_HINT: Record<string, string> = {
   retrieve: '文献 PDF 下载与入库中…',
-  generate_ideas: 'AI 脑暴候选选题中…',
-  novelty: 'AI 新颖性分析中…',
+  generate_ideas: 'AI 脑暴候选选题与新颖性分析中…',
+  novelty: 'AI 脑暴与新颖性分析中…',
   audit: 'AI 选题审计中…',
 }
 
@@ -700,6 +700,14 @@ function startTopicRunProgressPoll(msId: string, token: number): () => void {
   void tick()
   const timer = window.setInterval(() => void tick(), TOPIC_RUN_POLL_MS)
   return () => window.clearInterval(timer)
+}
+
+function noveltyStepHasPrefill(step?: TopicDiscoveryStepDTO): boolean {
+  if (!step?.result || typeof step.result !== 'object') return false
+  const r = step.result as Record<string, unknown>
+  const extra = (step.extra ?? {}) as Record<string, unknown>
+  if (extra.prefilled === true) return true
+  return Boolean(r.lines || r.risks || r.synthesis)
 }
 
 function linesFromApiStep(step?: TopicDiscoveryStepDTO): string[] {
