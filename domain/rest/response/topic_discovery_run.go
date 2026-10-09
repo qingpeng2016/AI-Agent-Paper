@@ -9,6 +9,7 @@ type TopicDiscoveryStepView struct {
 	InputParams json.RawMessage `json:"input_params,omitempty"`
 	Result      json.RawMessage `json:"result,omitempty"`
 	Extra       json.RawMessage `json:"extra,omitempty"`
+	Files       json.RawMessage `json:"files,omitempty"`
 	StartedAt   *string         `json:"started_at,omitempty"`
 	CompletedAt *string         `json:"completed_at,omitempty"`
 }

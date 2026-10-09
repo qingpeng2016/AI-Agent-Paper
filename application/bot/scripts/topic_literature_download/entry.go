@@ -116,26 +116,22 @@ func (j *TopicLiteratureDownloadJob) processOne(ctx context.Context, step *entit
 }
 
 func (j *TopicLiteratureDownloadJob) mergeExtra(ctx context.Context, step *entity.PaperOutputTopicStep, items []papersvc.LiteratureDownloadItem, errMsg string) error {
-	meta := map[string]any{}
-	if len(step.Extra) > 0 {
-		_ = json.Unmarshal(step.Extra, &meta)
-	}
-	meta["literature_downloads"] = items
+	meta := papersvc.LoadStepExtra(step)
+	patch := map[string]any{"literature_downloads": items}
 	if strings.TrimSpace(errMsg) != "" {
-		meta["error"] = errMsg
+		patch["error"] = errMsg
 	}
-	step.Extra = mustJSON(meta)
+	step.Extra = mustJSON(papersvc.MergeStepExtra(meta, patch))
+	papersvc.SyncStepFilesAppend(step, items)
 	return j.steps.SaveStep(ctx, step)
 }
 
 func (j *TopicLiteratureDownloadJob) finishSuccess(ctx context.Context, step *entity.PaperOutputTopicStep, items []papersvc.LiteratureDownloadItem) string {
-	meta := map[string]any{}
-	if len(step.Extra) > 0 {
-		_ = json.Unmarshal(step.Extra, &meta)
-	}
-	meta["literature_downloads"] = items
+	meta := papersvc.LoadStepExtra(step)
+	meta = papersvc.MergeStepExtra(meta, map[string]any{"literature_downloads": items})
 	delete(meta, "error")
 	step.Extra = mustJSON(meta)
+	papersvc.SyncStepFilesAppend(step, items)
 
 	hitCount := hitCountFromMeta(meta)
 	step.Status = "completed"
@@ -151,15 +147,15 @@ func (j *TopicLiteratureDownloadJob) finishSuccess(ctx context.Context, step *en
 }
 
 func (j *TopicLiteratureDownloadJob) markFailed(ctx context.Context, step *entity.PaperOutputTopicStep, items []papersvc.LiteratureDownloadItem, reason string) {
-	meta := map[string]any{}
-	if len(step.Extra) > 0 {
-		_ = json.Unmarshal(step.Extra, &meta)
-	}
+	meta := papersvc.LoadStepExtra(step)
+	patch := map[string]any{"error": strings.TrimSpace(reason)}
 	if items != nil {
-		meta["literature_downloads"] = items
+		patch["literature_downloads"] = items
 	}
-	meta["error"] = strings.TrimSpace(reason)
-	step.Extra = mustJSON(meta)
+	step.Extra = mustJSON(papersvc.MergeStepExtra(meta, patch))
+	if items != nil {
+		papersvc.SyncStepFilesAppend(step, items)
+	}
 	step.Status = "failed"
 	now := time.Now()
 	step.CompletedAt = &now

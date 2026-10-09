@@ -422,10 +422,7 @@ func (s *TopicDiscoveryRunService) executeStage(ctx context.Context, userID uint
 		done := time.Now()
 		step.CompletedAt = &done
 		step.Status = "failed"
-		stepMeta := map[string]any{}
-		if len(step.Extra) > 0 {
-			_ = json.Unmarshal(step.Extra, &stepMeta)
-		}
+		stepMeta := LoadStepExtra(step)
 		stepMeta["error"] = execErr.Error()
 		step.Extra = mustJSON(stepMeta)
 		if saveErr := s.steps.SaveStep(ctx, step); saveErr != nil {
@@ -482,6 +479,7 @@ func (s *TopicDiscoveryRunService) stageRetrieve(ctx context.Context, step *enti
 
 	seen := map[string]struct{}{}
 	hits := make([]storedLiteratureHit, 0, input.MaxPapers)
+	extraMeta := LoadStepExtra(step)
 	for _, code := range s.orderSourceCodesByPriority(ctx, input.SourceCodes) {
 		if len(hits) >= input.MaxPapers {
 			break
@@ -501,6 +499,7 @@ func (s *TopicDiscoveryRunService) stageRetrieve(ctx context.Context, step *enti
 		srcRow, _ := s.litSource.FindActiveByCode(ctx, code)
 		var searchResult *response.PaperLiteratureSearchResult
 		var searchErr error
+		reqInput := map[string]any{"query": query, "limit": limit}
 		switch code {
 		case sourceArxiv:
 			searchResult, searchErr = s.litSearch.SearchArxiv(ctx, query, limit)
@@ -509,11 +508,29 @@ func (s *TopicDiscoveryRunService) stageRetrieve(ctx context.Context, step *enti
 		case sourceSemanticScholar:
 			searchResult, searchErr = s.litSearch.SearchSemanticScholar(ctx, query, limit)
 		default:
+			AppendLiteraturePlatformRequest(extraMeta, LiteraturePlatformRequestLog{
+				SourceCode: code,
+				Input:      reqInput,
+				Error:      "unsupported source for retrieve search",
+			})
 			continue
 		}
-		if searchErr != nil || searchResult == nil {
+		logEntry := LiteraturePlatformRequestLog{
+			SourceCode: code,
+			Input:      reqInput,
+		}
+		if searchErr != nil {
+			logEntry.Error = searchErr.Error()
+			AppendLiteraturePlatformRequest(extraMeta, logEntry)
 			continue
 		}
+		if searchResult == nil {
+			logEntry.Error = "empty search result"
+			AppendLiteraturePlatformRequest(extraMeta, logEntry)
+			continue
+		}
+		logEntry.Response = searchResult
+		AppendLiteraturePlatformRequest(extraMeta, logEntry)
 		var sourceID uint
 		if srcRow != nil {
 			sourceID = srcRow.ID
@@ -575,17 +592,18 @@ func (s *TopicDiscoveryRunService) stageRetrieve(ctx context.Context, step *enti
 	brief := fallbackLiteratureBrief(hits)
 	mergeLiteratureBriefIntoResult(result, brief)
 	step.Result = mustJSON(result)
-	extra := map[string]any{
-		"hit_count":             len(hits),
-		"verified_count":        len(hits),
-		"search_query":          query,
-		"literature_links":      links,
-		"literature_downloads":  downloads,
+	extraPatch := map[string]any{
+		"hit_count":            len(hits),
+		"verified_count":       len(hits),
+		"search_query":         query,
+		"literature_links":     links,
+		"literature_downloads": downloads,
 	}
 	if b, e := json.Marshal(brief); e == nil {
-		extra["literature_brief"] = json.RawMessage(b)
+		extraPatch["literature_brief"] = json.RawMessage(b)
 	}
-	step.Extra = mustJSON(extra)
+	step.Extra = mustJSON(MergeStepExtra(extraMeta, extraPatch))
+	SyncStepFilesAppend(step, downloads)
 	step.SummaryText = ptrString(fmt.Sprintf("检索完成，共 %d 篇文献，PDF 下载中…", len(hits)))
 	if LiteratureDownloadsReady(downloads) {
 		step.SummaryText = ptrString(fmt.Sprintf("检索完成，共 %d 篇文献（PDF 已落盘）", len(hits)))
@@ -783,20 +801,13 @@ func persistStepLLMInput(step *entity.PaperOutputTopicStep, stageCode, system, u
 		step.InputParams = mustJSON(llmInput)
 	}
 
-	meta := map[string]any{}
-	if len(step.Extra) > 0 {
-		_ = json.Unmarshal(step.Extra, &meta)
-	}
-	meta["llm_stage_code"] = stageCode
-	if strings.TrimSpace(system) != "" {
-		meta["llm_system"] = system
-	}
-	if strings.TrimSpace(user) != "" {
-		meta["llm_user"] = user
-	}
-	if strings.TrimSpace(modelName) != "" {
-		meta["llm_model_name"] = modelName
-	}
+	meta := LoadStepExtra(step)
+	meta = MergeStepExtra(meta, map[string]any{
+		"llm_stage_code": stageCode,
+		"llm_system":     strings.TrimSpace(system),
+		"llm_user":       strings.TrimSpace(user),
+		"llm_model_name": strings.TrimSpace(modelName),
+	})
 	step.Extra = mustJSON(meta)
 }
 
@@ -957,6 +968,9 @@ func (s *TopicDiscoveryRunService) buildRunView(manuscriptID uint64, runVersion 
 		if len(r.Extra) > 0 {
 			sv.Extra = json.RawMessage(r.Extra)
 		}
+		if len(r.Files) > 0 {
+			sv.Files = json.RawMessage(r.Files)
+		}
 		if r.StartedAt != nil {
 			t := r.StartedAt.Format(time.RFC3339)
 			sv.StartedAt = &t
@@ -1021,10 +1035,7 @@ func mustJSON(v any) datatypes.JSON {
 func ptrString(s string) *string { return &s }
 
 func appendUsageMeta(step *entity.PaperOutputTopicStep, usage LLMUsage) {
-	meta := map[string]any{}
-	if len(step.Extra) > 0 {
-		_ = json.Unmarshal(step.Extra, &meta)
-	}
+	meta := LoadStepExtra(step)
 	meta["tokens_prompt"] = usage.PromptTokens
 	meta["tokens_completion"] = usage.CompletionTokens
 	step.Extra = mustJSON(meta)
