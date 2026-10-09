@@ -168,6 +168,8 @@ watch(
 const running = ref(false)
 const topicTerminateLoading = ref(false)
 const topicRunToken = ref(0)
+/** POST 新建 run 完成前，背景轮询不应用 GET /current（避免仍读到上一轮 failed） */
+const topicRunStartInFlight = ref(false)
 const topicRunsByManuscript = ref<Record<string, TopicRunDemo>>({})
 const litReviewDoneByManuscript = ref<Record<string, boolean>>({})
 const experimentPlanDoneByManuscript = ref<Record<string, boolean>>({})
@@ -685,6 +687,7 @@ onUnmounted(() => {
 function startTopicRunProgressPoll(msId: string, token: number): () => void {
   const tick = async () => {
     if (token !== topicRunToken.value) return
+    if (topicRunStartInFlight.value) return
     try {
       const data = await fetchCurrentTopicDiscoveryRun()
       if (!data || token !== topicRunToken.value) return
@@ -1024,6 +1027,7 @@ async function startTopicDiscoveryRun() {
 
   resetTopicRunForAction(msId)
   const token = topicRunToken.value
+  topicRunStartInFlight.value = true
   running.value = true
   await scrollToTopicFlowPanel()
 
@@ -1035,7 +1039,10 @@ async function startTopicDiscoveryRun() {
     const msg = e instanceof Error ? e.message : '运行失败'
     ElMessage.error(msg.includes('401') ? '请先登录后再运行选题发现' : msg)
   } finally {
-    if (token === topicRunToken.value) running.value = false
+    if (token === topicRunToken.value) {
+      topicRunStartInFlight.value = false
+      running.value = false
+    }
   }
 }
 

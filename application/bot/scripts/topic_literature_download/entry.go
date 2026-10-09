@@ -107,12 +107,25 @@ func (j *TopicLiteratureDownloadJob) processOne(ctx context.Context, step *entit
 	if papersvc.LiteratureDownloadsReady(items) {
 		return j.finishSuccess(ctx, step, items)
 	}
+	// 未全部落盘：保持 status=running，下一轮 bot 继续重试（避免 UI 闪一下 failed 又成功）
 	reason := papersvc.LiteratureDownloadFailureReason(items)
 	if reason == "" {
-		reason = "PDF 下载未完成"
+		reason = "PDF 下载进行中"
 	}
-	j.markFailed(ctx, step, items, reason)
-	return "failed"
+	_ = j.mergeExtraProgress(ctx, step, items, reason)
+	return ""
+}
+
+func (j *TopicLiteratureDownloadJob) mergeExtraProgress(ctx context.Context, step *entity.PaperOutputTopicStep, items []papersvc.LiteratureDownloadItem, progress string) error {
+	meta := papersvc.LoadStepExtra(step)
+	meta = papersvc.MergeStepExtra(meta, map[string]any{
+		"literature_downloads":  items,
+		"pdf_download_progress": strings.TrimSpace(progress),
+	})
+	delete(meta, "error")
+	step.Extra = mustJSON(meta)
+	papersvc.SyncStepFilesAppend(step, items)
+	return j.steps.SaveStep(ctx, step)
 }
 
 func (j *TopicLiteratureDownloadJob) mergeExtra(ctx context.Context, step *entity.PaperOutputTopicStep, items []papersvc.LiteratureDownloadItem, errMsg string) error {
