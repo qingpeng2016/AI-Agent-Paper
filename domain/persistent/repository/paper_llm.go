@@ -10,4 +10,5 @@ type PaperLLMRepo interface {
 	GetActiveModelByID(ctx context.Context, id uint) (*entity.PaperLLMModelConfig, error)
 	GetActiveBindingByStage(ctx context.Context, stageCode string) (*entity.PaperLLMWorkflowBinding, error)
 	GetActivePromptByStage(ctx context.Context, stageCode string) (*entity.PaperLLMPromptTemplate, error)
+	InsertCallLog(ctx context.Context, row *entity.PaperLLMCallLog) error
 }

@@ -57,8 +57,69 @@ export type TopicDiscoveryStepDTO = {
   stage_code: string
   status: string
   summary_text?: string
+  input_params?: Record<string, unknown>
   result?: unknown
   meta?: unknown
+}
+
+/** 从 retrieve 步的 input_params 回填选题表单（刷新 / 检查点继续） */
+export function applyStoredTopicRunInputToForm(
+  form: {
+    disciplineCode: string
+    keywords: string
+    description: string
+    venue: string
+    sourceCodes: string[]
+    intensity: string
+    auditLevel: string
+    humanCheckpoint: boolean
+  },
+  run?: TopicDiscoveryRunResponse | null,
+): void {
+  if (!run) return
+  const retrieve = run.steps.find((s) => s.stage_code === 'retrieve')
+  const p = retrieve?.input_params
+  if (!p || typeof p !== 'object') return
+
+  let keywords = Array.isArray(p.keywords)
+    ? (p.keywords as unknown[]).map((k) => String(k).trim()).filter(Boolean)
+    : []
+  let description = String(p.description ?? '').trim()
+  const legacyDirection = String(p.direction ?? '').trim()
+
+  if (keywords.length === 0 && legacyDirection) {
+    const kwMatch = legacyDirection.match(/关键词[：:]\s*(.+)$/m)
+    if (kwMatch) {
+      keywords = kwMatch[1]
+        .split(/[,，;\n、]+/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+    }
+    const contentMatch = legacyDirection.match(/研究内容[：:]\s*([\s\S]*?)(?:\n关键词|$)/)
+    if (contentMatch) {
+      description = contentMatch[1].trim()
+    } else if (!description) {
+      description = legacyDirection
+    }
+  }
+
+  if (keywords.length) form.keywords = keywords.join(', ')
+  if (description) form.description = description
+
+  const discipline = String(p.discipline_code ?? '').trim()
+  if (discipline) form.disciplineCode = discipline
+  const venue = String(p.venue ?? '').trim()
+  if (venue) form.venue = venue
+  if (Array.isArray(p.source_codes) && p.source_codes.length) {
+    form.sourceCodes = (p.source_codes as unknown[]).map((c) => String(c).trim()).filter(Boolean)
+  }
+  const intensity = String(p.intensity ?? '').trim()
+  if (intensity) form.intensity = intensity
+  const audit = String(p.audit_level ?? '').trim()
+  if (audit) form.auditLevel = audit
+  if (typeof p.human_checkpoint === 'boolean') {
+    form.humanCheckpoint = p.human_checkpoint
+  }
 }
 
 export function parseRetrieveLiteratureLinks(

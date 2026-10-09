@@ -6,6 +6,7 @@ type TopicDiscoveryStepView struct {
 	StageCode   string          `json:"stage_code"`
 	Status      string          `json:"status"`
 	SummaryText string          `json:"summary_text,omitempty"`
+	InputParams json.RawMessage `json:"input_params,omitempty"`
 	Result      json.RawMessage `json:"result,omitempty"`
 	Meta        json.RawMessage `json:"meta,omitempty"`
 	StartedAt   *string         `json:"started_at,omitempty"`

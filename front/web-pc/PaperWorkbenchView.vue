@@ -8,6 +8,7 @@ import {
   cancelTopicDiscoveryRun,
   commitTopicDiscoveryManuscript,
   parseRetrieveLiteratureLinks,
+  applyStoredTopicRunInputToForm,
   type TopicDiscoveryRunResponse,
   type TopicDiscoveryStepDTO,
 } from '@/api/topicDiscovery'
@@ -689,11 +690,13 @@ function topicRunFromApi(data: TopicDiscoveryRunResponse): TopicRunDemo {
 }
 
 function buildTopicRunRequest(action: 'start' | 'continue') {
+  const direction = formatTopicDirectionText(topicForm)
   return {
     manuscript_title: currentManuscript.value?.title ?? '',
     discipline_code: topicForm.disciplineCode,
     keywords: parseTopicKeywords(topicForm.keywords),
     description: topicForm.description.trim(),
+    direction: direction || undefined,
     venue: topicForm.venue,
     source_codes: [...topicForm.sourceCodes],
     intensity: topicForm.intensity,
@@ -713,6 +716,7 @@ async function hydrateTopicRunFromServer(msId: string) {
       persistTopicRun(msId, createIdleTopicRun())
       return
     }
+    applyStoredTopicRunInputToForm(topicForm, data)
     topicLastRunByMs.value = { ...topicLastRunByMs.value, [msId]: data }
     persistTopicRun(msId, topicRunFromApi(data))
   } catch {

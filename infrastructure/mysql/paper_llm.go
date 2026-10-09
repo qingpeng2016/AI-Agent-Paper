@@ -58,3 +58,10 @@ func (r *PaperLLMImpl) GetActivePromptByStage(ctx context.Context, stageCode str
 	}
 	return &row, nil
 }
+
+func (r *PaperLLMImpl) InsertCallLog(ctx context.Context, row *entity.PaperLLMCallLog) error {
+	if row == nil {
+		return nil
+	}
+	return r.db.WithContext(ctx).Create(row).Error
+}

@@ -3,6 +3,7 @@ package paper
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -125,18 +126,21 @@ func currentRunCancelled(rows []entity.PaperOutputTopicStep) bool {
 }
 
 func (s *TopicDiscoveryRunService) Run(ctx context.Context, userID uint, req request.TopicDiscoveryRunRequest) (*response.TopicDiscoveryRunView, error) {
-	input, err := s.prepareRun(ctx, userID, req)
-	if err != nil {
-		return nil, err
-	}
 	action := strings.ToLower(strings.TrimSpace(req.Action))
 	if action == "" {
 		action = "start"
 	}
 
 	var runVersion int
+	var input topicRunInput
+	var err error
+
 	switch action {
 	case "start":
+		input, err = s.prepareRun(ctx, userID, req)
+		if err != nil {
+			return nil, err
+		}
 		paramsBytes, _ := json.Marshal(input)
 		runVersion, err = s.steps.BeginRun(ctx, uint64(userID), paramsBytes)
 		if err != nil {
@@ -171,6 +175,10 @@ func (s *TopicDiscoveryRunService) Run(ctx context.Context, userID uint, req req
 			return nil, err
 		}
 		if ver == 0 || currentRunCancelled(rows) {
+			input, err = s.prepareRun(ctx, userID, req)
+			if err != nil {
+				return nil, err
+			}
 			paramsBytes, _ := json.Marshal(input)
 			runVersion, err = s.steps.BeginRun(ctx, uint64(userID), paramsBytes)
 			if err != nil {
@@ -508,7 +516,7 @@ func (s *TopicDiscoveryRunService) stageRetrieve(ctx context.Context, step *enti
 		contextBlock = "(no literature hits from configured sources)"
 	}
 
-	summary, usage, err := s.callStageLLM(ctx, "retrieve", map[string]string{
+	summary, usage, err := s.callStageLLM(ctx, step.ManuscriptID, "retrieve", map[string]string{
 		"direction": input.Direction,
 		"venue":     input.Venue,
 	}, contextBlock+"\n\nSummarize coverage and gaps in concise Chinese.")
@@ -533,7 +541,7 @@ Corpus:
 Return ONLY valid JSON: {"ideas":[{"title":"","problem":"","approach":"","contribution":""}]}
 Use Chinese for text fields.`, input.Direction, input.Venue, input.MaxIdeas, ctxBlock)
 
-	text, usage, err := s.callStageLLM(ctx, "generate_ideas", map[string]string{
+	text, usage, err := s.callStageLLM(ctx, step.ManuscriptID, "generate_ideas", map[string]string{
 		"direction": input.Direction,
 		"max_ideas": fmt.Sprintf("%d", input.MaxIdeas),
 	}, userMsg)
@@ -557,7 +565,7 @@ Prior steps:
 Return ONLY valid JSON: {"lines":["..."],"risks":[{"idea_title":"","risk":"low|medium|high","note":""}]}
 Use Chinese.`, input.Direction, ctxBlock)
 
-	text, usage, err := s.callStageLLM(ctx, "novelty", map[string]string{"direction": input.Direction}, userMsg)
+	text, usage, err := s.callStageLLM(ctx, step.ManuscriptID, "novelty", map[string]string{"direction": input.Direction}, userMsg)
 	if err != nil {
 		return err
 	}
@@ -585,7 +593,7 @@ Context:
 
 Return ONLY valid JSON: {"issues":[{"severity":"blocker|major|minor","claim":"","fix":""}],"summary":""}
 Use Chinese.`, r, rounds, input.Venue, input.AuditLevel, ctxBlock)
-		text, usage, err := s.callStageLLM(ctx, "audit", map[string]string{"direction": input.Direction}, userMsg)
+		text, usage, err := s.callStageLLM(ctx, step.ManuscriptID, "audit", map[string]string{"direction": input.Direction}, userMsg)
 		if err != nil {
 			return err
 		}
@@ -624,32 +632,106 @@ func (s *TopicDiscoveryRunService) stageContext(ctx context.Context, userID uint
 	return strings.Join(parts, "\n\n"), nil
 }
 
-func (s *TopicDiscoveryRunService) callStageLLM(ctx context.Context, stageCode string, vars map[string]string, userExtra string) (string, LLMUsage, error) {
-	model, system, stagePrompt, err := s.resolveStageLLM(ctx, stageCode, vars)
+type stageLLMResolve struct {
+	model          *entity.PaperLLMModelConfig
+	binding        *entity.PaperLLMWorkflowBinding
+	defPrompt      *entity.PaperLLMPromptTemplate
+	stagePrompt    *entity.PaperLLMPromptTemplate
+	system         string
+	userPrefix     string
+}
+
+func (s *TopicDiscoveryRunService) callStageLLM(ctx context.Context, manuscriptID uint64, stageCode string, vars map[string]string, userExtra string) (string, LLMUsage, error) {
+	resolved, err := s.resolveStageLLM(ctx, stageCode, vars)
 	if err != nil {
 		return "", LLMUsage{}, err
 	}
-	user := stagePrompt
+	user := resolved.userPrefix
 	if strings.TrimSpace(userExtra) != "" {
-		user = stagePrompt + "\n\n" + userExtra
+		user = resolved.userPrefix + "\n\n" + userExtra
 	}
-	return s.llm.Complete(ctx, model, system, user)
+	start := time.Now()
+	text, usage, err := s.llm.Complete(ctx, resolved.model, resolved.system, user)
+	s.persistLLMCallLog(ctx, manuscriptID, stageCode, resolved, usage, int(time.Since(start).Milliseconds()), err)
+	return text, usage, err
 }
 
-func (s *TopicDiscoveryRunService) resolveStageLLM(ctx context.Context, stageCode string, vars map[string]string) (*entity.PaperLLMModelConfig, string, string, error) {
+func (s *TopicDiscoveryRunService) persistLLMCallLog(
+	ctx context.Context,
+	manuscriptID uint64,
+	stageCode string,
+	resolved *stageLLMResolve,
+	usage LLMUsage,
+	latencyMs int,
+	callErr error,
+) {
+	if resolved == nil || resolved.model == nil {
+		return
+	}
+	status := int16(200)
+	if callErr != nil {
+		status = int16(500)
+		var re *errorx.RespErr
+		if errors.As(callErr, &re) && re != nil && re.Code > 0 && re.Code <= 32767 {
+			status = int16(re.Code)
+		}
+	}
+	stage := stageCode
+	var modelCfgID *uint
+	if resolved.model.ID > 0 {
+		id := resolved.model.ID
+		modelCfgID = &id
+	}
+	var bindingID *uint
+	if resolved.binding != nil && resolved.binding.ID > 0 {
+		id := resolved.binding.ID
+		bindingID = &id
+	}
+	var promptTplID *uint
+	if resolved.stagePrompt != nil && resolved.stagePrompt.ID > 0 {
+		id := resolved.stagePrompt.ID
+		promptTplID = &id
+	} else if resolved.defPrompt != nil && resolved.defPrompt.ID > 0 {
+		id := resolved.defPrompt.ID
+		promptTplID = &id
+	}
+	var promptTok, completionTok *int
+	if usage.PromptTokens > 0 {
+		promptTok = &usage.PromptTokens
+	}
+	if usage.CompletionTokens > 0 {
+		completionTok = &usage.CompletionTokens
+	}
+	row := &entity.PaperLLMCallLog{
+		ManuscriptID:      manuscriptID,
+		StageCode:         &stage,
+		ModelConfigID:     modelCfgID,
+		WorkflowBindingID: bindingID,
+		PromptTemplateID:  promptTplID,
+		ModelName:         resolved.model.ModelName,
+		PromptTokens:      promptTok,
+		CompletionTokens:  completionTok,
+		LatencyMs:         latencyMs,
+		Status:            status,
+		CreatedAt:         time.Now(),
+	}
+	_ = s.llmRepo.InsertCallLog(ctx, row)
+}
+
+func (s *TopicDiscoveryRunService) resolveStageLLM(ctx context.Context, stageCode string, vars map[string]string) (*stageLLMResolve, error) {
 	binding, err := s.llmRepo.GetActiveBindingByStage(ctx, stageCode)
 	if err != nil {
-		return nil, "", "", err
+		return nil, err
 	}
 	if binding == nil {
 		binding, err = s.llmRepo.GetActiveBindingByStage(ctx, "default")
 		if err != nil || binding == nil {
-			return nil, "", "", errorx.ErrLLMNotConfigured
+			return nil, errorx.ErrLLMNotConfigured
 		}
 	}
 	model, err := s.llmRepo.GetActiveModelByID(ctx, binding.ModelConfigID)
 	if err != nil || model == nil {
-		return nil, "", "", errorx.ErrLLMNotConfigured
+		return nil, errorx.ErrLLMNotConfigured
 	}
 	defPrompt, _ := s.llmRepo.GetActivePromptByStage(ctx, "default")
 	stagePrompt, _ := s.llmRepo.GetActivePromptByStage(ctx, stageCode)
@@ -664,7 +746,14 @@ func (s *TopicDiscoveryRunService) resolveStageLLM(ctx context.Context, stageCod
 	if userTmpl == "" {
 		userTmpl = stageCode
 	}
-	return model, system, userTmpl, nil
+	return &stageLLMResolve{
+		model:       model,
+		binding:     binding,
+		defPrompt:   defPrompt,
+		stagePrompt: stagePrompt,
+		system:      system,
+		userPrefix:  userTmpl,
+	}, nil
 }
 
 func (s *TopicDiscoveryRunService) reloadView(ctx context.Context, userID uint, runVersion int) (*response.TopicDiscoveryRunView, error) {
@@ -697,6 +786,9 @@ func (s *TopicDiscoveryRunService) buildRunView(manuscriptID uint64, runVersion 
 		sv := response.TopicDiscoveryStepView{
 			StageCode: r.StageCode,
 			Status:    r.Status,
+		}
+		if len(r.InputParams) > 0 {
+			sv.InputParams = json.RawMessage(r.InputParams)
 		}
 		if r.SummaryText != nil {
 			sv.SummaryText = *r.SummaryText
