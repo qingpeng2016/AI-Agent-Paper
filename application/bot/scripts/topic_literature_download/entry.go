@@ -19,6 +19,8 @@ const (
 	ModuleAIAgentPaper          = "ai_agent_paper"
 	TaskTopicLiteratureDownload = "topic_literature_pdf_download"
 	scanLimit                   = 50
+	pdfDownloadMaxAttempts      = 5
+	pdfDownloadRetryDelay       = time.Second
 )
 
 type TopicLiteratureDownloadJob struct {
@@ -91,12 +93,8 @@ func (j *TopicLiteratureDownloadJob) processOne(ctx context.Context, step *entit
 			it.DownloadError = ""
 			continue
 		}
-		if err := papersvc.DownloadLiteraturePDF(ctx, pdfURL, abs); err != nil {
+		if err := downloadPDFWithRetry(ctx, pdfURL, abs, it.ExternalKey); err != nil {
 			it.DownloadError = err.Error()
-			logger.WarnZ(ctx, "topic-literature-download-pdf-failed",
-				zap.String("external_key", it.ExternalKey),
-				zap.String("pdf_url", pdfURL),
-				zap.Error(err))
 			continue
 		}
 		it.DownloadError = ""
@@ -107,25 +105,40 @@ func (j *TopicLiteratureDownloadJob) processOne(ctx context.Context, step *entit
 	if papersvc.LiteratureDownloadsReady(items) {
 		return j.finishSuccess(ctx, step, items)
 	}
-	// 未全部落盘：保持 status=running，下一轮 bot 继续重试（避免 UI 闪一下 failed 又成功）
 	reason := papersvc.LiteratureDownloadFailureReason(items)
 	if reason == "" {
-		reason = "PDF 下载进行中"
+		reason = fmt.Sprintf("PDF 下载失败（每项已重试 %d 次）", pdfDownloadMaxAttempts)
 	}
-	_ = j.mergeExtraProgress(ctx, step, items, reason)
-	return ""
+	j.markFailed(ctx, step, items, reason)
+	return "failed"
 }
 
-func (j *TopicLiteratureDownloadJob) mergeExtraProgress(ctx context.Context, step *entity.PaperOutputTopicStep, items []papersvc.LiteratureDownloadItem, progress string) error {
-	meta := papersvc.LoadStepExtra(step)
-	meta = papersvc.MergeStepExtra(meta, map[string]any{
-		"literature_downloads":  items,
-		"pdf_download_progress": strings.TrimSpace(progress),
-	})
-	delete(meta, "error")
-	step.Extra = mustJSON(meta)
-	papersvc.SyncStepFilesAppend(step, items)
-	return j.steps.SaveStep(ctx, step)
+func downloadPDFWithRetry(ctx context.Context, pdfURL, absPath, externalKey string) error {
+	var lastErr error
+	for attempt := 1; attempt <= pdfDownloadMaxAttempts; attempt++ {
+		if st, err := os.Stat(absPath); err == nil && st.Size() > 0 {
+			return nil
+		}
+		lastErr = papersvc.DownloadLiteraturePDF(ctx, pdfURL, absPath)
+		if lastErr == nil {
+			return nil
+		}
+		logger.WarnZ(ctx, "topic-literature-download-pdf-failed",
+			zap.String("external_key", externalKey),
+			zap.String("pdf_url", pdfURL),
+			zap.Int("attempt", attempt),
+			zap.Int("max_attempts", pdfDownloadMaxAttempts),
+			zap.Error(lastErr))
+		if attempt >= pdfDownloadMaxAttempts {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(pdfDownloadRetryDelay):
+		}
+	}
+	return lastErr
 }
 
 func (j *TopicLiteratureDownloadJob) mergeExtra(ctx context.Context, step *entity.PaperOutputTopicStep, items []papersvc.LiteratureDownloadItem, errMsg string) error {
