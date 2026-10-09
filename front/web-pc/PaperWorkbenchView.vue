@@ -419,7 +419,7 @@ const topicRunBusy = computed(
 const topicFailedSummary = computed((): { stageLabel: string; stageCode: string; error: string } | null => {
   if (currentTopicRun.value.status !== 'failed') return null
   const raw = topicLastRunByMs.value[activeManuscriptId.value]
-  const failedDto = raw?.steps.find((s) => s.status === 'failed')
+  const failedDto = raw?.steps.find((s) => s.status === 'failed' || stepDtoHasError(s))
   const localStep = currentTopicRun.value.steps.find((s) => s.status === 'failed')
   const stageCode = failedDto?.stage_code ?? localStep?.stageCode ?? 'unknown'
   const def = TOPIC_DISCOVERY_FLOW_STEPS.find((s) => s.stageCode === stageCode)
@@ -557,6 +557,16 @@ function mapApiRunStatus(runStatus: string): TopicRunDemo['status'] {
   return 'running'
 }
 
+function stepDtoHasError(step?: TopicDiscoveryStepDTO): boolean {
+  const err = (step?.extra as Record<string, unknown> | undefined)?.error
+  return typeof err === 'string' && err.trim().length > 0
+}
+
+function effectiveStepStatusFromDto(step?: TopicDiscoveryStepDTO): TopicFlowStepStatus {
+  if (stepDtoHasError(step)) return 'failed'
+  return mapStepStatus(step?.status ?? 'pending')
+}
+
 function mapStepStatus(raw: string): TopicFlowStepStatus {
   if (raw === 'completed') return 'completed'
   if (raw === 'running') return 'running'
@@ -688,19 +698,25 @@ function topicRunFromApi(data: TopicDiscoveryRunResponse, opts?: TopicRunFromApi
       stageCode: def.stageCode,
       label: def.label,
       checkpointKey: def.checkpointKey,
-      status: mapStepStatus(st?.status ?? 'pending'),
+      status: effectiveStepStatusFromDto(st),
     }
   })
 
+  if (steps.some((s) => s.status === 'failed')) {
+    status = 'failed'
+  }
+
   const awaitPost = opts?.awaitPost === true
-  if (awaitPost && status !== 'completed' && status !== 'failed') {
+  const apiCheckpoint = data.run_status === 'checkpoint'
+  if (awaitPost && !apiCheckpoint && status !== 'completed' && status !== 'failed') {
     status = 'running'
   }
 
-  if (
-    (status === 'running' || data.run_status === 'running' || awaitPost) &&
-    !steps.some((s) => s.status === 'running')
-  ) {
+  const shouldSpinSteps =
+    !apiCheckpoint &&
+    status !== 'failed' &&
+    (status === 'running' || data.run_status === 'running' || (awaitPost && !apiCheckpoint))
+  if (shouldSpinSteps && !steps.some((s) => s.status === 'running')) {
     steps = markTopicRunActiveStep(steps)
   }
 
@@ -773,13 +789,18 @@ async function invokeTopicDiscoveryRun(action: 'start' | 'continue', token: numb
   })
 
   const stopPoll = startTopicRunProgressPoll(msId, token)
-  let data: TopicDiscoveryRunResponse
+  let data: TopicDiscoveryRunResponse | undefined
   try {
     data = await postTopicDiscoveryRun(buildTopicRunRequest(action))
+  } catch (e) {
+    if (token === topicRunToken.value) {
+      await hydrateTopicRunFromServer(msId)
+    }
+    throw e
   } finally {
     stopPoll()
   }
-  if (token !== topicRunToken.value) return
+  if (token !== topicRunToken.value || !data) return
 
   topicLastRunByMs.value = { ...topicLastRunByMs.value, [msId]: data }
   const run = topicRunFromApi(data)
@@ -790,7 +811,8 @@ async function invokeTopicDiscoveryRun(action: 'start' | 'continue', token: numb
   } else if (run.status === 'checkpoint' && run.checkpoint) {
     ElMessage.info(`流程已暂停：请确认「${run.checkpoint.title}」后再继续`)
   } else if (run.status === 'failed') {
-    ElMessage.error('选题发现运行失败，请查看后端日志或改参数重试')
+    const errLine = topicFailedSummary.value?.error
+    ElMessage.error(errLine && errLine.length < 120 ? errLine : '选题发现运行失败，请配置 LLM 或改参数后重试')
   }
 }
 
@@ -953,11 +975,14 @@ function continueTopicAfterCheckpoint() {
     steps: markTopicRunActiveStep(currentTopicRun.value.steps),
   })
 
-  invokeTopicDiscoveryRun('continue', token)
-    .catch((e) => {
+  void invokeTopicDiscoveryRun('continue', token)
+    .catch(async (e) => {
       if (token !== topicRunToken.value) return
+      await hydrateTopicRunFromServer(msId)
       const msg = e instanceof Error ? e.message : '继续失败'
-      ElMessage.error(msg)
+      if (currentTopicRun.value.status !== 'failed') {
+        ElMessage.error(msg.includes('401') ? '请先登录后再运行选题发现' : msg)
+      }
     })
     .finally(() => {
       if (token === topicRunToken.value) running.value = false

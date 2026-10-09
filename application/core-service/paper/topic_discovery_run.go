@@ -147,7 +147,7 @@ func (s *TopicDiscoveryRunService) Run(ctx context.Context, userID uint, req req
 			return nil, err
 		}
 		if err := s.executeFromStage(ctx, userID, runVersion, input, 0); err != nil {
-			return nil, err
+			return s.reloadViewOrErr(ctx, userID, runVersion, err)
 		}
 	case "continue":
 		ver, rows, err := s.steps.GetLatestRunByUser(ctx, uint64(userID))
@@ -167,7 +167,7 @@ func (s *TopicDiscoveryRunService) Run(ctx context.Context, userID uint, req req
 			return s.reloadView(ctx, userID, runVersion)
 		}
 		if err := s.executeFromStage(ctx, userID, runVersion, input, idx); err != nil {
-			return nil, err
+			return s.reloadViewOrErr(ctx, userID, runVersion, err)
 		}
 	case "run_all":
 		ver, rows, err := s.steps.GetLatestRunByUser(ctx, uint64(userID))
@@ -197,7 +197,7 @@ func (s *TopicDiscoveryRunService) Run(ctx context.Context, userID uint, req req
 				break
 			}
 			if err := s.executeStage(ctx, userID, runVersion, input, topicDiscoveryStages[idx]); err != nil {
-				return nil, err
+				return s.reloadViewOrErr(ctx, userID, runVersion, err)
 			}
 			if input.HumanCheckpoint {
 				view, err := s.reloadView(ctx, userID, runVersion)
@@ -405,7 +405,9 @@ func (s *TopicDiscoveryRunService) executeStage(ctx context.Context, userID uint
 		}
 		stepMeta["error"] = execErr.Error()
 		step.Extra = mustJSON(stepMeta)
-		_ = s.steps.SaveStep(ctx, step)
+		if saveErr := s.steps.SaveStep(ctx, step); saveErr != nil {
+			return saveErr
+		}
 		return execErr
 	}
 	step.Status = "completed"
@@ -814,6 +816,35 @@ func (s *TopicDiscoveryRunService) reloadView(ctx context.Context, userID uint, 
 	return s.buildRunView(manuscriptIDOf(rows), runVersion, rows), nil
 }
 
+func (s *TopicDiscoveryRunService) reloadViewOrErr(ctx context.Context, userID uint, runVersion int, stageErr error) (*response.TopicDiscoveryRunView, error) {
+	view, err := s.reloadView(ctx, userID, runVersion)
+	if err != nil {
+		return nil, stageErr
+	}
+	return view, nil
+}
+
+// effectiveTopicStepStatus 将 extra.error 或「已结束但无结果」的脏 pending 视为 failed，避免 UI 误判为 checkpoint/running。
+func effectiveTopicStepStatus(r entity.PaperOutputTopicStep) string {
+	st := strings.TrimSpace(r.Status)
+	if st == "failed" {
+		return "failed"
+	}
+	var ex map[string]any
+	if len(r.Extra) > 0 {
+		_ = json.Unmarshal(r.Extra, &ex)
+	}
+	if e, ok := ex["error"].(string); ok && strings.TrimSpace(e) != "" {
+		return "failed"
+	}
+	if st == "pending" && r.CompletedAt != nil && len(r.Result) == 0 {
+		if _, ok := ex["llm_stage_code"]; ok {
+			return "failed"
+		}
+	}
+	return st
+}
+
 func (s *TopicDiscoveryRunService) buildRunView(manuscriptID uint64, runVersion int, rows []entity.PaperOutputTopicStep) *response.TopicDiscoveryRunView {
 	view := &response.TopicDiscoveryRunView{
 		ManuscriptID: manuscriptID,
@@ -833,9 +864,10 @@ func (s *TopicDiscoveryRunService) buildRunView(manuscriptID uint64, runVersion 
 
 	runStatus := "completed"
 	for _, r := range rows {
+		eff := effectiveTopicStepStatus(r)
 		sv := response.TopicDiscoveryStepView{
 			StageCode: r.StageCode,
-			Status:    r.Status,
+			Status:    eff,
 		}
 		if len(r.InputParams) > 0 {
 			sv.InputParams = json.RawMessage(r.InputParams)
@@ -859,7 +891,7 @@ func (s *TopicDiscoveryRunService) buildRunView(manuscriptID uint64, runVersion 
 		}
 		view.Steps = append(view.Steps, sv)
 
-		switch r.Status {
+		switch eff {
 		case "failed":
 			runStatus = "failed"
 		case "running":
@@ -872,7 +904,7 @@ func (s *TopicDiscoveryRunService) buildRunView(manuscriptID uint64, runVersion 
 	}
 	if runStatus != "failed" && human {
 		for i, r := range rows {
-			if r.Status == "completed" && i+1 < len(rows) && rows[i+1].Status == "pending" {
+			if effectiveTopicStepStatus(r) == "completed" && i+1 < len(rows) && effectiveTopicStepStatus(rows[i+1]) == "pending" {
 				view.PauseAfterStage = r.StageCode
 				runStatus = "checkpoint"
 				break
