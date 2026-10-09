@@ -297,7 +297,7 @@ func (s *TopicDiscoveryRunService) CommitManuscript(ctx context.Context, userID 
 		return nil, errorx.ErrTopicRunNotFound
 	}
 	for _, r := range rows {
-		if r.Status != "completed" {
+		if strings.TrimSpace(r.Status) != "completed" {
 			return nil, errorx.ErrTopicRunNotComplete
 		}
 	}
@@ -824,27 +824,6 @@ func (s *TopicDiscoveryRunService) reloadViewOrErr(ctx context.Context, userID u
 	return view, nil
 }
 
-// effectiveTopicStepStatus 将 extra.error 或「已结束但无结果」的脏 pending 视为 failed，避免 UI 误判为 checkpoint/running。
-func effectiveTopicStepStatus(r entity.PaperOutputTopicStep) string {
-	st := strings.TrimSpace(r.Status)
-	if st == "failed" {
-		return "failed"
-	}
-	var ex map[string]any
-	if len(r.Extra) > 0 {
-		_ = json.Unmarshal(r.Extra, &ex)
-	}
-	if e, ok := ex["error"].(string); ok && strings.TrimSpace(e) != "" {
-		return "failed"
-	}
-	if st == "pending" && r.CompletedAt != nil && len(r.Result) == 0 {
-		if _, ok := ex["llm_stage_code"]; ok {
-			return "failed"
-		}
-	}
-	return st
-}
-
 func (s *TopicDiscoveryRunService) buildRunView(manuscriptID uint64, runVersion int, rows []entity.PaperOutputTopicStep) *response.TopicDiscoveryRunView {
 	view := &response.TopicDiscoveryRunView{
 		ManuscriptID: manuscriptID,
@@ -864,10 +843,10 @@ func (s *TopicDiscoveryRunService) buildRunView(manuscriptID uint64, runVersion 
 
 	runStatus := "completed"
 	for _, r := range rows {
-		eff := effectiveTopicStepStatus(r)
+		st := strings.TrimSpace(r.Status)
 		sv := response.TopicDiscoveryStepView{
 			StageCode: r.StageCode,
-			Status:    eff,
+			Status:    st,
 		}
 		if len(r.InputParams) > 0 {
 			sv.InputParams = json.RawMessage(r.InputParams)
@@ -891,7 +870,7 @@ func (s *TopicDiscoveryRunService) buildRunView(manuscriptID uint64, runVersion 
 		}
 		view.Steps = append(view.Steps, sv)
 
-		switch eff {
+		switch st {
 		case "failed":
 			runStatus = "failed"
 		case "running":
@@ -904,7 +883,12 @@ func (s *TopicDiscoveryRunService) buildRunView(manuscriptID uint64, runVersion 
 	}
 	if runStatus != "failed" && human {
 		for i, r := range rows {
-			if effectiveTopicStepStatus(r) == "completed" && i+1 < len(rows) && effectiveTopicStepStatus(rows[i+1]) == "pending" {
+			cur := strings.TrimSpace(r.Status)
+			next := ""
+			if i+1 < len(rows) {
+				next = strings.TrimSpace(rows[i+1].Status)
+			}
+			if cur == "completed" && next == "pending" {
 				view.PauseAfterStage = r.StageCode
 				runStatus = "checkpoint"
 				break

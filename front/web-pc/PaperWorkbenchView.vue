@@ -416,12 +416,74 @@ const topicRunBusy = computed(
   () => currentTopicRun.value.status === 'running' || running.value,
 )
 
+const topicDiscoveryApiRun = computed(
+  () => topicLastRunByMs.value[activeManuscriptId.value] ?? null,
+)
+
+/** 任一步骤 status=failed（后端落盘） */
+const topicHasFailedStep = computed(() =>
+  currentTopicRun.value.steps.some((s) => s.status === 'failed'),
+)
+
+/** 失败：仅「驳回并返回」 */
+const topicShowFailedPanel = computed(
+  () => topicHasFailedStep.value || currentTopicRun.value.status === 'failed',
+)
+
+/** 非失败且在人工暂停点：「终止并返回」+「确认并继续」 */
+const topicShowCheckpointPanel = computed(() => {
+  if (topicShowFailedPanel.value) return false
+  if (!topicForm.humanCheckpoint) return false
+  if (currentTopicRun.value.status === 'completed') return false
+  const raw = topicDiscoveryApiRun.value
+  if (raw?.run_status === 'checkpoint') return true
+  if (raw?.pause_after_stage?.trim()) return true
+  const steps = currentTopicRun.value.steps
+  for (let i = 0; i < steps.length - 1; i++) {
+    if (steps[i].status === 'completed' && steps[i + 1].status === 'pending') {
+      return true
+    }
+  }
+  return false
+})
+
+function buildTopicCheckpointView(
+  pauseStage: string,
+  raw: TopicDiscoveryRunResponse | null,
+): TopicCheckpointView | null {
+  const def = TOPIC_DISCOVERY_FLOW_STEPS.find((s) => s.stageCode === pauseStage)
+  if (!def?.checkpointKey) return null
+  const dto = raw?.steps.find((s) => s.stage_code === pauseStage)
+  const lines = linesFromApiStep(dto)
+  return {
+    key: def.checkpointKey,
+    title: def.label,
+    lines: lines.length ? lines : CHECKPOINT_COPY[def.checkpointKey].lines,
+  }
+}
+
+const topicCheckpointPanel = computed((): TopicCheckpointView | null => {
+  if (!topicShowCheckpointPanel.value) return null
+  if (currentTopicRun.value.checkpoint) return currentTopicRun.value.checkpoint
+  const raw = topicDiscoveryApiRun.value
+  const fromApi = raw?.pause_after_stage?.trim()
+  if (fromApi) {
+    return buildTopicCheckpointView(fromApi, raw)
+  }
+  const steps = currentTopicRun.value.steps
+  for (let i = 0; i < steps.length - 1; i++) {
+    if (steps[i].status === 'completed' && steps[i + 1].status === 'pending') {
+      return buildTopicCheckpointView(steps[i].stageCode, raw)
+    }
+  }
+  return null
+})
+
 const topicFailedSummary = computed((): { stageLabel: string; stageCode: string; error: string } | null => {
-  if (currentTopicRun.value.status !== 'failed') return null
-  const raw = topicLastRunByMs.value[activeManuscriptId.value]
-  const failedDto = raw?.steps.find((s) => s.status === 'failed' || stepDtoHasError(s))
-  const localStep = currentTopicRun.value.steps.find((s) => s.status === 'failed')
-  const stageCode = failedDto?.stage_code ?? localStep?.stageCode ?? 'unknown'
+  if (!topicShowFailedPanel.value) return null
+  const raw = topicDiscoveryApiRun.value
+  const failedDto = raw?.steps.find((s) => s.status === 'failed')
+  const stageCode = failedDto?.stage_code ?? 'unknown'
   const def = TOPIC_DISCOVERY_FLOW_STEPS.find((s) => s.stageCode === stageCode)
   const extra = (failedDto?.extra ?? {}) as Record<string, unknown>
   const errRaw = extra.error
@@ -549,29 +611,30 @@ function persistTopicRun(msId: string, patch: TopicRunDemo) {
   topicRunsByManuscript.value = { ...topicRunsByManuscript.value, [msId]: patch }
 }
 
-function mapApiRunStatus(runStatus: string): TopicRunDemo['status'] {
-  if (runStatus === 'checkpoint') return 'checkpoint'
-  if (runStatus === 'completed') return 'completed'
-  if (runStatus === 'failed') return 'failed'
-  if (runStatus === 'running') return 'running'
-  return 'running'
+/** 与后端 run_status 落盘值一一对应，不做推断 */
+function runStatusFromApi(runStatus: string): TopicRunDemo['status'] {
+  switch (runStatus) {
+    case 'running':
+    case 'checkpoint':
+    case 'completed':
+    case 'failed':
+      return runStatus
+    default:
+      return 'idle'
+  }
 }
 
-function stepDtoHasError(step?: TopicDiscoveryStepDTO): boolean {
-  const err = (step?.extra as Record<string, unknown> | undefined)?.error
-  return typeof err === 'string' && err.trim().length > 0
-}
-
-function effectiveStepStatusFromDto(step?: TopicDiscoveryStepDTO): TopicFlowStepStatus {
-  if (stepDtoHasError(step)) return 'failed'
-  return mapStepStatus(step?.status ?? 'pending')
-}
-
-function mapStepStatus(raw: string): TopicFlowStepStatus {
-  if (raw === 'completed') return 'completed'
-  if (raw === 'running') return 'running'
-  if (raw === 'failed') return 'failed'
-  return 'pending'
+/** 与后端 steps[].status 落盘值一一对应，不做推断 */
+function stepStatusFromApi(raw: string): TopicFlowStepStatus {
+  switch (raw) {
+    case 'pending':
+    case 'running':
+    case 'completed':
+    case 'failed':
+      return raw
+    default:
+      return 'pending'
+  }
 }
 
 const TOPIC_STEP_RUNNING_HINT: Record<string, string> = {
@@ -585,20 +648,6 @@ function topicStepRunningHint(stageCode: string) {
   return TOPIC_STEP_RUNNING_HINT[stageCode] ?? 'AI 模型运行中…'
 }
 
-/** 本地标记当前进行中的步骤（后端返回前 + 轮询间隙） */
-function markTopicRunActiveStep(steps: TopicFlowStepRuntime[]): TopicFlowStepRuntime[] {
-  let activeSet = false
-  return steps.map((s) => {
-    if (s.status === 'completed') return s
-    if (!activeSet) {
-      activeSet = true
-      return { ...s, status: 'running' }
-    }
-    if (s.status === 'running') return { ...s, status: 'pending' }
-    return s
-  })
-}
-
 const TOPIC_RUN_POLL_MS = 1500
 
 function startTopicRunProgressPoll(msId: string, token: number): () => void {
@@ -608,7 +657,7 @@ function startTopicRunProgressPoll(msId: string, token: number): () => void {
       const data = await fetchCurrentTopicDiscoveryRun()
       if (!data || token !== topicRunToken.value) return
       topicLastRunByMs.value = { ...topicLastRunByMs.value, [msId]: data }
-      persistTopicRun(msId, topicRunFromApi(data, { awaitPost: running.value }))
+      persistTopicRun(msId, topicRunFromApi(data))
     } catch {
       /* 忽略轮询失败 */
     }
@@ -685,48 +734,21 @@ function linesFromApiStep(step?: TopicDiscoveryStepDTO): string[] {
   }
 }
 
-type TopicRunFromApiOptions = {
-  /** POST /run 尚未返回：保持步骤圈转动，避免轮询到的 checkpoint 中间态打断 UI */
-  awaitPost?: boolean
-}
-
-function topicRunFromApi(data: TopicDiscoveryRunResponse, opts?: TopicRunFromApiOptions): TopicRunDemo {
-  let status = mapApiRunStatus(data.run_status)
-  let steps: TopicFlowStepRuntime[] = TOPIC_DISCOVERY_FLOW_STEPS.map((def) => {
+/** 展示态唯一来源：GET/POST 返回的 run_status 与 steps[].status */
+function topicRunFromApi(data: TopicDiscoveryRunResponse): TopicRunDemo {
+  const status = runStatusFromApi(data.run_status)
+  const steps: TopicFlowStepRuntime[] = TOPIC_DISCOVERY_FLOW_STEPS.map((def) => {
     const st = data.steps.find((s) => s.stage_code === def.stageCode)
     return {
       stageCode: def.stageCode,
       label: def.label,
       checkpointKey: def.checkpointKey,
-      status: effectiveStepStatusFromDto(st),
+      status: st ? stepStatusFromApi(st.status) : 'pending',
     }
   })
 
-  if (steps.some((s) => s.status === 'failed')) {
-    status = 'failed'
-  }
-
-  const awaitPost = opts?.awaitPost === true
-  const apiCheckpoint = data.run_status === 'checkpoint'
-  if (awaitPost && !apiCheckpoint && status !== 'completed' && status !== 'failed') {
-    status = 'running'
-  }
-
-  const shouldSpinSteps =
-    !apiCheckpoint &&
-    status !== 'failed' &&
-    (status === 'running' || data.run_status === 'running' || (awaitPost && !apiCheckpoint))
-  if (shouldSpinSteps && !steps.some((s) => s.status === 'running')) {
-    steps = markTopicRunActiveStep(steps)
-  }
-
   let checkpoint: TopicCheckpointView | null = null
-  if (steps.some((s) => s.status === 'failed')) {
-    status = 'failed'
-    checkpoint = null
-  }
-
-  if (!awaitPost && status === 'checkpoint' && data.pause_after_stage) {
+  if (status === 'checkpoint' && data.pause_after_stage) {
     const def = TOPIC_DISCOVERY_FLOW_STEPS.find((s) => s.stageCode === data.pause_after_stage)
     const step = data.steps.find((s) => s.stage_code === data.pause_after_stage)
     if (def && step) {
@@ -781,13 +803,6 @@ async function invokeTopicDiscoveryRun(action: 'start' | 'continue', token: numb
   const msId = activeManuscriptId.value
   if (!msId) return
 
-  persistTopicRun(msId, {
-    ...currentTopicRun.value,
-    status: 'running',
-    checkpoint: null,
-    steps: markTopicRunActiveStep(currentTopicRun.value.steps),
-  })
-
   const stopPoll = startTopicRunProgressPoll(msId, token)
   let data: TopicDiscoveryRunResponse | undefined
   try {
@@ -816,14 +831,7 @@ async function invokeTopicDiscoveryRun(action: 'start' | 'continue', token: numb
   }
 }
 
-function finalizeTopicDiscoveryRun(msId: string) {
-  const run = {
-    ...currentTopicRun.value,
-    status: 'completed' as const,
-    checkpoint: null,
-    steps: currentTopicRun.value.steps.map((s) => ({ ...s })),
-  }
-  persistTopicRun(msId, run)
+function finalizeTopicDiscoveryRun(_msId: string) {
   recordModuleOperationLog('topic-discovery', '运行工作流（retrieve → ideas → novelty → audit）')
   ElMessage.success('选题发现已完成：可点顶栏「生成文献综述」继续')
 }
@@ -855,6 +863,25 @@ async function scrollToTopicFlowPanel() {
   }
   panel.scrollIntoView({ behavior: 'smooth', block: 'start' })
 }
+
+async function scrollToTopicFlowPanelWhenReady() {
+  await scrollToTopicFlowPanel()
+  if (topicRunVisible.value && !topicFlowPanelRef.value) {
+    await nextTick()
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    await scrollToTopicFlowPanel()
+  }
+}
+
+/** 刷新 hydrate 或切回选题模块后，有进行中的 run 则滚到「运行进度」 */
+watch(
+  () => topicRunVisible.value,
+  (visible) => {
+    if (!visible) return
+    void scrollToTopicFlowPanelWhenReady()
+  },
+  { flush: 'post' },
+)
 
 async function markLiteratureReviewDone(msId: string) {
   litReviewDoneByManuscript.value = { ...litReviewDoneByManuscript.value, [msId]: true }
@@ -944,19 +971,14 @@ async function startTopicDiscoveryRun() {
   resetTopicRunForAction(msId)
   const token = topicRunToken.value
   running.value = true
-
-  let run = createIdleTopicRun()
-  run.status = 'running'
-  run.steps = markTopicRunActiveStep(run.steps)
-  persistTopicRun(msId, run)
   await scrollToTopicFlowPanel()
 
   try {
     await invokeTopicDiscoveryRun('start', token)
   } catch (e) {
     if (token !== topicRunToken.value) return
+    await hydrateTopicRunFromServer(msId)
     const msg = e instanceof Error ? e.message : '运行失败'
-    persistTopicRun(msId, { ...currentTopicRun.value, status: 'failed', checkpoint: null })
     ElMessage.error(msg.includes('401') ? '请先登录后再运行选题发现' : msg)
   } finally {
     if (token === topicRunToken.value) running.value = false
@@ -965,15 +987,10 @@ async function startTopicDiscoveryRun() {
 
 function continueTopicAfterCheckpoint() {
   const msId = activeManuscriptId.value
-  if (!msId || currentTopicRun.value.status !== 'checkpoint') return
+  if (!msId || !topicShowCheckpointPanel.value) return
 
   const token = topicRunToken.value
   running.value = true
-  persistTopicRun(msId, {
-    ...currentTopicRun.value,
-    status: 'running',
-    steps: markTopicRunActiveStep(currentTopicRun.value.steps),
-  })
 
   void invokeTopicDiscoveryRun('continue', token)
     .catch(async (e) => {
@@ -1407,16 +1424,20 @@ async function onPrimaryAction() {
           </ul>
         </div>
 
-        <div v-if="currentTopicRun.status === 'checkpoint' && currentTopicRun.checkpoint" class="paper-checkpoint">
-          <div class="paper-checkpoint-head">
+        <div v-if="topicShowCheckpointPanel" class="paper-checkpoint">
+          <div v-if="topicCheckpointPanel" class="paper-checkpoint-head">
             <span class="paper-checkpoint-pause" aria-hidden="true">⏸</span>
             <div>
-              <h3 class="paper-checkpoint-title">人工检查点 · {{ currentTopicRun.checkpoint.key }}</h3>
-              <p class="paper-checkpoint-sub">{{ currentTopicRun.checkpoint.title }}</p>
+              <h3 class="paper-checkpoint-title">人工检查点 · {{ topicCheckpointPanel.key }}</h3>
+              <p class="paper-checkpoint-sub">{{ topicCheckpointPanel.title }}</p>
             </div>
           </div>
-          <ul class="paper-checkpoint-list">
-            <li v-for="(line, i) in currentTopicRun.checkpoint.lines" :key="i">{{ line }}</li>
+          <div v-else class="paper-checkpoint-head">
+            <span class="paper-checkpoint-pause" aria-hidden="true">⏸</span>
+            <h3 class="paper-checkpoint-title">人工检查点</h3>
+          </div>
+          <ul v-if="topicCheckpointPanel?.lines.length" class="paper-checkpoint-list">
+            <li v-for="(line, i) in topicCheckpointPanel.lines" :key="i">{{ line }}</li>
           </ul>
           <p class="paper-checkpoint-note">
             确认后继续下一步；终止会取消本轮进度，刷新后不会再加载。
@@ -1441,7 +1462,7 @@ async function onPrimaryAction() {
           </div>
         </div>
 
-        <div v-else-if="currentTopicRun.status === 'failed'" class="paper-checkpoint paper-checkpoint--failed">
+        <div v-else-if="topicShowFailedPanel" class="paper-checkpoint paper-checkpoint--failed">
           <div class="paper-checkpoint-head">
             <span class="paper-checkpoint-pause paper-checkpoint-pause--failed" aria-hidden="true">✕</span>
             <div>
