@@ -35,7 +35,9 @@ export type TopicDiscoveryRunRequest = {
   manuscript_id?: number
   manuscript_title?: string
   discipline_code: string
-  direction: string
+  keywords: string[]
+  description: string
+  direction?: string
   venue: string
   source_codes: string[]
   intensity: string
@@ -140,6 +142,22 @@ export async function fetchCurrentTopicDiscoveryRun(
     throw new Error(envelope.message ?? 'topic-discovery current failed')
   }
   return envelope.data ?? null
+}
+
+export async function cancelTopicDiscoveryRun(manuscriptId: number): Promise<void> {
+  const res = await fetch('/api/v1/paper/topic-discovery/run/cancel', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ manuscript_id: manuscriptId }),
+  })
+  if (!res.ok) {
+    throw new Error(`topic-discovery cancel http ${res.status}`)
+  }
+  const envelope = (await res.json()) as ApiEnvelope<unknown>
+  if (envelope.code !== 200) {
+    throw new Error(envelope.message ?? 'topic-discovery cancel failed')
+  }
 }
 
 function pickDefaultCode(items: Array<{ code: string; is_default?: boolean }>): string {

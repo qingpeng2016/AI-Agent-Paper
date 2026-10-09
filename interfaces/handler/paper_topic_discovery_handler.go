@@ -70,3 +70,22 @@ func (h *PaperTopicDiscoveryHandler) GetCurrentRun(c *gin.Context) {
 	}
 	response.ResponseSuccess(c, data)
 }
+
+// PostCancelRun POST /api/v1/paper/topic-discovery/run/cancel
+func (h *PaperTopicDiscoveryHandler) PostCancelRun(c *gin.Context) {
+	userID, ok := middleware.UserIDFromContext(c)
+	if !ok {
+		response.ResponseErr(c, errorx.ErrParamsError)
+		return
+	}
+	var req request.TopicDiscoveryCancelRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.ResponseErr(c, errorx.ErrParamsError)
+		return
+	}
+	if err := h.run.CancelCurrentRun(c.Request.Context(), userID, req.ManuscriptID); err != nil {
+		response.ResponseErr(c, err)
+		return
+	}
+	response.ResponseSuccess(c, nil)
+}

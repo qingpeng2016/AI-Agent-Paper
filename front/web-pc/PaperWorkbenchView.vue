@@ -5,6 +5,7 @@ import { useTopicDiscoveryFormOptions } from '@/composables/useTopicDiscoveryFor
 import {
   postTopicDiscoveryRun,
   fetchCurrentTopicDiscoveryRun,
+  cancelTopicDiscoveryRun,
   parseRetrieveLiteratureLinks,
   type TopicDiscoveryRunResponse,
   type TopicDiscoveryStepDTO,
@@ -14,6 +15,8 @@ import {
   DEFAULT_ENV_PREFERENCE,
   ENV_PREFERENCE_STORAGE_KEY,
   DEFAULT_TOPIC_DISCOVERY,
+  formatTopicDirectionText,
+  parseTopicKeywords,
   DEMO_PAPER_MANUSCRIPTS,
   LITERATURE_SOURCE_OPTIONS,
   PAPER_MODULE_GROUPS,
@@ -432,7 +435,7 @@ const topicDiscoveryArtifact = computed((): TopicDiscoveryArtifactSnapshot => {
   const runCompleted = run.status === 'completed'
   const sourceLabels = topicForm.sourceCodes.map((c) => getLiteratureSourceLabel(c))
   const direction =
-    topicForm.direction.trim() ||
+    formatTopicDirectionText(topicForm).trim() ||
     (corpusReady ? '（本次 run 未保留方向文案 · 演示）' : '（尚未填写研究方向）')
 
   const noveltyReady =
@@ -550,6 +553,52 @@ function mapStepStatus(raw: string): TopicFlowStepStatus {
   return 'pending'
 }
 
+const TOPIC_STEP_RUNNING_HINT: Record<string, string> = {
+  retrieve: '多源检索与 AI 摘要生成中…',
+  generate_ideas: 'AI 脑暴候选选题中…',
+  novelty: 'AI 新颖性分析中…',
+  audit: 'AI 选题审计中…',
+}
+
+function topicStepRunningHint(stageCode: string) {
+  return TOPIC_STEP_RUNNING_HINT[stageCode] ?? 'AI 模型运行中…'
+}
+
+/** 本地标记当前进行中的步骤（后端返回前 + 轮询间隙） */
+function markTopicRunActiveStep(steps: TopicFlowStepRuntime[]): TopicFlowStepRuntime[] {
+  let activeSet = false
+  return steps.map((s) => {
+    if (s.status === 'completed') return s
+    if (!activeSet) {
+      activeSet = true
+      return { ...s, status: 'running' }
+    }
+    if (s.status === 'running') return { ...s, status: 'pending' }
+    return s
+  })
+}
+
+const TOPIC_RUN_POLL_MS = 1500
+
+function startTopicRunProgressPoll(msId: string, token: number): () => void {
+  const tick = async () => {
+    if (token !== topicRunToken.value) return
+    const backendId = manuscriptBackendIds.value[msId]
+    if (!backendId) return
+    try {
+      const data = await fetchCurrentTopicDiscoveryRun(backendId)
+      if (!data || token !== topicRunToken.value) return
+      topicLastRunByMs.value = { ...topicLastRunByMs.value, [msId]: data }
+      persistTopicRun(msId, topicRunFromApi(data))
+    } catch {
+      /* 忽略轮询失败 */
+    }
+  }
+  void tick()
+  const timer = window.setInterval(() => void tick(), TOPIC_RUN_POLL_MS)
+  return () => window.clearInterval(timer)
+}
+
 function linesFromApiStep(step?: TopicDiscoveryStepDTO): string[] {
   if (!step) return []
   const summary = step.summary_text?.trim()
@@ -619,7 +668,7 @@ function linesFromApiStep(step?: TopicDiscoveryStepDTO): string[] {
 
 function topicRunFromApi(data: TopicDiscoveryRunResponse): TopicRunDemo {
   const status = mapApiRunStatus(data.run_status)
-  const steps: TopicFlowStepRuntime[] = TOPIC_DISCOVERY_FLOW_STEPS.map((def) => {
+  let steps: TopicFlowStepRuntime[] = TOPIC_DISCOVERY_FLOW_STEPS.map((def) => {
     const st = data.steps.find((s) => s.stage_code === def.stageCode)
     return {
       stageCode: def.stageCode,
@@ -628,6 +677,12 @@ function topicRunFromApi(data: TopicDiscoveryRunResponse): TopicRunDemo {
       status: mapStepStatus(st?.status ?? 'pending'),
     }
   })
+  if (
+    (status === 'running' || data.run_status === 'running') &&
+    !steps.some((s) => s.status === 'running')
+  ) {
+    steps = markTopicRunActiveStep(steps)
+  }
 
   let checkpoint: TopicCheckpointView | null = null
   if (status === 'checkpoint' && data.pause_after_stage) {
@@ -653,7 +708,8 @@ function buildTopicRunRequest(action: 'start' | 'continue') {
     manuscript_id: backendId ?? 0,
     manuscript_title: currentManuscript.value?.title ?? '',
     discipline_code: topicForm.disciplineCode,
-    direction: topicForm.direction.trim(),
+    keywords: parseTopicKeywords(topicForm.keywords),
+    description: topicForm.description.trim(),
     venue: topicForm.venue,
     source_codes: [...topicForm.sourceCodes],
     intensity: topicForm.intensity,
@@ -668,7 +724,13 @@ async function hydrateTopicRunFromServer(msId: string) {
   if (!backendId) return
   try {
     const data = await fetchCurrentTopicDiscoveryRun(backendId)
-    if (!data) return
+    if (!data) {
+      const next = { ...topicLastRunByMs.value }
+      delete next[msId]
+      topicLastRunByMs.value = next
+      persistTopicRun(msId, createIdleTopicRun())
+      return
+    }
     topicLastRunByMs.value = { ...topicLastRunByMs.value, [msId]: data }
     persistTopicRun(msId, topicRunFromApi(data))
   } catch {
@@ -684,10 +746,16 @@ async function invokeTopicDiscoveryRun(action: 'start' | 'continue', token: numb
     ...currentTopicRun.value,
     status: 'running',
     checkpoint: null,
-    steps: currentTopicRun.value.steps.map((s) => ({ ...s })),
+    steps: markTopicRunActiveStep(currentTopicRun.value.steps),
   })
 
-  const data = await postTopicDiscoveryRun(buildTopicRunRequest(action))
+  const stopPoll = startTopicRunProgressPoll(msId, token)
+  let data: TopicDiscoveryRunResponse
+  try {
+    data = await postTopicDiscoveryRun(buildTopicRunRequest(action))
+  } finally {
+    stopPoll()
+  }
   if (token !== topicRunToken.value) return
 
   persistManuscriptBackendId(msId, data.manuscript_id)
@@ -832,6 +900,7 @@ async function startTopicDiscoveryRun() {
 
   let run = createIdleTopicRun()
   run.status = 'running'
+  run.steps = markTopicRunActiveStep(run.steps)
   persistTopicRun(msId, run)
   await scrollToTopicFlowPanel()
 
@@ -853,6 +922,11 @@ function continueTopicAfterCheckpoint() {
 
   const token = topicRunToken.value
   running.value = true
+  persistTopicRun(msId, {
+    ...currentTopicRun.value,
+    status: 'running',
+    steps: markTopicRunActiveStep(currentTopicRun.value.steps),
+  })
 
   invokeTopicDiscoveryRun('continue', token)
     .catch((e) => {
@@ -865,29 +939,41 @@ function continueTopicAfterCheckpoint() {
     })
 }
 
-function rejectTopicCheckpoint() {
-  const msId = activeManuscriptId.value
-  if (!msId) return
+async function abandonCurrentTopicRun(msId: string) {
   topicRunToken.value += 1
-  const run = {
-    ...currentTopicRun.value,
-    status: 'failed' as const,
-    checkpoint: null,
-    steps: currentTopicRun.value.steps.map((s) =>
-      s.status === 'running' ? { ...s, status: 'failed' as TopicFlowStepStatus } : { ...s },
-    ),
-  }
-  persistTopicRun(msId, run)
   running.value = false
-  ElMessage.warning('已驳回：可修改参数后再次运行')
+  const backendId = manuscriptBackendIds.value[msId]
+  if (backendId) {
+    await cancelTopicDiscoveryRun(backendId)
+  }
+  const next = { ...topicLastRunByMs.value }
+  delete next[msId]
+  topicLastRunByMs.value = next
+  persistTopicRun(msId, createIdleTopicRun())
 }
 
-function cancelTopicRun() {
+async function rejectTopicCheckpoint() {
   const msId = activeManuscriptId.value
   if (!msId) return
-  resetTopicRunForAction(msId)
-  running.value = false
-  ElMessage.info('已取消运行')
+  try {
+    await abandonCurrentTopicRun(msId)
+    ElMessage.info('已驳回，可修改后重新运行')
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : '驳回失败'
+    ElMessage.error(msg)
+  }
+}
+
+async function cancelTopicRun() {
+  const msId = activeManuscriptId.value
+  if (!msId) return
+  try {
+    await abandonCurrentTopicRun(msId)
+    ElMessage.info('已取消运行')
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : '取消失败'
+    ElMessage.error(msg)
+  }
 }
 
 function topicStepIcon(status: TopicFlowStepStatus) {
@@ -918,8 +1004,12 @@ function isTopicSourceChecked(code: string) {
 
 async function onPrimaryAction() {
   if (activeModule.value === 'topic-discovery') {
-    if (!topicForm.direction.trim()) {
-      ElMessage.warning('请填写研究方向')
+    if (parseTopicKeywords(topicForm.keywords).length === 0) {
+      ElMessage.warning('请填写检索关键词（可多个，逗号分隔）')
+      return
+    }
+    if (!topicForm.description.trim()) {
+      ElMessage.warning('请填写详细描述')
       return
     }
     if (topicForm.sourceCodes.length === 0) {
@@ -1090,12 +1180,22 @@ async function onPrimaryAction() {
       <template v-if="activeModule === 'topic-discovery'">
       <section class="paper-panel">
         <label class="paper-field paper-field--block">
-          <span class="paper-label">研究方向 / 检索主题 <em class="req">*</em></span>
+          <span class="paper-label">检索关键词 <em class="req">*</em></span>
+          <input
+            v-model="topicForm.keywords"
+            type="text"
+            class="paper-input"
+            placeholder="多个关键词用逗号分隔"
+          />
+        </label>
+
+        <label class="paper-field paper-field--block paper-field--after-keywords">
+          <span class="paper-label">详细描述 <em class="req">*</em></span>
           <textarea
-            v-model="topicForm.direction"
+            v-model="topicForm.description"
             class="paper-textarea"
-            rows="4"
-            placeholder="输入要探索的研究主题、问题或关键词。"
+            rows="5"
+            placeholder="研究的背景，研究的内容"
           />
         </label>
 
@@ -1188,10 +1288,6 @@ async function onPrimaryAction() {
             取消
           </button>
         </div>
-        <p class="paper-section-lead">
-          进度来自后端 <code>paper_output_topic_step</code>（检索 + 四步模型调用）；长步骤请耐心等待。
-        </p>
-
         <ol class="paper-flow-steps">
           <li
             v-for="step in currentTopicRun.steps"
@@ -1199,12 +1295,18 @@ async function onPrimaryAction() {
             class="paper-flow-step"
             :class="`paper-flow-step--${step.status}`"
           >
-            <span class="paper-flow-step-icon" aria-hidden="true">{{ topicStepIcon(step.status) }}</span>
+            <span class="paper-flow-step-icon" aria-hidden="true">
+              <span v-if="step.status === 'running'" class="paper-flow-step-spinner" />
+              <template v-else>{{ topicStepIcon(step.status) }}</template>
+            </span>
             <div class="paper-flow-step-body">
               <span class="paper-flow-step-label">{{ step.label }}</span>
               <span class="paper-flow-step-code">{{ step.stageCode }}</span>
               <span v-if="step.checkpointKey && topicForm.humanCheckpoint" class="paper-flow-step-tag">
                 检查点 · {{ step.checkpointKey }}
+              </span>
+              <span v-if="step.status === 'running'" class="paper-flow-step-running" role="status">
+                {{ topicStepRunningHint(step.stageCode) }}
               </span>
             </div>
           </li>
@@ -1235,14 +1337,14 @@ async function onPrimaryAction() {
             <li v-for="(line, i) in currentTopicRun.checkpoint.lines" :key="i">{{ line }}</li>
           </ul>
           <p class="paper-checkpoint-note">
-            确认前后续阶段不会继续；驳回后本次 run 标记为失败，可改参数后点「再次运行」。
+            确认后继续下一步；驳回并重填会取消本轮进度，刷新后不会再加载。
           </p>
           <div class="paper-checkpoint-actions">
             <button type="button" class="paper-btn-primary" @click="continueTopicAfterCheckpoint">
               确认并继续
             </button>
             <button type="button" class="paper-btn-secondary" @click="rejectTopicCheckpoint">
-              驳回并重跑
+              驳回并重填
             </button>
           </div>
         </div>
@@ -1749,6 +1851,24 @@ async function onPrimaryAction() {
   animation: paper-flow-pulse 1s ease-in-out infinite;
 }
 
+.paper-flow-step-spinner {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #e9d5ff;
+  border-top-color: #7c3aed;
+  border-radius: 50%;
+  animation: paper-flow-spin 0.75s linear infinite;
+}
+
+.paper-flow-step-running {
+  flex: 1 1 100%;
+  font-size: 13px;
+  font-weight: 500;
+  color: #7c3aed;
+  animation: paper-flow-pulse 1.2s ease-in-out infinite;
+}
+
 .paper-flow-step--completed .paper-flow-step-icon {
   color: #fff;
   background: #7c3aed;
@@ -1912,6 +2032,12 @@ async function onPrimaryAction() {
   border-radius: 10px;
 }
 
+@keyframes paper-flow-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @keyframes paper-flow-pulse {
   0%,
   100% {
@@ -1965,6 +2091,10 @@ async function onPrimaryAction() {
 
 .paper-field--block {
   margin-bottom: 4px;
+}
+
+.paper-field--after-keywords {
+  margin-top: 16px;
 }
 
 .paper-field--section-gap {

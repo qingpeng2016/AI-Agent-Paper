@@ -106,3 +106,14 @@ func (r *PaperOutputTopicStepImpl) GetStep(ctx context.Context, manuscriptID uin
 func (r *PaperOutputTopicStepImpl) SaveStep(ctx context.Context, step *entity.PaperOutputTopicStep) error {
 	return r.db.WithContext(ctx).Save(step).Error
 }
+
+func (r *PaperOutputTopicStepImpl) CancelCurrentRun(ctx context.Context, manuscriptID uint64) error {
+	now := time.Now()
+	return r.db.WithContext(ctx).Model(&entity.PaperOutputTopicStep{}).
+		Where("manuscript_id = ? AND is_current_run = ?", manuscriptID, true).
+		Updates(map[string]any{
+			"status":         "cancelled",
+			"is_current_run": false,
+			"completed_at":   now,
+		}).Error
+}

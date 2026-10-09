@@ -4,7 +4,9 @@ type TopicDiscoveryRunRequest struct {
 	ManuscriptID    uint64   `json:"manuscript_id"`
 	ManuscriptTitle string   `json:"manuscript_title"`
 	DisciplineCode  string   `json:"discipline_code"`
-	Direction       string   `json:"direction"`
+	Keywords        []string `json:"keywords"`
+	Description     string   `json:"description"`
+	Direction       string   `json:"direction"` // 兼容旧版单框；新版请传 keywords + description
 	Venue           string   `json:"venue"`
 	SourceCodes     []string `json:"source_codes"`
 	Intensity       string   `json:"intensity"`
@@ -16,4 +18,8 @@ type TopicDiscoveryRunRequest struct {
 
 type TopicDiscoveryRunQuery struct {
 	ManuscriptID uint64 `form:"manuscript_id" binding:"required"`
+}
+
+type TopicDiscoveryCancelRequest struct {
+	ManuscriptID uint64 `json:"manuscript_id" binding:"required"`
 }

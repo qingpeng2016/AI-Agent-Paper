@@ -19,6 +19,8 @@ var topicDiscoveryStages = []string{"retrieve", "generate_ideas", "novelty", "au
 
 type topicRunInput struct {
 	DisciplineCode  string   `json:"discipline_code"`
+	Keywords        []string `json:"keywords"`
+	Description     string   `json:"description"`
 	Direction       string   `json:"direction"`
 	Venue           string   `json:"venue"`
 	SourceCodes     []string `json:"source_codes"`
@@ -92,7 +94,29 @@ func (s *TopicDiscoveryRunService) GetCurrentRun(ctx context.Context, userID uin
 	if runVersion == 0 || len(stepRows) == 0 {
 		return nil, nil
 	}
+	if currentRunCancelled(stepRows) {
+		return nil, nil
+	}
 	return s.buildRunView(manuscriptID, runVersion, stepRows), nil
+}
+
+func (s *TopicDiscoveryRunService) CancelCurrentRun(ctx context.Context, userID uint, manuscriptID uint64) error {
+	if err := s.assertManuscript(ctx, userID, manuscriptID); err != nil {
+		return err
+	}
+	return s.steps.CancelCurrentRun(ctx, manuscriptID)
+}
+
+func currentRunCancelled(rows []entity.PaperOutputTopicStep) bool {
+	if len(rows) == 0 {
+		return false
+	}
+	for _, r := range rows {
+		if r.Status != "cancelled" {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *TopicDiscoveryRunService) Run(ctx context.Context, userID uint, req request.TopicDiscoveryRunRequest) (*response.TopicDiscoveryRunView, error) {
@@ -206,8 +230,8 @@ func (s *TopicDiscoveryRunService) defaultAuditLevelCode(ctx context.Context) st
 }
 
 func (s *TopicDiscoveryRunService) prepareRun(ctx context.Context, userID uint, req request.TopicDiscoveryRunRequest) (uint64, topicRunInput, error) {
-	direction := strings.TrimSpace(req.Direction)
-	if direction == "" {
+	keywords, description, direction, ok := normalizeTopicDiscoveryInput(req)
+	if !ok {
 		return 0, topicRunInput{}, errorx.ErrParamsError
 	}
 	if len(req.SourceCodes) == 0 {
@@ -237,6 +261,8 @@ func (s *TopicDiscoveryRunService) prepareRun(ctx context.Context, userID uint, 
 
 	input := topicRunInput{
 		DisciplineCode:  strings.TrimSpace(req.DisciplineCode),
+		Keywords:        keywords,
+		Description:     description,
 		Direction:       direction,
 		Venue:           strings.TrimSpace(req.Venue),
 		SourceCodes:     req.SourceCodes,
@@ -366,10 +392,7 @@ func (s *TopicDiscoveryRunService) executeStage(ctx context.Context, manuscriptI
 }
 
 func (s *TopicDiscoveryRunService) stageRetrieve(ctx context.Context, step *entity.PaperOutputTopicStep, input topicRunInput) error {
-	query := ExtractLiteratureSearchQuery(input.Direction)
-	if query == "" {
-		query = strings.TrimSpace(input.Direction)
-	}
+	query := literatureSearchQueryFromInput(input)
 	perSource := input.MaxPapers / len(input.SourceCodes)
 	if perSource < 5 {
 		perSource = 5

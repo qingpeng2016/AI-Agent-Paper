@@ -12,4 +12,5 @@ type PaperOutputTopicStepRepo interface {
 	GetCurrentRun(ctx context.Context, manuscriptID uint64) (runVersion int, steps []entity.PaperOutputTopicStep, err error)
 	GetStep(ctx context.Context, manuscriptID uint64, runVersion int, stageCode string) (*entity.PaperOutputTopicStep, error)
 	SaveStep(ctx context.Context, step *entity.PaperOutputTopicStep) error
+	CancelCurrentRun(ctx context.Context, manuscriptID uint64) error
 }

@@ -324,7 +324,10 @@ export type AuditLevel = 'standard' | 'polished' | 'strict'
 export type TopicDiscoveryForm = {
   /** 对齐 paper_discipline，影响检索策略与 Prompt 模板 */
   disciplineCode: string
-  direction: string
+  /** 检索用词，逗号/换行分隔多个 */
+  keywords: string
+  /** 研究背景、问题与手段等详细说明 */
+  description: string
   venue: string
   /** 多源检索（写入 paper_output_topic_step retrieve 步 result.literature_hits） */
   sourceCodes: string[]
@@ -521,9 +524,28 @@ export const FIGURE_CHART_OPTIONS = [
   { value: 'ablation', label: '消融分组图' },
 ] as const
 
+export function parseTopicKeywords(raw: string): string[] {
+  return raw
+    .split(/[,，;\n、]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
+export function formatTopicDirectionText(form: Pick<TopicDiscoveryForm, 'keywords' | 'description'>): string {
+  const desc = form.description.trim()
+  const kw = parseTopicKeywords(form.keywords)
+  if (desc && kw.length) {
+    return `研究内容：${desc}\n关键词：${kw.join(', ')}`
+  }
+  if (desc) return desc
+  if (kw.length) return `关键词：${kw.join(', ')}`
+  return ''
+}
+
 export const DEFAULT_TOPIC_DISCOVERY: TopicDiscoveryForm = {
   disciplineCode: 'cs_ai',
-  direction: '',
+  keywords: '',
+  description: '',
   venue: 'NeurIPS/ICLR/ICML',
   sourceCodes: ['arxiv', 'openalex', 'semantic_scholar'],
   intensity: 'balanced',

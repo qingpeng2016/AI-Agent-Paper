@@ -452,7 +452,7 @@ CREATE TABLE IF NOT EXISTS `paper_output_topic_step` (
   `run_version`       INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '本篇选题第几轮（同轮四步相同）',
   `is_current_run`    TINYINT(1)   NOT NULL DEFAULT 1 COMMENT '是否本篇当前生效的一轮',
   `stage_code`        VARCHAR(32)  NOT NULL COMMENT 'retrieve|generate_ideas|novelty|audit',
-  `status`            VARCHAR(16)  NOT NULL DEFAULT 'pending' COMMENT 'pending|running|completed|failed',
+  `status`            VARCHAR(16)  NOT NULL DEFAULT 'pending' COMMENT 'pending|running|completed|failed|cancelled',
   `result`            JSON         DEFAULT NULL COMMENT '本步产出：retrieve→literature_hits[]；generate_ideas→ideas[]；novelty/audit→报告结构',
   `summary_text`      MEDIUMTEXT   DEFAULT NULL COMMENT '本步可读摘要/报告',
   `input_params`      JSON         DEFAULT NULL COMMENT '本轮表单快照（通常写在 retrieve 步）',
