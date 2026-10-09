@@ -20,6 +20,10 @@ type TopicDiscoveryRunQuery struct {
 	ManuscriptID uint64 `form:"manuscript_id" binding:"required"`
 }
 
+type TopicDiscoveryCurrentRunQuery struct {
+	ManuscriptID uint64 `form:"manuscript_id" binding:"required"`
+}
+
 type TopicDiscoveryCancelRequest struct {
 	ManuscriptID uint64 `json:"manuscript_id"`
 }

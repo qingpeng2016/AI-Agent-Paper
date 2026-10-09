@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, reactive, ref, watch } from 'vue'
 import { loadWorkbenchModuleContent } from '@/composables/loadWorkbenchModule'
-import { useTopicDiscoveryFormOptions } from '@/composables/useTopicDiscoveryFormOptions'
+import {
+  reloadTopicDiscoveryFormOptions,
+  useTopicDiscoveryFormOptions,
+} from '@/composables/useTopicDiscoveryFormOptions'
 import {
   postTopicDiscoveryRun,
   fetchCurrentTopicDiscoveryRun,
@@ -12,6 +15,12 @@ import {
   type TopicDiscoveryRunResponse,
   type TopicDiscoveryStepDTO,
 } from '@/api/topicDiscovery'
+import {
+  fetchPaperManuscripts,
+  createPaperManuscript,
+  setCurrentPaperManuscript,
+  type PaperManuscriptListResponse,
+} from '@/api/manuscripts'
 import { ElMessage } from 'element-plus'
 import { paperConfirm } from '@/utils/paperDialog'
 import {
@@ -20,7 +29,6 @@ import {
   DEFAULT_TOPIC_DISCOVERY,
   formatTopicDirectionText,
   parseTopicKeywords,
-  DEMO_PAPER_MANUSCRIPTS,
   PAPER_MODULE_GROUPS,
   appendOperationLog,
   TOPIC_DISCOVERY_FLOW_STEPS,
@@ -92,11 +100,11 @@ const CHECKPOINT_COPY: Record<TopicCheckpointKey, Omit<TopicCheckpointView, 'key
     ],
   },
   audit_ready: {
-    title: '选题审计摘要',
+    title: '审查结论与文献综述',
     lines: [
-      'Idea A：minor ×1（基线描述可更具体）— 可进入下游',
-      'Idea B：major ×1（claim 与文献 key 不完全对齐）— 建议修订后复审',
-      'Idea C：blocker ×1（贡献边界模糊）— 不建议进入文献综述',
+      '贴题复核：第二步脑暴与新颖性是否与方向一致（演示）',
+      '审查结论：blocker/major/minor 与 off_topic 说明',
+      '已生成文献综述摘要，写入 paper_output_literature_review（演示）',
     ],
   },
 }
@@ -188,8 +196,109 @@ const {
 
 const envPreferenceFromStorage = ref(false)
 
-const manuscripts = ref<PaperManuscriptItem[]>([...DEMO_PAPER_MANUSCRIPTS])
-const activeManuscriptId = ref<string>(DEMO_PAPER_MANUSCRIPTS[0]?.id ?? '')
+const manuscripts = ref<PaperManuscriptItem[]>([])
+const activeManuscriptId = ref<string>('')
+const manuscriptsLoading = ref(false)
+/** 切换当前论文请求进行中；阻止列表刷新把选中项打回服务端旧 is_current */
+const manuscriptSwitching = ref(false)
+const manuscriptSwitchPendingId = ref<string | null>(null)
+
+const createManuscriptDialogVisible = ref(false)
+const createManuscriptSubmitting = ref(false)
+const createManuscriptForm = reactive({ disciplineCode: '', title: '' })
+let createManuscriptDialogResolve: ((ok: boolean) => void) | null = null
+
+function pickDefaultDisciplineCode(): string {
+  return disciplineSelectOptions.value[0]?.value ?? ''
+}
+
+async function openCreateManuscriptDialog(): Promise<boolean> {
+  await reloadTopicDiscoveryFormOptions()
+  createManuscriptForm.disciplineCode = pickDefaultDisciplineCode()
+  createManuscriptForm.title = ''
+  createManuscriptDialogVisible.value = true
+  return new Promise((resolve) => {
+    createManuscriptDialogResolve = resolve
+  })
+}
+
+function onAddManuscriptClick() {
+  void openCreateManuscriptDialog()
+}
+
+function closeCreateManuscriptDialog(ok: boolean) {
+  createManuscriptDialogVisible.value = false
+  createManuscriptDialogResolve?.(ok)
+  createManuscriptDialogResolve = null
+}
+
+async function submitCreateManuscriptDialog() {
+  const title = createManuscriptForm.title.trim()
+  if (!title) {
+    ElMessage.warning('请填写论文名称')
+    return
+  }
+  if (!createManuscriptForm.disciplineCode) {
+    ElMessage.warning('请选择学科')
+    return
+  }
+  createManuscriptSubmitting.value = true
+  try {
+    const data = await createPaperManuscript(title, createManuscriptForm.disciplineCode)
+    applyManuscriptListFromApi(data)
+    topicForm.disciplineCode = createManuscriptForm.disciplineCode
+    closeCreateManuscriptDialog(true)
+    ElMessage.success('论文已创建')
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '创建论文失败')
+  } finally {
+    createManuscriptSubmitting.value = false
+  }
+}
+
+let ensureManuscriptInFlight: Promise<string | null> | null = null
+
+async function fetchManuscriptListOrNull(): Promise<PaperManuscriptListResponse | null> {
+  try {
+    return await fetchPaperManuscripts()
+  } catch {
+    return null
+  }
+}
+
+/** 无论文则弹「创建论文」；有论文则同步 is_current 到侧栏 */
+async function ensureManuscriptWhenEmpty(options?: { warnIfUnset?: boolean }): Promise<string | null> {
+  if (ensureManuscriptInFlight) return ensureManuscriptInFlight
+
+  ensureManuscriptInFlight = (async () => {
+    let list = await fetchManuscriptListOrNull()
+
+    if (list?.items?.length) {
+      applyManuscriptListFromApi(list)
+    } else if (!createManuscriptDialogVisible.value) {
+      const ok = await openCreateManuscriptDialog()
+      if (!ok) return null
+      list = await fetchManuscriptListOrNull()
+      if (!list?.items?.length) return null
+      applyManuscriptListFromApi(list)
+    } else {
+      return null
+    }
+
+    const msId = activeManuscriptId.value
+    if (!/^\d+$/.test(msId)) {
+      if (options?.warnIfUnset) ElMessage.warning('请选择当前论文')
+      return null
+    }
+    return msId
+  })()
+
+  try {
+    return await ensureManuscriptInFlight
+  } finally {
+    ensureManuscriptInFlight = null
+  }
+}
 
 const retrieveLiteratureLinks = computed(() =>
   parseRetrieveLiteratureLinks(topicLastRunByMs.value[activeManuscriptId.value]),
@@ -271,8 +380,9 @@ function loadManuscriptsFromStorage() {
     }
     const list = data.manuscripts ?? data.projects
     const activeId = data.activeManuscriptId ?? data.activeProjectId
-    if (list?.length) manuscripts.value = list
-    if (activeId && manuscripts.value.some((m) => m.id === activeId)) {
+    const serverLike = list?.filter((m) => /^\d+$/.test(m.id)) ?? []
+    if (serverLike.length) manuscripts.value = serverLike
+    if (activeId && /^\d+$/.test(activeId) && manuscripts.value.some((m) => m.id === activeId)) {
       activeManuscriptId.value = activeId
     }
   } catch {
@@ -290,9 +400,114 @@ function persistManuscripts() {
   )
 }
 
-function onManuscriptChange(id: string) {
-  activeManuscriptId.value = id
+function applyManuscriptListFromApi(data: PaperManuscriptListResponse, preferId?: string) {
+  manuscripts.value = (data.items ?? []).map((m) => ({
+    id: m.id,
+    title: m.title,
+    venueHint: '',
+    status: m.status,
+    isCurrent: m.is_current,
+    disciplineCode: m.discipline_code,
+    disciplineLabel: m.discipline_label,
+  }))
+
+  if (!manuscripts.value.length) {
+    activeManuscriptId.value = ''
+    persistManuscripts()
+    return
+  }
+
+  const fromCurrent = data.current_manuscript_id ? String(data.current_manuscript_id) : ''
+  const fromFlag = data.items?.find((m) => m.is_current)?.id ?? ''
+  const pending = manuscriptSwitchPendingId.value
+  let nextId = preferId || fromCurrent || fromFlag || manuscripts.value[0].id
+  if (pending && manuscripts.value.some((m) => m.id === pending)) {
+    nextId = pending
+  }
+  if (manuscripts.value.some((m) => m.id === nextId)) {
+    activeManuscriptId.value = nextId
+    ensureTopicRunForManuscript(nextId)
+  } else {
+    activeManuscriptId.value = manuscripts.value[0].id
+    ensureTopicRunForManuscript(activeManuscriptId.value)
+  }
+  syncTopicDisciplineFromCurrentManuscript()
   persistManuscripts()
+}
+
+function syncTopicDisciplineFromCurrentManuscript() {
+  const m = currentManuscript.value
+  if (m?.disciplineCode) {
+    topicForm.disciplineCode = m.disciplineCode
+  }
+}
+
+async function loadManuscriptsFromServer(
+  preferId?: string,
+  opts?: { initial?: boolean },
+) {
+  const initial = opts?.initial === true
+  if (initial) manuscriptsLoading.value = true
+  try {
+    const data = await fetchPaperManuscripts()
+    applyManuscriptListFromApi(data, preferId)
+    return true
+  } catch {
+    /* 刷新失败时保留已有列表，避免一点击下拉就被清空 */
+    if (initial && manuscripts.value.length === 0) {
+      activeManuscriptId.value = ''
+    }
+    return false
+  } finally {
+    if (initial) manuscriptsLoading.value = false
+  }
+}
+
+async function bootstrapManuscriptSwitcher() {
+  const ok = await loadManuscriptsFromServer(undefined, { initial: true })
+  if (!ok) loadManuscriptsFromStorage()
+}
+
+function applyOptimisticCurrentManuscript(id: string) {
+  activeManuscriptId.value = id
+  manuscripts.value = manuscripts.value.map((m) => ({
+    ...m,
+    isCurrent: m.id === id,
+  }))
+  persistManuscripts()
+  syncTopicDisciplineFromCurrentManuscript()
+  ensureTopicRunForManuscript(id)
+}
+
+async function onManuscriptChange(id: string) {
+  if (!id || id === activeManuscriptId.value) return
+  if (!/^\d+$/.test(id)) {
+    ElMessage.warning('请从列表中选择已创建的论文')
+    return
+  }
+  const previousId = activeManuscriptId.value
+  manuscriptSwitchPendingId.value = id
+  manuscriptSwitching.value = true
+  applyOptimisticCurrentManuscript(id)
+  if (isTopicDiscoveryModule.value) {
+    void hydrateTopicRunFromServer(id)
+  }
+
+  try {
+    const data = await setCurrentPaperManuscript(id)
+    applyManuscriptListFromApi(data, id)
+    ElMessage.success('已切换当前论文')
+  } catch (e) {
+    applyOptimisticCurrentManuscript(previousId)
+    if (isTopicDiscoveryModule.value && previousId) {
+      void hydrateTopicRunFromServer(previousId)
+    }
+    const msg = e instanceof Error ? e.message : '切换当前论文失败'
+    ElMessage.error(msg)
+  } finally {
+    manuscriptSwitchPendingId.value = null
+    manuscriptSwitching.value = false
+  }
 }
 
 function onManuscriptsListUpdate(list: PaperManuscriptItem[]) {
@@ -301,10 +516,9 @@ function onManuscriptsListUpdate(list: PaperManuscriptItem[]) {
 }
 
 loadEnvFromStorage()
-loadManuscriptsFromStorage()
+void bootstrapManuscriptSwitcher()
 loadLitReviewFlagsFromStorage()
 loadExperimentPlanFlagsFromStorage()
-topicForm.disciplineCode = envPreference.disciplineCode
 topicForm.venue = envPreference.defaultVenueText || topicForm.venue
 topicForm.sourceCodes = [...envPreference.literatureSourceCodes]
 topicForm.intensity = envPreference.intensity
@@ -317,6 +531,18 @@ const currentManuscript = computed(
   () =>
     manuscripts.value.find((m) => m.id === activeManuscriptId.value) ?? activeManuscripts.value[0],
 )
+
+const topicDisciplineDisplayLabel = computed(() => {
+  const m = currentManuscript.value
+  if (m?.disciplineLabel) return m.disciplineLabel
+  if (m?.disciplineCode) {
+    return (
+      disciplineSelectOptions.value.find((d) => d.value === m.disciplineCode)?.label ??
+      m.disciplineCode
+    )
+  }
+  return '未设置学科'
+})
 
 const isMyManuscriptsModule = computed(() => activeModule.value === 'my-manuscripts')
 const isInviteRebateModule = computed(() => activeModule.value === 'invite-rebate')
@@ -331,9 +557,11 @@ const isTopicDiscoveryModule = computed(() => activeModule.value === 'topic-disc
 
 watch(isTopicDiscoveryModule, (on) => {
   if (!on) return
-  const msId = activeManuscriptId.value
-  if (msId) void hydrateTopicRunFromServer(msId)
-})
+  void (async () => {
+    const msId = await ensureManuscriptWhenEmpty()
+    if (msId) void hydrateTopicRunFromServer(msId)
+  })()
+}, { immediate: true })
 const isLiteratureReviewModule = computed(() => activeModule.value === 'literature-review')
 
 const personalCenterPanelRef = ref<InstanceType<typeof PaperPersonalCenterPanel> | null>(null)
@@ -363,7 +591,6 @@ function recordModuleOperationLog(
 }
 
 function onEnvironmentSaved() {
-  topicForm.disciplineCode = envPreference.disciplineCode
   topicForm.venue = envPreference.defaultVenueText || topicForm.venue
   topicForm.intensity = envPreference.intensity
   topicForm.auditLevel = envPreference.auditLevel
@@ -476,7 +703,6 @@ const topicShowFailedPanel = computed(
 
 /** 非失败且在人工暂停点：「终止并返回」+「确认并继续」 */
 const topicShowCheckpointPanel = computed(() => {
-  if (topicContinueLoading.value) return false
   if (currentTopicRun.value.steps.some((s) => s.status === 'running')) return false
   if (topicDiscoveryApiRun.value?.steps.some((s) => s.status === 'running')) return false
   return topicAtHumanPause.value
@@ -670,7 +896,7 @@ function stepStatusFromApi(raw: string): TopicFlowStepStatus {
 const TOPIC_STEP_RUNNING_HINT: Record<string, string> = {
   retrieve: '文献 PDF 下载与入库中…',
   generate_ideas: 'AI 脑暴候选选题与新颖性分析中…',
-  audit: 'AI 选题审计中…',
+  audit: 'AI 审查结论与文献综述生成中…',
 }
 
 function topicStepRunningHint(stageCode: string) {
@@ -679,14 +905,14 @@ function topicStepRunningHint(stageCode: string) {
 
 const TOPIC_RUN_POLL_MS = 1500
 
-/** 服务端 retrieve / generate_ideas 等 bot 异步步为 running 时需轮询 */
+/** 服务端 retrieve / generate_ideas / audit 等 bot 异步步为 running 时需轮询 */
 function topicRunHasAsyncWorkOnServer(msId: string): boolean {
   const apiRun = topicLastRunByMs.value[msId]
   if (!apiRun) return false
   return apiRun.steps.some((s) => s.status === 'running')
 }
 
-/** 轮询 GET /run/current：PDF 下载（retrieve）、脑暴 LLM（generate_ideas）等异步步 */
+/** 轮询 GET /run/current：PDF 下载（retrieve）、脑暴 LLM（generate_ideas）、审查 LLM（audit）等异步步 */
 const topicRunNeedsPoll = computed(() => {
   const msId = activeManuscriptId.value
   if (topicContinueLoading.value) return true
@@ -723,11 +949,14 @@ function startTopicRunProgressPoll(msId: string, token: number): () => void {
     if (token !== topicRunToken.value) return
     if (topicRunStartInFlight.value || topicContinueLoading.value) return
     try {
-      const data = await fetchCurrentTopicDiscoveryRun()
+      const data = await fetchCurrentTopicDiscoveryRun(msId)
       if (!data || token !== topicRunToken.value) return
       topicLastRunByMs.value = { ...topicLastRunByMs.value, [msId]: data }
       persistTopicRun(msId, topicRunFromApi(data))
       syncRunningFlagFromServer(msId)
+      if (data.manuscript_id > 0) {
+        void loadManuscriptsFromServer(String(data.manuscript_id))
+      }
     } catch {
       /* 忽略轮询失败 */
     }
@@ -828,12 +1057,40 @@ function linesFromApiStep(step?: TopicDiscoveryStepDTO): string[] {
   }
 
   if (step.stage_code === 'audit') {
-    const rounds = (result.rounds as Array<{ issues?: Array<{ severity?: string; claim?: string }> }>) ?? []
-    const last = rounds[rounds.length - 1]
-    const issues = last?.issues ?? (result.issues as Array<{ severity?: string; claim?: string }>)
-    if (issues?.length) {
-      return issues.slice(0, 8).map((iss) => `[${iss.severity ?? 'issue'}] ${iss.claim ?? ''}`.trim())
+    const lines: string[] = []
+    const lr = result.literature_review as { title?: string; summary?: string } | undefined
+    if (lr?.title?.trim()) {
+      lines.push(`文献综述：${lr.title.trim()}`)
     }
+    if (lr?.summary?.trim()) {
+      lines.push(lr.summary.trim())
+    }
+    const rounds = (result.rounds as Array<{
+      issues?: Array<{ severity?: string; claim?: string }>
+      summary?: string
+      off_topic?: { generate_ideas_on_topic?: boolean; notes?: string }
+    }>) ?? []
+    const last = rounds[rounds.length - 1]
+    const auditBlock = last as Record<string, unknown> | undefined
+    const issues =
+      last?.issues ??
+      (auditBlock?.audit as { issues?: Array<{ severity?: string; claim?: string }> } | undefined)?.issues ??
+      (result.issues as Array<{ severity?: string; claim?: string }>)
+    if (last?.summary?.trim()) {
+      lines.push(last.summary.trim())
+    }
+    const off = last?.off_topic
+    if (off?.notes?.trim()) {
+      lines.push(`贴题复核：${off.notes.trim()}`)
+    } else if (off && typeof off.generate_ideas_on_topic === 'boolean') {
+      lines.push(`第二步贴题：${off.generate_ideas_on_topic ? '是' : '否'}`)
+    }
+    if (issues?.length) {
+      lines.push(
+        ...issues.slice(0, 6).map((iss) => `[${iss.severity ?? 'issue'}] ${iss.claim ?? ''}`.trim()),
+      )
+    }
+    if (lines.length) return lines.slice(0, 12)
   }
 
   try {
@@ -886,7 +1143,9 @@ function topicRunFromApi(data: TopicDiscoveryRunResponse): TopicRunDemo {
 
 function buildTopicRunRequest(action: 'start' | 'continue') {
   const direction = formatTopicDirectionText(topicForm)
+  const msNum = Number(activeManuscriptId.value)
   return {
+    manuscript_id: msNum,
     manuscript_title: currentManuscript.value?.title ?? '',
     discipline_code: topicForm.disciplineCode,
     keywords: parseTopicKeywords(topicForm.keywords),
@@ -903,7 +1162,7 @@ function buildTopicRunRequest(action: 'start' | 'continue') {
 
 async function hydrateTopicRunFromServer(msId: string) {
   try {
-    const data = await fetchCurrentTopicDiscoveryRun()
+    const data = await fetchCurrentTopicDiscoveryRun(msId)
     if (!data) {
       const next = { ...topicLastRunByMs.value }
       delete next[msId]
@@ -912,6 +1171,7 @@ async function hydrateTopicRunFromServer(msId: string) {
       return
     }
     applyStoredTopicRunInputToForm(topicForm, data)
+    syncTopicDisciplineFromCurrentManuscript()
     topicLastRunByMs.value = { ...topicLastRunByMs.value, [msId]: data }
     persistTopicRun(msId, topicRunFromApi(data))
     requestScrollToTopicFlowIfNeeded()
@@ -951,6 +1211,21 @@ async function invokeTopicDiscoveryRun(action: 'start' | 'continue', token: numb
     const errLine = topicFailedSummary.value?.error
     ElMessage.error(errLine && errLine.length < 120 ? errLine : '选题发现运行失败，请配置 LLM 或改参数后重试')
   }
+}
+
+/** 新开 run：第一步立刻标 running，避免 POST 返回前只有「提交中」无转圈 */
+function optimisticMarkFirstStepRunning(msId: string) {
+  const steps = TOPIC_DISCOVERY_FLOW_STEPS.map((def, i) => ({
+    stageCode: def.stageCode,
+    label: def.label,
+    checkpointKey: def.checkpointKey,
+    status: (i === 0 ? 'running' : 'pending') as TopicFlowStepStatus,
+  }))
+  persistTopicRun(msId, {
+    status: 'running',
+    steps,
+    checkpoint: null,
+  })
 }
 
 /** 检查点继续：下一步先标 running，与 retrieve 异步时立刻出现转圈 */
@@ -1141,13 +1416,14 @@ async function runLiteratureReviewFromTopic() {
 }
 
 async function startTopicDiscoveryRun() {
-  const msId = activeManuscriptId.value
+  const msId = await ensureManuscriptWhenEmpty({ warnIfUnset: true })
   if (!msId) return
 
   resetTopicRunForAction(msId)
   const token = topicRunToken.value
   topicRunStartInFlight.value = true
   running.value = true
+  optimisticMarkFirstStepRunning(msId)
   await scrollToTopicFlowPanel()
 
   try {
@@ -1171,9 +1447,9 @@ function continueTopicAfterCheckpoint() {
   if (topicContinueLoading.value) return
 
   const token = topicRunToken.value
-  topicContinueLoading.value = true
-  running.value = true
   optimisticMarkNextStepRunning(msId)
+  running.value = true
+  topicContinueLoading.value = true
   void scrollToTopicFlowPanelWhenReady()
 
   void invokeTopicDiscoveryRun('continue', token)
@@ -1195,7 +1471,7 @@ function continueTopicAfterCheckpoint() {
 async function abandonCurrentTopicRun(msId: string) {
   topicRunToken.value += 1
   running.value = false
-  await cancelTopicDiscoveryRun()
+  await cancelTopicDiscoveryRun(msId)
   const next = { ...topicLastRunByMs.value }
   delete next[msId]
   topicLastRunByMs.value = next
@@ -1373,6 +1649,65 @@ async function onPrimaryAction() {
 </script>
 
 <template>
+  <Teleport to="body">
+    <div
+      v-if="createManuscriptDialogVisible"
+      class="paper-modal-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="paper-create-ms-title"
+    >
+      <div class="paper-message-box paper-message-box--default paper-modal-panel">
+        <header class="paper-modal-header">
+          <h2 id="paper-create-ms-title" class="paper-modal-title">创建论文</h2>
+          <button
+            type="button"
+            class="paper-modal-close"
+            aria-label="关闭"
+            @click="closeCreateManuscriptDialog(false)"
+          >
+            ×
+          </button>
+        </header>
+        <div class="paper-modal-body">
+          <div class="paper-message-box__form">
+            <div>
+              <span class="paper-label">学科</span>
+              <PaperSelect
+                v-model="createManuscriptForm.disciplineCode"
+                :options="disciplineSelectOptions"
+              />
+            </div>
+            <div>
+              <span class="paper-label">论文名称</span>
+              <input
+                v-model="createManuscriptForm.title"
+                class="paper-input"
+                type="text"
+                maxlength="256"
+                placeholder="例如：MDD 脑网络拓扑研究"
+                @keyup.enter="submitCreateManuscriptDialog"
+              />
+            </div>
+          </div>
+        </div>
+        <footer class="paper-message-box__btns">
+          <el-button
+            class="paper-message-box__confirm"
+            type="primary"
+            :loading="createManuscriptSubmitting"
+            @click="submitCreateManuscriptDialog"
+          >
+            创建
+          </el-button>
+          <el-button class="paper-message-box__cancel" @click="closeCreateManuscriptDialog(false)">
+            取消
+          </el-button>
+        </footer>
+      </div>
+    </div>
+  </Teleport>
+
   <div class="paper-workbench">
     <aside class="paper-sidebar">
       <div class="paper-sidebar-brand">
@@ -1385,16 +1720,31 @@ async function onPrimaryAction() {
 
       <div class="paper-manuscript-switcher">
         <label class="paper-manuscript-label" for="paper-manuscript-select">当前论文</label>
-        <select
-          id="paper-manuscript-select"
-          class="paper-manuscript-select"
-          :value="activeManuscriptId"
-          @change="onManuscriptChange(($event.target as HTMLSelectElement).value)"
+        <div
+          class="paper-manuscript-select-wrap"
+          :class="{ 'paper-manuscript-select-wrap--busy': manuscriptSwitching }"
         >
-          <option v-for="m in activeManuscripts" :key="m.id" :value="m.id">
-            {{ m.title }}{{ m.venueHint ? ` · ${m.venueHint}` : '' }}
-          </option>
-        </select>
+          <select
+            id="paper-manuscript-select"
+            class="paper-manuscript-select"
+            :class="{ 'paper-manuscript-select--empty': !activeManuscripts.length }"
+            :value="activeManuscriptId"
+            :disabled="!activeManuscripts.length || manuscriptSwitching"
+            @change="onManuscriptChange(($event.target as HTMLSelectElement).value)"
+          >
+            <option v-for="m in activeManuscripts" :key="m.id" :value="m.id">
+              {{ m.title }}{{ m.venueHint ? ` · ${m.venueHint}` : '' }}
+            </option>
+          </select>
+          <span
+            v-if="manuscriptSwitching"
+            class="paper-manuscript-select-loading"
+            aria-label="切换中"
+          />
+        </div>
+        <button type="button" class="paper-manuscript-new" @click="onAddManuscriptClick">
+          添加论文
+        </button>
       </div>
 
       <nav class="paper-nav" aria-label="科研工作流">
@@ -1487,8 +1837,10 @@ async function onPrimaryAction() {
         <div class="paper-field-grid">
           <label class="paper-field">
             <span class="paper-label">学科</span>
-            <PaperSelect v-model="topicForm.disciplineCode" :options="disciplineSelectOptions" />
-            <span class="paper-hint">与个人中心「默认配置」同一套学科；影响默认文献源与 venue</span>
+            <div class="paper-input paper-input--readonly" aria-readonly="true">
+              {{ topicDisciplineDisplayLabel }}
+            </div>
+            <span class="paper-hint">与当前论文创建时选定的学科一致，不可在此修改</span>
           </label>
 
           <label class="paper-field">
@@ -1562,21 +1914,19 @@ async function onPrimaryAction() {
             "
           >
             {{
-              topicContinueLoading
-                ? '提交中…'
-                : topicAtHumanPause
-                  ? '等待人工确认'
-                  : topicRunBusy && currentTopicRun.status !== 'completed' && currentTopicRun.status !== 'failed'
-                    ? '执行中'
-                    : currentTopicRun.status === 'checkpoint'
-                      ? '等待人工确认'
-                      : currentTopicRun.status === 'running'
-                        ? '执行中'
-                        : currentTopicRun.status === 'completed'
-                          ? '已完成'
-                          : currentTopicRun.status === 'failed'
-                            ? '执行失败'
-                            : ''
+              topicAtHumanPause
+                ? '等待人工确认'
+                : topicRunBusy && currentTopicRun.status !== 'completed' && currentTopicRun.status !== 'failed'
+                  ? '执行中'
+                  : currentTopicRun.status === 'checkpoint'
+                    ? '等待人工确认'
+                    : currentTopicRun.status === 'running'
+                      ? '执行中'
+                      : currentTopicRun.status === 'completed'
+                        ? '已完成'
+                        : currentTopicRun.status === 'failed'
+                          ? '执行失败'
+                          : ''
             }}
           </span>
           <button
@@ -1659,11 +2009,10 @@ async function onPrimaryAction() {
               @click="continueTopicAfterCheckpoint"
             >
               {{
-                topicContinueLoading
-                  ? '提交中…'
-                  : currentTopicRun.steps.some((s) => s.status === 'running')
-                    ? '执行中…'
-                    : '确认并继续'
+                topicContinueLoading ||
+                currentTopicRun.steps.some((s) => s.status === 'running')
+                  ? '执行中…'
+                  : '确认并继续'
               }}
             </button>
           </div>
@@ -1810,6 +2159,33 @@ async function onPrimaryAction() {
   color: rgba(255, 255, 255, 0.65);
 }
 
+.paper-manuscript-select-wrap {
+  position: relative;
+}
+
+.paper-manuscript-select-wrap--busy .paper-manuscript-select {
+  opacity: 0.88;
+}
+
+.paper-manuscript-select-loading {
+  position: absolute;
+  top: 50%;
+  right: 34px;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(100, 116, 139, 0.35);
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: paper-manuscript-select-spin 0.65s linear infinite;
+}
+
+@keyframes paper-manuscript-select-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .paper-manuscript-select {
   width: 100%;
   padding: 9px 32px 9px 10px;
@@ -1825,6 +2201,17 @@ async function onPrimaryAction() {
   appearance: none;
   -webkit-appearance: none;
   cursor: pointer;
+}
+
+.paper-manuscript-select:disabled {
+  cursor: default;
+  opacity: 0.92;
+}
+
+.paper-manuscript-select--empty:disabled {
+  min-height: 36px;
+  color: transparent;
+  background-color: rgba(255, 255, 255, 0.92);
 }
 
 .paper-manuscript-new {
@@ -2507,6 +2894,14 @@ async function onPrimaryAction() {
   outline: none;
   border-color: #94a3b8;
   box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.22);
+}
+
+.paper-input--readonly {
+  color: #64748b;
+  background: #eef2f6;
+  border-color: #e2e8f0;
+  cursor: default;
+  user-select: none;
 }
 
 .paper-hint {

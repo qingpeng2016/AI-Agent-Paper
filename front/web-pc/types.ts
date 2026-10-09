@@ -301,6 +301,11 @@ export type PaperManuscriptItem = {
   title: string
   venueHint: string
   status: 'active' | 'archived'
+  /** 与服务端 paper_manuscript.is_current 同步 */
+  isCurrent?: boolean
+  /** 创建论文时绑定的学科（选题发现只读展示） */
+  disciplineCode?: string
+  disciplineLabel?: string
 }
 
 export const DEMO_PAPER_MANUSCRIPTS: PaperManuscriptItem[] = [
@@ -361,7 +366,7 @@ export const TOPIC_DISCOVERY_FLOW_STEPS: TopicFlowStepDef[] = [
   },
   {
     stageCode: 'audit',
-    label: '选题断言初 audit',
+    label: '审查结论+生成文献综述',
     checkpointKey: 'audit_ready',
   },
 ]

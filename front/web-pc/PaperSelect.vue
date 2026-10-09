@@ -6,10 +6,14 @@ export type PaperSelectOption = {
   label: string
 }
 
-const props = defineProps<{
-  modelValue: string
-  options: readonly PaperSelectOption[]
-}>()
+const props = withDefaults(
+  defineProps<{
+    modelValue: string
+    options: readonly PaperSelectOption[]
+    placeholder?: string
+  }>(),
+  { placeholder: '请选择' },
+)
 
 const emit = defineEmits<{
   'update:modelValue': [value: string]
@@ -20,9 +24,18 @@ const root = ref<HTMLElement | null>(null)
 /** 选项点击后 label 可能再触发一次 button，需忽略 */
 const ignoreNextToggle = ref(false)
 
-const currentLabel = computed(
-  () => props.options.find((o) => o.value === props.modelValue)?.label ?? props.modelValue,
+const matchedOption = computed(() =>
+  props.options.find((o) => o.value === props.modelValue),
 )
+
+const currentLabel = computed(() => {
+  if (matchedOption.value) return matchedOption.value.label
+  if (!props.modelValue) return props.placeholder
+  if (!props.options.length) return '加载中…'
+  return props.placeholder
+})
+
+const showPlaceholderStyle = computed(() => !matchedOption.value)
 
 function closeMenu() {
   open.value = false
@@ -60,7 +73,9 @@ onUnmounted(() => document.removeEventListener('pointerdown', onDocumentPointerD
 <template>
   <div ref="root" class="paper-select" :class="{ 'paper-select--open': open }">
     <button type="button" class="paper-select-trigger" @click.stop="toggle">
-      <span class="paper-select-value">{{ currentLabel }}</span>
+      <span class="paper-select-value" :class="{ 'paper-select-value--muted': showPlaceholderStyle }">
+        {{ currentLabel }}
+      </span>
       <span class="paper-select-chevron" aria-hidden="true">▾</span>
     </button>
     <ul v-if="open" class="paper-select-menu" role="listbox" @click.stop @mousedown.stop>
@@ -116,6 +131,10 @@ onUnmounted(() => document.removeEventListener('pointerdown', onDocumentPointerD
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.paper-select-value--muted {
+  color: #94a3b8;
 }
 
 .paper-select-chevron {

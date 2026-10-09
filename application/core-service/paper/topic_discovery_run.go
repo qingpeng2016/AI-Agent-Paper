@@ -58,6 +58,7 @@ type storedLiteratureLink struct {
 type TopicDiscoveryRunService struct {
 	manuscripts repository.PaperManuscriptRepo
 	steps       repository.PaperOutputTopicStepRepo
+	litReviews  repository.PaperOutputLiteratureReviewRepo
 	catalog     repository.PaperRefCatalogRepo
 	litSource   repository.PaperRefLiteratureSourceRepo
 	litSearch   *LiteratureSearchService
@@ -68,6 +69,7 @@ type TopicDiscoveryRunService struct {
 func NewTopicDiscoveryRunService(
 	manuscripts repository.PaperManuscriptRepo,
 	steps repository.PaperOutputTopicStepRepo,
+	litReviews repository.PaperOutputLiteratureReviewRepo,
 	catalog repository.PaperRefCatalogRepo,
 	litSource repository.PaperRefLiteratureSourceRepo,
 	litSearch *LiteratureSearchService,
@@ -77,6 +79,7 @@ func NewTopicDiscoveryRunService(
 	return &TopicDiscoveryRunService{
 		manuscripts: manuscripts,
 		steps:       steps,
+		litReviews:  litReviews,
 		catalog:     catalog,
 		litSource:   litSource,
 		litSearch:   litSearch,
@@ -85,8 +88,8 @@ func NewTopicDiscoveryRunService(
 	}
 }
 
-func (s *TopicDiscoveryRunService) GetCurrentRun(ctx context.Context, userID uint) (*response.TopicDiscoveryRunView, error) {
-	runVersion, stepRows, err := s.steps.GetLatestRunByUser(ctx, uint64(userID))
+func (s *TopicDiscoveryRunService) GetCurrentRun(ctx context.Context, userID uint, manuscriptID uint64) (*response.TopicDiscoveryRunView, error) {
+	runVersion, stepRows, err := s.latestRunForManuscript(ctx, userID, manuscriptID)
 	if err != nil {
 		return nil, err
 	}
@@ -96,8 +99,8 @@ func (s *TopicDiscoveryRunService) GetCurrentRun(ctx context.Context, userID uin
 	return s.buildRunView(manuscriptIDOf(stepRows), runVersion, stepRows), nil
 }
 
-func (s *TopicDiscoveryRunService) CancelCurrentRun(ctx context.Context, userID uint) error {
-	runVersion, stepRows, err := s.steps.GetLatestRunByUser(ctx, uint64(userID))
+func (s *TopicDiscoveryRunService) CancelCurrentRun(ctx context.Context, userID uint, manuscriptID uint64) error {
+	runVersion, stepRows, err := s.latestRunForManuscript(ctx, userID, manuscriptID)
 	if err != nil {
 		return err
 	}
@@ -105,6 +108,27 @@ func (s *TopicDiscoveryRunService) CancelCurrentRun(ctx context.Context, userID 
 		return nil
 	}
 	return s.steps.CancelRun(ctx, uint64(userID), runVersion)
+}
+
+func (s *TopicDiscoveryRunService) latestRunForManuscript(ctx context.Context, userID uint, manuscriptID uint64) (int, []entity.PaperOutputTopicStep, error) {
+	if manuscriptID > 0 {
+		return s.steps.GetLatestRunByManuscript(ctx, uint64(userID), manuscriptID)
+	}
+	return s.steps.GetLatestRunByUser(ctx, uint64(userID))
+}
+
+func (s *TopicDiscoveryRunService) validateManuscriptForUser(ctx context.Context, userID uint, manuscriptID uint64) error {
+	if manuscriptID == 0 {
+		return errorx.ErrParamsError.WithDetail("缺少 manuscript_id，请先创建论文")
+	}
+	ms, err := s.manuscripts.GetByIDForUser(ctx, uint(manuscriptID), userID)
+	if err != nil {
+		return err
+	}
+	if ms == nil {
+		return errorx.ErrParamsError.WithDetail("论文不存在或无权访问")
+	}
+	return nil
 }
 
 func manuscriptIDOf(rows []entity.PaperOutputTopicStep) uint64 {
@@ -138,12 +162,15 @@ func (s *TopicDiscoveryRunService) Run(ctx context.Context, userID uint, req req
 
 	switch action {
 	case "start":
+		if err := s.validateManuscriptForUser(ctx, userID, req.ManuscriptID); err != nil {
+			return nil, err
+		}
 		input, err = s.prepareRun(ctx, userID, req)
 		if err != nil {
 			return nil, err
 		}
 		paramsBytes, _ := json.Marshal(input)
-		runVersion, err = s.steps.BeginRun(ctx, uint64(userID), paramsBytes)
+		runVersion, err = s.steps.BeginRun(ctx, uint64(userID), req.ManuscriptID, paramsBytes)
 		if err != nil {
 			return nil, err
 		}
@@ -151,7 +178,10 @@ func (s *TopicDiscoveryRunService) Run(ctx context.Context, userID uint, req req
 			return s.reloadViewOrErr(ctx, userID, runVersion, err)
 		}
 	case "continue":
-		ver, rows, err := s.steps.GetLatestRunByUser(ctx, uint64(userID))
+		if err := s.validateManuscriptForUser(ctx, userID, req.ManuscriptID); err != nil {
+			return nil, err
+		}
+		ver, rows, err := s.latestRunForManuscript(ctx, userID, req.ManuscriptID)
 		if err != nil {
 			return nil, err
 		}
@@ -174,7 +204,10 @@ func (s *TopicDiscoveryRunService) Run(ctx context.Context, userID uint, req req
 			return s.reloadViewOrErr(ctx, userID, runVersion, err)
 		}
 	case "run_all":
-		ver, rows, err := s.steps.GetLatestRunByUser(ctx, uint64(userID))
+		if err := s.validateManuscriptForUser(ctx, userID, req.ManuscriptID); err != nil {
+			return nil, err
+		}
+		ver, rows, err := s.latestRunForManuscript(ctx, userID, req.ManuscriptID)
 		if err != nil {
 			return nil, err
 		}
@@ -184,7 +217,7 @@ func (s *TopicDiscoveryRunService) Run(ctx context.Context, userID uint, req req
 				return nil, err
 			}
 			paramsBytes, _ := json.Marshal(input)
-			runVersion, err = s.steps.BeginRun(ctx, uint64(userID), paramsBytes)
+			runVersion, err = s.steps.BeginRun(ctx, uint64(userID), req.ManuscriptID, paramsBytes)
 			if err != nil {
 				return nil, err
 			}
@@ -296,6 +329,7 @@ func (s *TopicDiscoveryRunService) prepareRun(ctx context.Context, userID uint, 
 }
 
 func (s *TopicDiscoveryRunService) CommitManuscript(ctx context.Context, userID uint, title string) (*response.TopicDiscoveryRunView, error) {
+	_ = title
 	runVersion, rows, err := s.steps.GetLatestRunByUser(ctx, uint64(userID))
 	if err != nil {
 		return nil, err
@@ -308,32 +342,14 @@ func (s *TopicDiscoveryRunService) CommitManuscript(ctx context.Context, userID 
 			return nil, errorx.ErrTopicRunNotComplete
 		}
 	}
-	if id := manuscriptIDOf(rows); id > 0 {
-		return s.buildRunView(id, runVersion, rows), nil
+	id := manuscriptIDOf(rows)
+	if id == 0 {
+		return nil, errorx.ErrParamsError.WithDetail("run 未绑定论文，请在开始选题前创建论文")
 	}
-	t := strings.TrimSpace(title)
-	if t == "" {
-		if in, e := s.loadRunInput(ctx, userID, runVersion); e == nil {
-			t = strings.TrimSpace(in.Description)
-			if t == "" {
-				t = strings.TrimSpace(in.Direction)
-			}
-		}
-	}
-	if t == "" {
-		t = "未命名论文"
-	}
-	if len([]rune(t)) > 120 {
-		t = string([]rune(t)[:120])
-	}
-	ms, err := s.manuscripts.Create(ctx, userID, t)
-	if err != nil {
+	if err := s.manuscripts.SetCurrentForUser(ctx, userID, uint(id)); err != nil {
 		return nil, err
 	}
-	if err := s.steps.BindManuscript(ctx, uint64(userID), runVersion, uint64(ms.ID)); err != nil {
-		return nil, err
-	}
-	return s.reloadView(ctx, userID, runVersion)
+	return s.buildRunView(id, runVersion, rows), nil
 }
 
 // LoadRunInputForUser 供 bot 等读取 retrieve 步表单快照。
@@ -416,7 +432,7 @@ func (s *TopicDiscoveryRunService) executeStage(ctx context.Context, userID uint
 	case "generate_ideas":
 		execErr = s.stageBeginGenerateIdeasAsync(ctx, userID, runVersion, step)
 	case "audit":
-		execErr = s.stageAudit(ctx, userID, runVersion, step, input)
+		execErr = s.stageBeginAuditAsync(ctx, userID, runVersion, step)
 	default:
 		execErr = errorx.ErrTopicStepInvalid
 	}
@@ -433,7 +449,7 @@ func (s *TopicDiscoveryRunService) executeStage(ctx context.Context, userID uint
 		}
 		return execErr
 	}
-	if (stageCode == "retrieve" || stageCode == "generate_ideas") && strings.TrimSpace(step.Status) == "running" {
+	if (stageCode == "retrieve" || stageCode == "generate_ideas" || stageCode == "audit") && strings.TrimSpace(step.Status) == "running" {
 		step.CompletedAt = nil
 		return s.steps.SaveStep(ctx, step)
 	}
@@ -631,41 +647,6 @@ func relIfExists(pdfURL, externalKey string) string {
 		return rel
 	}
 	return ""
-}
-
-func (s *TopicDiscoveryRunService) stageAudit(ctx context.Context, userID uint, runVersion int, step *entity.PaperOutputTopicStep, input topicRunInput) error {
-	rounds := input.AuditRounds
-	if rounds < 1 {
-		rounds = 1
-	}
-	var roundOutputs []map[string]any
-	var lastText string
-	var totalUsage LLMUsage
-	for r := 1; r <= rounds; r++ {
-		userMsg := s.buildAuditUserExtra(ctx, userID, runVersion, input, r, rounds)
-		text, usage, err := s.callStageLLM(ctx, step, "audit", map[string]string{
-			"direction": compactDirectionForPrompt(input),
-			"keywords":  keywordsLine(input),
-			"venue":     input.Venue,
-		}, userMsg)
-		if err != nil {
-			return err
-		}
-		lastText = text
-		totalUsage.PromptTokens += usage.PromptTokens
-		totalUsage.CompletionTokens += usage.CompletionTokens
-		parsed, _ := parseJSONOrWrap(text, "audit")
-		roundOutputs = append(roundOutputs, parsed)
-	}
-	result := map[string]any{"rounds": roundOutputs}
-	step.Result = mustJSON(result)
-	if summary, ok := roundOutputs[len(roundOutputs)-1]["summary"].(string); ok && summary != "" {
-		step.SummaryText = ptrString(summary)
-	} else {
-		step.SummaryText = ptrString(lastText)
-	}
-	appendUsageMeta(step, totalUsage)
-	return nil
 }
 
 func (s *TopicDiscoveryRunService) stageContext(ctx context.Context, userID uint, runVersion int) (string, error) {

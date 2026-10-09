@@ -45,6 +45,7 @@ func (s *LLMChatService) Complete(ctx context.Context, model *entity.PaperLLMMod
 			"请在 paper_llm_model_config 填写 api_key，或设置环境变量 ANTHROPIC_API_KEY / OPENAI_API_KEY / GOOGLE_API_KEY",
 		)
 	}
+	// timeout_ms → context deadline；infrastructure/http 会按同一 deadline 设置 Resty 超时（非全局 30s）。
 	timeout := time.Duration(model.TimeoutMs) * time.Millisecond
 	if timeout <= 0 {
 		timeout = 120 * time.Second

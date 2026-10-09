@@ -279,13 +279,32 @@ func (s *TopicDiscoveryRunService) buildAuditUserExtra(
 %s
 
 【审计要求】
-1. 候选 idea 是否与关键词、研究描述一致；是否明显偏题（off-topic）。
+1. **再次审查第二步 generate_ideas 全文产出**：候选 idea 与 novelty 是否与关键词、研究描述、目标期刊一致；逐条判断是否偏题（off-topic），并说明与 Corpus 的贴合度。
 2. 新颖性结论是否支撑 idea，有无与文献/方向矛盾或过度声称。
-3. 以严格审稿人视角检查：论断是否有文献支持、是否缺少基线/对照、贡献是否清晰；并列出 unsupported claims、缺失基线/对照、贡献含糊等问题。
+3. 以严格审稿人视角给出审查结论：论断是否有文献支持、是否缺少基线/对照、贡献是否清晰；列出 unsupported claims、缺失基线/对照、贡献含糊等问题。
+4. **同时生成文献综述**（中文 Markdown 正文）：综合 Corpus 与已通过审查的 idea/novelty，结构清晰（thematic/chronological/method 择一写入 structure），引用须使用 Corpus 中的 ref_id；正文写入 content_medium。
 
-输出 ONLY valid JSON：
-{"issues":[{"severity":"blocker|major|minor","claim":"","fix":""}],"summary":"","off_topic":{"ideas_aligned":true,"novelty_aligned":true,"notes":""}}
-off_topic 与 issues 字段使用中文。`,
+输出 ONLY valid JSON（最后一轮须含 literature_review）：
+{
+  "audit": {
+    "issues": [{"severity":"blocker|major|minor","claim":"","fix":""}],
+    "summary": "审查结论摘要",
+    "off_topic": {
+      "ideas_aligned": true,
+      "novelty_aligned": true,
+      "generate_ideas_on_topic": true,
+      "notes": "对第二步产出的贴题性复核说明"
+    }
+  },
+  "literature_review": {
+    "title": "综述标题",
+    "summary": "一段话摘要",
+    "structure": "thematic",
+    "content_medium": "Markdown 正文",
+    "citations": [{"ref_id":"","note":""}]
+  }
+}
+audit、literature_review 内文本字段使用中文。`,
 		round, rounds,
 		input.Venue, input.AuditLevel,
 		keywordsLine(input),

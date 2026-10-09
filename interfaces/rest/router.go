@@ -24,6 +24,7 @@ type Router struct {
 	trackingHandler        *handler.TrackingHandler
 	paperLiteratureHandler    *handler.PaperLiteratureHandler
 	paperTopicDiscoveryHandler *handler.PaperTopicDiscoveryHandler
+	paperManuscriptHandler     *handler.PaperManuscriptHandler
 }
 
 func NewRouter(
@@ -34,6 +35,7 @@ func NewRouter(
 	trackingHandler *handler.TrackingHandler,
 	paperLiteratureHandler *handler.PaperLiteratureHandler,
 	paperTopicDiscoveryHandler *handler.PaperTopicDiscoveryHandler,
+	paperManuscriptHandler *handler.PaperManuscriptHandler,
 ) *Router {
 	return &Router{
 		setting:                    setting,
@@ -43,6 +45,7 @@ func NewRouter(
 		trackingHandler:            trackingHandler,
 		paperLiteratureHandler:     paperLiteratureHandler,
 		paperTopicDiscoveryHandler: paperTopicDiscoveryHandler,
+		paperManuscriptHandler:     paperManuscriptHandler,
 	}
 }
 
@@ -70,6 +73,9 @@ func (r *Router) setupRouters() *gin.Engine {
 		paperAuth.GET("/topic-discovery/run/current", r.paperTopicDiscoveryHandler.GetCurrentRun)
 		paperAuth.POST("/topic-discovery/run/cancel", r.paperTopicDiscoveryHandler.PostCancelRun)
 		paperAuth.POST("/topic-discovery/commit-manuscript", r.paperTopicDiscoveryHandler.PostCommitManuscript)
+		paperAuth.GET("/manuscripts", r.paperManuscriptHandler.GetManuscripts)
+		paperAuth.POST("/manuscripts", r.paperManuscriptHandler.PostCreateManuscript)
+		paperAuth.POST("/manuscripts/set-current", r.paperManuscriptHandler.PostSetCurrentManuscript)
 	}
 
 	userAuth := engine.Group("/api/v1", ginMiddleware.RequireAuth)

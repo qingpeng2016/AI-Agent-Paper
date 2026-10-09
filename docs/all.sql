@@ -339,6 +339,7 @@ CREATE TABLE IF NOT EXISTS `paper_manuscript` (
   `draft_word_count`  INT UNSIGNED DEFAULT NULL COMMENT '当前稿字数',
   `draft_updated_at`  DATETIME     DEFAULT NULL COMMENT '最近一次写作/保存',
   `status`            VARCHAR(16)  NOT NULL DEFAULT 'active' COMMENT 'active|archived',
+  `is_current`        TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '是否工作台当前论文（每用户 active 至多一条为 1）',
   `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
@@ -711,6 +712,14 @@ INSERT INTO `bot_schedule_config` (
     '选题 generate_ideas=running：异步调用 LLM 脑暴+新颖性预填',
     1,
     1
+  ),
+  (
+    'ai_agent_paper',
+    'topic_audit_llm',
+    15,
+    '选题 audit=running：异步调用 LLM 审查结论+文献综述并写入 paper_output_literature_review',
+    1,
+    1
   )
 ON DUPLICATE KEY UPDATE
   `interval_seconds` = VALUES(`interval_seconds`),
@@ -819,7 +828,7 @@ INSERT INTO `paper_llm_workflow_binding` (`stage_code`, `stage_name`, `model_con
   ('retrieve', '多源文献检索与校验入库', @paper_llm_model_id, 'active'),
   ('generate_ideas', '脑暴候选选题', @paper_llm_model_id, 'active'),
   ('novelty', '新颖性检查', @paper_llm_model_id, 'active'),
-  ('audit', '选题断言初审', @paper_llm_model_id, 'active')
+  ('audit', '审查结论+生成文献综述', @paper_llm_model_id, 'active')
 ON DUPLICATE KEY UPDATE
   `stage_name` = VALUES(`stage_name`),
   `model_config_id` = VALUES(`model_config_id`),
@@ -839,8 +848,8 @@ INSERT INTO `paper_llm_prompt_template` (`stage_code`, `stage_name`, `template_b
   ('novelty', '新颖性检查',
    '（通常与 generate_ideas 合并为一次调用；本模板仅用于旧 run 单独补跑 novelty。）方向 {{direction}}：对照 Corpus 比较每条 idea，输出 lines/risks。',
    'active'),
-  ('audit', '选题断言初审',
-   '环节：选题审计。方向：{{direction}}。目标期刊：{{venue}}。以严格审稿人视角检查论断是否有文献支持、是否缺少基线/对照、贡献是否清晰；并评估 idea/新颖性是否偏题。输出 JSON 以用户消息为准。',
+  ('audit', '审查结论+生成文献综述',
+   '环节：审查结论 + 生成文献综述。方向：{{direction}}。目标期刊：{{venue}}。须再次审查第二步 generate_ideas（含 novelty）是否贴题；以严格审稿人视角给出 issues/summary/off_topic；并基于 Corpus 生成文献综述（structure/content_medium/citations）。输出 JSON 以用户消息 schema 为准（含 audit 与 literature_review）。',
    'active')
 ON DUPLICATE KEY UPDATE
   `stage_name` = VALUES(`stage_name`),

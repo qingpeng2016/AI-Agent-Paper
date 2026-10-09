@@ -17,6 +17,33 @@ func NewPaperRefCatalogImpl(db *gorm.DB) repository.PaperRefCatalogRepo {
 	return &PaperRefCatalogImpl{db: db}
 }
 
+func (r *PaperRefCatalogImpl) FindDisciplineByCode(ctx context.Context, code string) (*entity.PaperRefDiscipline, error) {
+	var row entity.PaperRefDiscipline
+	err := r.db.WithContext(ctx).Where("code = ? AND status = ?", code, "active").First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *PaperRefCatalogImpl) FindDisciplineByID(ctx context.Context, id uint64) (*entity.PaperRefDiscipline, error) {
+	if id == 0 {
+		return nil, nil
+	}
+	var row entity.PaperRefDiscipline
+	err := r.db.WithContext(ctx).Where("id = ? AND status = ?", id, "active").First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
 func (r *PaperRefCatalogImpl) ListActiveDisciplines(ctx context.Context) ([]entity.PaperRefDiscipline, error) {
 	var rows []entity.PaperRefDiscipline
 	err := r.db.WithContext(ctx).

@@ -58,7 +58,12 @@ func (h *PaperTopicDiscoveryHandler) GetCurrentRun(c *gin.Context) {
 		response.ResponseErr(c, errorx.ErrParamsError)
 		return
 	}
-	data, err := h.run.GetCurrentRun(c.Request.Context(), userID)
+	var q request.TopicDiscoveryCurrentRunQuery
+	if err := c.ShouldBindQuery(&q); err != nil {
+		response.ResponseErr(c, errorx.ErrParamsError)
+		return
+	}
+	data, err := h.run.GetCurrentRun(c.Request.Context(), userID, q.ManuscriptID)
 	if err != nil {
 		response.ResponseErr(c, err)
 		return
@@ -73,7 +78,9 @@ func (h *PaperTopicDiscoveryHandler) PostCancelRun(c *gin.Context) {
 		response.ResponseErr(c, errorx.ErrParamsError)
 		return
 	}
-	if err := h.run.CancelCurrentRun(c.Request.Context(), userID); err != nil {
+	var req request.TopicDiscoveryCancelRequest
+	_ = c.ShouldBindJSON(&req)
+	if err := h.run.CancelCurrentRun(c.Request.Context(), userID, req.ManuscriptID); err != nil {
 		response.ResponseErr(c, err)
 		return
 	}

@@ -20,7 +20,10 @@ func NewPaperOutputTopicStepImpl(db *gorm.DB) repository.PaperOutputTopicStepRep
 	return &PaperOutputTopicStepImpl{db: db}
 }
 
-func (r *PaperOutputTopicStepImpl) BeginRun(ctx context.Context, userID uint64, inputParams []byte) (int, error) {
+func (r *PaperOutputTopicStepImpl) BeginRun(ctx context.Context, userID, manuscriptID uint64, inputParams []byte) (int, error) {
+	if manuscriptID == 0 {
+		return 0, errors.New("manuscript_id required")
+	}
 	var runVersion int
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var maxVer *int
@@ -38,7 +41,7 @@ func (r *PaperOutputTopicStepImpl) BeginRun(ctx context.Context, userID uint64, 
 		now := time.Now()
 		for i, stage := range topicDiscoveryStageOrder {
 			row := entity.PaperOutputTopicStep{
-				ManuscriptID: 0,
+				ManuscriptID: manuscriptID,
 				UserID:       userID,
 				RunVersion:   next,
 				StageCode:    stage,
@@ -72,6 +75,26 @@ func (r *PaperOutputTopicStepImpl) GetLatestRunByUser(ctx context.Context, userI
 	err := r.db.WithContext(ctx).
 		Select("run_version").
 		Where("user_id = ?", userID).
+		Order("run_version DESC, id DESC").
+		Take(&probe).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return 0, nil, nil
+	}
+	if err != nil {
+		return 0, nil, err
+	}
+	steps, err := r.ListByUserRun(ctx, userID, probe.RunVersion)
+	return probe.RunVersion, steps, err
+}
+
+func (r *PaperOutputTopicStepImpl) GetLatestRunByManuscript(ctx context.Context, userID, manuscriptID uint64) (int, []entity.PaperOutputTopicStep, error) {
+	if manuscriptID == 0 {
+		return 0, nil, nil
+	}
+	var probe entity.PaperOutputTopicStep
+	err := r.db.WithContext(ctx).
+		Select("run_version").
+		Where("user_id = ? AND manuscript_id = ?", userID, manuscriptID).
 		Order("run_version DESC, id DESC").
 		Take(&probe).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {

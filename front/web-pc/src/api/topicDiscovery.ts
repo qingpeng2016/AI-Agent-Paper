@@ -45,6 +45,7 @@ export type PaperSelectOption = { value: string; label: string }
 const FORM_OPTIONS_TIMEOUT_MS = 8_000
 
 export type TopicDiscoveryRunRequest = {
+  manuscript_id: number
   manuscript_title?: string
   discipline_code: string
   keywords: string[]
@@ -200,10 +201,17 @@ export async function postTopicDiscoveryRun(
   return envelope.data
 }
 
-export async function fetchCurrentTopicDiscoveryRun(): Promise<TopicDiscoveryRunResponse | null> {
-  const res = await fetch('/api/v1/paper/topic-discovery/run/current', {
-    credentials: 'include',
-  })
+export async function fetchCurrentTopicDiscoveryRun(
+  manuscriptId: string | number,
+): Promise<TopicDiscoveryRunResponse | null> {
+  const id = typeof manuscriptId === 'string' ? manuscriptId.trim() : String(manuscriptId)
+  if (!id || !/^\d+$/.test(id)) {
+    return null
+  }
+  const res = await fetch(
+    `/api/v1/paper/topic-discovery/run/current?manuscript_id=${encodeURIComponent(id)}`,
+    { credentials: 'include' },
+  )
   if (!res.ok) {
     throw new Error(`topic-discovery current http ${res.status}`)
   }
@@ -231,10 +239,13 @@ export async function commitTopicDiscoveryManuscript(title?: string): Promise<To
   return envelope.data
 }
 
-export async function cancelTopicDiscoveryRun(): Promise<void> {
+export async function cancelTopicDiscoveryRun(manuscriptId: string | number): Promise<void> {
+  const idNum = Number(typeof manuscriptId === 'string' ? manuscriptId.trim() : manuscriptId)
   const res = await fetch('/api/v1/paper/topic-discovery/run/cancel', {
     method: 'POST',
     credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ manuscript_id: idNum }),
   })
   if (!res.ok) {
     throw new Error(`topic-discovery cancel http ${res.status}`)

@@ -8,6 +8,8 @@ import (
 
 type PaperRefCatalogRepo interface {
 	ListActiveDisciplines(ctx context.Context) ([]entity.PaperRefDiscipline, error)
+	FindDisciplineByCode(ctx context.Context, code string) (*entity.PaperRefDiscipline, error)
+	FindDisciplineByID(ctx context.Context, id uint64) (*entity.PaperRefDiscipline, error)
 	ListExecutionIntensities(ctx context.Context) ([]entity.PaperRefExecutionIntensity, error)
 	ListAuditLevels(ctx context.Context) ([]entity.PaperRefAuditLevel, error)
 	FindExecutionIntensityByCode(ctx context.Context, code string) (*entity.PaperRefExecutionIntensity, error)

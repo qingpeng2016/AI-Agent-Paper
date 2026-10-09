@@ -145,3 +145,146 @@
   background-color: rgba(30, 27, 75, 0.35);
   backdrop-filter: blur(2px);
 }
+
+/* 与 ElMessageBox 同套视觉：viewport 正中表单弹窗（Teleport + flex） */
+.paper-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background-color: rgba(30, 27, 75, 0.35);
+  backdrop-filter: blur(2px);
+}
+
+.paper-modal-panel.paper-message-box {
+  width: min(420px, calc(100vw - 32px));
+  max-height: min(90vh, 640px);
+  padding: 0;
+  margin: 0;
+  border-radius: var(--atm-radius);
+  border: 1px solid #e2e8f0;
+  box-shadow: var(--atm-shadow-lg);
+  background: #fff;
+  /* 允许 PaperSelect 下拉超出内容区，不被 footer 裁切 */
+  overflow: visible;
+  display: flex;
+  flex-direction: column;
+}
+
+.paper-modal-header {
+  position: relative;
+  flex-shrink: 0;
+  padding: 22px 24px 0;
+}
+
+.paper-modal-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--atm-text);
+  line-height: 1.35;
+}
+
+.paper-modal-close {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.paper-modal-close:hover {
+  color: var(--atm-text);
+  background: #f1f5f9;
+}
+
+.paper-modal-body {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+  min-height: 0;
+  overflow: visible;
+  padding: 12px 24px 4px;
+}
+
+.paper-modal-panel .paper-select-menu {
+  z-index: 30;
+}
+
+.paper-message-box__form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.paper-message-box__form .paper-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--atm-text);
+}
+
+.paper-message-box__form .paper-input {
+  width: 100%;
+  box-sizing: border-box;
+  height: 38px;
+  padding: 0 12px;
+  font-size: 14px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  color: var(--atm-text);
+}
+
+.paper-message-box__form .paper-input:focus {
+  outline: none;
+  border-color: var(--atm-primary);
+  box-shadow: 0 0 0 1px var(--atm-primary);
+}
+
+.paper-modal-panel .paper-message-box__btns {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: row-reverse;
+  justify-content: flex-start;
+  gap: 10px;
+  flex-shrink: 0;
+  padding: 16px 24px 22px;
+  background: #fff;
+  border-radius: 0 0 var(--atm-radius) var(--atm-radius);
+}
+
+.paper-modal-panel .paper-message-box__btns .el-button {
+  margin: 0;
+  min-width: 88px;
+  height: 38px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.paper-message-box--default .paper-modal-title::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--atm-primary);
+  vertical-align: middle;
+  transform: translateY(-1px);
+}
