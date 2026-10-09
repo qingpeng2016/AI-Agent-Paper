@@ -49,4 +49,6 @@ type PaperOutputLiteratureReviewRepo interface {
 		reviewID, manuscriptID uint64,
 		userID uint,
 	) (bool, error)
+	// GetIDByExperimentPlanID 由 experiment_plan_id 反查文献综述（input_params 缺失时的兜底）。
+	GetIDByExperimentPlanID(ctx context.Context, planID, manuscriptID uint64) (uint64, error)
 }

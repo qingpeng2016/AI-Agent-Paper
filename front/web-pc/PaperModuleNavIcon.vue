@@ -26,7 +26,7 @@ defineProps<{
     <template v-else-if="moduleId === 'literature-review'">
       <path d="M6 18V10M10 18V6M14 18v-5M18 18V8" />
     </template>
-    <!-- 实验规划：烧瓶 -->
+    <!-- 实验方案：烧瓶 -->
     <template v-else-if="moduleId === 'experiment-planning'">
       <path d="M10 3v6l-5 9a2 2 0 0 0 1.7 3h10.6a2 2 0 0 0 1.7-3l-5-9V3" />
       <path d="M8 3h8" />

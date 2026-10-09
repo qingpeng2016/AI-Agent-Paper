@@ -95,3 +95,28 @@ func (h *PaperLiteratureReviewHandler) PostGenerateExperimentPlan(c *gin.Context
 		"status": papersvc.LitReviewStatusGeneratingExperimentPlan,
 	})
 }
+
+// GetLiteratureReviewDetail GET /api/v1/paper/literature-reviews/detail?manuscript_id=&literature_review_id=
+func (h *PaperLiteratureReviewHandler) GetLiteratureReviewDetail(c *gin.Context) {
+	userID, ok := middleware.UserIDFromContext(c)
+	if !ok {
+		response.ResponseErr(c, errorx.ErrParamsError)
+		return
+	}
+	var q request.PaperLiteratureReviewDetailQuery
+	if err := c.ShouldBindQuery(&q); err != nil {
+		response.ResponseErr(c, errorx.ErrParamsError)
+		return
+	}
+	data, err := h.svc.GetDetail(
+		c.Request.Context(),
+		userID,
+		q.ManuscriptID,
+		q.LiteratureReviewID,
+	)
+	if err != nil {
+		response.ResponseErr(c, err)
+		return
+	}
+	response.ResponseSuccess(c, data)
+}

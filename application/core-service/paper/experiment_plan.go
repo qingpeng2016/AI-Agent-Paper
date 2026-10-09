@@ -4,11 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/qingpeng2016/ai-agent-paper/common/errorx"
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/repository"
+	"github.com/qingpeng2016/ai-agent-paper/domain/rest/response"
 	"gorm.io/datatypes"
 )
 
@@ -301,6 +304,110 @@ func (s *ExperimentPlanService) persistExperimentPlanFromLLM(
 		return nil, err
 	}
 	return row, nil
+}
+
+func (s *ExperimentPlanService) ListByManuscript(
+	ctx context.Context,
+	userID uint,
+	manuscriptID uint64,
+) (*response.PaperExperimentPlanListView, error) {
+	if manuscriptID == 0 {
+		return nil, errorx.ErrParamsError
+	}
+	ms, err := s.manuscripts.GetByIDForUser(ctx, uint(manuscriptID), userID)
+	if err != nil {
+		return nil, err
+	}
+	if ms == nil {
+		return nil, errorx.ErrParamsError.WithDetail("manuscript 不存在或无权访问")
+	}
+	rows, err := s.plans.ListByManuscript(ctx, manuscriptID)
+	if err != nil {
+		return nil, err
+	}
+	out := &response.PaperExperimentPlanListView{
+		ManuscriptID: manuscriptID,
+		Items:        make([]response.PaperExperimentPlanItemView, 0, len(rows)),
+	}
+	for _, row := range rows {
+		item := experimentPlanItemView(row)
+		item = s.enrichExperimentPlanLiteratureReviewID(ctx, manuscriptID, row.ID, item)
+		out.Items = append(out.Items, item)
+	}
+	return out, nil
+}
+
+func (s *ExperimentPlanService) enrichExperimentPlanLiteratureReviewID(
+	ctx context.Context,
+	manuscriptID, planID uint64,
+	item response.PaperExperimentPlanItemView,
+) response.PaperExperimentPlanItemView {
+	if strings.TrimSpace(item.LiteratureReviewID) != "" {
+		return item
+	}
+	lrID, err := s.reviews.GetIDByExperimentPlanID(ctx, planID, manuscriptID)
+	if err != nil || lrID == 0 {
+		return item
+	}
+	item.LiteratureReviewID = strconv.FormatUint(lrID, 10)
+	return item
+}
+
+func (s *ExperimentPlanService) GetDetail(
+	ctx context.Context,
+	userID uint,
+	manuscriptID, planID uint64,
+) (*response.PaperExperimentPlanItemView, error) {
+	if manuscriptID == 0 || planID == 0 {
+		return nil, errorx.ErrParamsError
+	}
+	ms, err := s.manuscripts.GetByIDForUser(ctx, uint(manuscriptID), userID)
+	if err != nil {
+		return nil, err
+	}
+	if ms == nil {
+		return nil, errorx.ErrParamsError.WithDetail("manuscript 不存在或无权访问")
+	}
+	row, err := s.plans.GetByIDForManuscript(ctx, planID, manuscriptID)
+	if err != nil {
+		return nil, err
+	}
+	if row == nil {
+		return nil, errorx.ErrParamsError.WithDetail("实验方案不存在")
+	}
+	if row.Status == "deleted" {
+		return nil, errorx.ErrParamsError.WithDetail("实验方案已删除")
+	}
+	item := experimentPlanItemView(*row)
+	item = s.enrichExperimentPlanLiteratureReviewID(ctx, manuscriptID, planID, item)
+	return &item, nil
+}
+
+func experimentPlanItemView(row entity.PaperOutputExperimentPlan) response.PaperExperimentPlanItemView {
+	item := response.PaperExperimentPlanItemView{
+		ID:        strconv.FormatUint(row.ID, 10),
+		Version:   row.Version,
+		Status:    row.Status,
+		Format:    row.Format,
+		CreatedAt: row.CreatedAt.UTC().Format(time.RFC3339),
+	}
+	if row.Title != nil {
+		item.Title = *row.Title
+	}
+	if row.Summary != nil {
+		item.Summary = *row.Summary
+	}
+	if row.ContentMedium != nil {
+		item.ContentMedium = *row.ContentMedium
+	}
+	if len(row.InputParams) > 0 {
+		var snap map[string]any
+		_ = json.Unmarshal(row.InputParams, &snap)
+		if id := strFromAny(snap["literature_review_id"]); id != "" {
+			item.LiteratureReviewID = id
+		}
+	}
+	return item
 }
 
 func mergeReviewMeta(review *entity.PaperOutputLiteratureReview, patch map[string]any) map[string]any {

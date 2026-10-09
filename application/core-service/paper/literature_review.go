@@ -77,6 +77,35 @@ func (s *LiteratureReviewService) SoftDelete(
 	return nil
 }
 
+func (s *LiteratureReviewService) GetDetail(
+	ctx context.Context,
+	userID uint,
+	manuscriptID, reviewID uint64,
+) (*response.PaperLiteratureReviewItemView, error) {
+	if manuscriptID == 0 || reviewID == 0 {
+		return nil, errorx.ErrParamsError
+	}
+	ms, err := s.manuscripts.GetByIDForUser(ctx, uint(manuscriptID), userID)
+	if err != nil {
+		return nil, err
+	}
+	if ms == nil {
+		return nil, errorx.ErrParamsError.WithDetail("manuscript 不存在或无权访问")
+	}
+	row, err := s.reviews.GetByIDForUser(ctx, reviewID, manuscriptID, userID)
+	if err != nil {
+		return nil, err
+	}
+	if row == nil {
+		return nil, errorx.ErrParamsError.WithDetail("文献综述不存在或无权访问")
+	}
+	if row.Status == "deleted" {
+		return nil, errorx.ErrParamsError.WithDetail("文献综述已删除")
+	}
+	item := literatureReviewItemView(*row)
+	return &item, nil
+}
+
 func literatureReviewItemView(row entity.PaperOutputLiteratureReview) response.PaperLiteratureReviewItemView {
 	item := response.PaperLiteratureReviewItemView{
 		ID:        strconv.FormatUint(row.ID, 10),

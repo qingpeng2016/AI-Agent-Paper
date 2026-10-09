@@ -26,6 +26,7 @@ type Router struct {
 	paperTopicDiscoveryHandler *handler.PaperTopicDiscoveryHandler
 	paperManuscriptHandler       *handler.PaperManuscriptHandler
 	paperLiteratureReviewHandler *handler.PaperLiteratureReviewHandler
+	paperExperimentPlanHandler   *handler.PaperExperimentPlanHandler
 }
 
 func NewRouter(
@@ -38,6 +39,7 @@ func NewRouter(
 	paperTopicDiscoveryHandler *handler.PaperTopicDiscoveryHandler,
 	paperManuscriptHandler *handler.PaperManuscriptHandler,
 	paperLiteratureReviewHandler *handler.PaperLiteratureReviewHandler,
+	paperExperimentPlanHandler *handler.PaperExperimentPlanHandler,
 ) *Router {
 	return &Router{
 		setting:                      setting,
@@ -49,6 +51,7 @@ func NewRouter(
 		paperTopicDiscoveryHandler:   paperTopicDiscoveryHandler,
 		paperManuscriptHandler:       paperManuscriptHandler,
 		paperLiteratureReviewHandler: paperLiteratureReviewHandler,
+		paperExperimentPlanHandler:   paperExperimentPlanHandler,
 	}
 }
 
@@ -80,8 +83,11 @@ func (r *Router) setupRouters() *gin.Engine {
 		paperAuth.POST("/manuscripts", r.paperManuscriptHandler.PostCreateManuscript)
 		paperAuth.POST("/manuscripts/set-current", r.paperManuscriptHandler.PostSetCurrentManuscript)
 		paperAuth.GET("/literature-reviews", r.paperLiteratureReviewHandler.GetLiteratureReviews)
+		paperAuth.GET("/literature-reviews/detail", r.paperLiteratureReviewHandler.GetLiteratureReviewDetail)
 		paperAuth.POST("/literature-reviews/soft-delete", r.paperLiteratureReviewHandler.PostSoftDeleteLiteratureReview)
 		paperAuth.POST("/literature-reviews/generate-experiment-plan", r.paperLiteratureReviewHandler.PostGenerateExperimentPlan)
+		paperAuth.GET("/experiment-plans", r.paperExperimentPlanHandler.GetExperimentPlans)
+		paperAuth.GET("/experiment-plans/detail", r.paperExperimentPlanHandler.GetExperimentPlanDetail)
 	}
 
 	userAuth := engine.Group("/api/v1", ginMiddleware.RequireAuth)

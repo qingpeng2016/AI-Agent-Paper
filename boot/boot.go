@@ -53,6 +53,7 @@ func BuildContainer() *dig.Container {
 	_ = c.Provide(handler.NewPaperTopicDiscoveryHandler)
 	_ = c.Provide(handler.NewPaperManuscriptHandler)
 	_ = c.Provide(handler.NewPaperLiteratureReviewHandler)
+	_ = c.Provide(handler.NewPaperExperimentPlanHandler)
 	_ = c.Provide(trackingSvc.NewService)
 	_ = c.Provide(papersvc.NewLiteratureSearchService)
 	_ = c.Provide(papersvc.NewTopicDiscoveryOptionsService)

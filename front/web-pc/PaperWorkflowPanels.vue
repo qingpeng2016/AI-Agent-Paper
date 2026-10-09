@@ -2,6 +2,7 @@
 import { onUnmounted, reactive, ref, toRefs, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
+  fetchLiteratureReviewDetail,
   fetchLiteratureReviews,
   formatLiteratureReviewStatus,
   generateExperimentPlanFromLiteratureReview,
@@ -10,8 +11,14 @@ import {
   type PaperLiteratureReviewItem,
 } from '@/api/literatureReviews'
 import {
+  experimentPlanRowTitle,
+  fetchExperimentPlanDetail,
+  fetchExperimentPlans,
+  formatExperimentPlanStatus,
+  type PaperExperimentPlanItem,
+} from '@/api/experimentPlans'
+import {
   DEMO_AUTO_REVIEW,
-  DEMO_EXPERIMENT_PLAN,
   DEMO_FIGURES,
   DEMO_MANUSCRIPT,
   DEMO_MANUSCRIPT_ANALYSIS,
@@ -20,14 +27,12 @@ import PaperFigureUploadPanel from './PaperFigureUploadPanel.vue'
 import PaperSelect from './PaperSelect.vue'
 import {
   DEFAULT_AUTO_REVIEW,
-  DEFAULT_EXPERIMENT_PLANNING,
   DEFAULT_FIGURE_GENERATION,
   DEFAULT_MANUSCRIPT_ANALYSIS,
   DEFAULT_PAPER_WRITING,
   FIGURE_CHART_OPTIONS,
   PAPER_WRITING_SECTION_OPTIONS,
   type AutoReviewForm,
-  type ExperimentPlanningForm,
   type FigureGenerationForm,
   type ManuscriptAnalysisForm,
   type PaperModuleId,
@@ -38,20 +43,26 @@ export type FigureManagementTabId = 'upload' | 'generate'
 
 const figureTab = defineModel<FigureManagementTabId>('figureTab', { default: 'upload' })
 
+const emit = defineEmits<{
+  navigateModule: [PaperModuleId, openExperimentPlanId?: string]
+  consumedPendingExperimentPlan: []
+}>()
+
 const props = withDefaults(
   defineProps<{
     moduleId: PaperModuleId
     manuscriptId?: string
     manuscriptTitle?: string
+    pendingOpenExperimentPlanId?: string | null
   }>(),
   {
     manuscriptId: '',
     manuscriptTitle: '未命名',
+    pendingOpenExperimentPlanId: null,
   },
 )
 const { moduleId, manuscriptId, manuscriptTitle } = toRefs(props)
 
-const planForm = reactive<ExperimentPlanningForm>({ ...DEFAULT_EXPERIMENT_PLANNING })
 const reviewForm = reactive<AutoReviewForm>({ ...DEFAULT_AUTO_REVIEW })
 const writeForm = reactive<PaperWritingForm>({
   ...DEFAULT_PAPER_WRITING,
@@ -73,6 +84,11 @@ const litReviewDeleteSubmitting = ref(false)
 const litReviewGeneratePending = ref<PaperLiteratureReviewItem | null>(null)
 const litReviewGenerateSubmitting = ref(false)
 let litReviewPollTimer: ReturnType<typeof setInterval> | null = null
+
+const expPlanItems = ref<PaperExperimentPlanItem[]>([])
+const expPlanViewItem = ref<PaperExperimentPlanItem | null>(null)
+const expPlanLitReviewLoading = ref(false)
+let expPlanReloadSeq = 0
 
 const LIT_STRUCTURE_LABEL: Record<string, string> = {
   thematic: '按主题',
@@ -158,11 +174,94 @@ onUnmounted(() => {
   }
 })
 
+function literatureReviewHasExperimentPlan(item: PaperLiteratureReviewItem): boolean {
+  const id = item.experiment_plan_id?.trim()
+  return !!id && id !== '0'
+}
+
 function isGenerateExperimentPlanDisabled(item: PaperLiteratureReviewItem): boolean {
+  if (literatureReviewHasExperimentPlan(item)) return true
   return isLiteratureReviewGeneratingExperimentPlan(item.status)
 }
 
+function goToExperimentPlanningFromLitReview(item: PaperLiteratureReviewItem) {
+  const planId = item.experiment_plan_id?.trim()
+  if (!planId) return
+  emit('navigateModule', 'experiment-planning', planId)
+}
+
+async function tryOpenPendingExperimentPlan() {
+  const planId = props.pendingOpenExperimentPlanId?.trim()
+  if (moduleId.value !== 'experiment-planning' || !planId) return
+
+  let item = expPlanItems.value.find((it) => it.id === planId)
+  if (!item) {
+    await reloadExperimentPlans({ silent: true })
+    item = expPlanItems.value.find((it) => it.id === planId)
+  }
+  if (item) {
+    openExpPlanView(item)
+    emit('consumedPendingExperimentPlan')
+    return
+  }
+
+  const ms = manuscriptId.value
+  if (!ms) return
+  try {
+    const detail = await fetchExperimentPlanDetail(ms, planId)
+    openExpPlanView(detail)
+    emit('consumedPendingExperimentPlan')
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : '加载实验方案失败'
+    ElMessage.error(msg)
+    emit('consumedPendingExperimentPlan')
+  }
+}
+
+async function reloadExperimentPlans(opts?: { silent?: boolean }) {
+  const silent = opts?.silent === true
+  const ms = manuscriptId.value
+  if (!ms || !/^\d+$/.test(ms)) {
+    expPlanItems.value = []
+    return
+  }
+  const seq = ++expPlanReloadSeq
+  try {
+    const data = await fetchExperimentPlans(ms)
+    if (seq !== expPlanReloadSeq) return
+    expPlanItems.value = data.items ?? []
+  } catch (e) {
+    if (seq !== expPlanReloadSeq) return
+    if (!silent) {
+      expPlanItems.value = []
+      const msg = e instanceof Error ? e.message : '加载实验方案失败'
+      ElMessage.error(msg)
+    }
+  }
+}
+
+watch(
+  () => [moduleId.value, manuscriptId.value] as const,
+  ([mod, ms]) => {
+    if (mod !== 'experiment-planning') return
+    if (!ms || !/^\d+$/.test(ms)) {
+      expPlanItems.value = []
+      return
+    }
+    void reloadExperimentPlans({ silent: true }).then(() => tryOpenPendingExperimentPlan())
+  },
+  { immediate: true },
+)
+
+watch(
+  () => props.pendingOpenExperimentPlanId,
+  () => {
+    void tryOpenPendingExperimentPlan()
+  },
+)
+
 function openGenerateExperimentPlanConfirm(item: PaperLiteratureReviewItem) {
+  if (literatureReviewHasExperimentPlan(item)) return
   if (isGenerateExperimentPlanDisabled(item)) return
   litReviewGeneratePending.value = item
 }
@@ -189,12 +288,6 @@ async function submitGenerateExperimentPlanConfirm() {
     litReviewGenerateSubmitting.value = false
   }
 }
-
-const intensityOptions = [
-  { value: 'fast', label: '更快' },
-  { value: 'balanced', label: 'Balanced（平衡）' },
-  { value: 'deep', label: '更深' },
-]
 
 const auditOptions = [
   { value: 'standard', label: 'Standard' },
@@ -262,6 +355,33 @@ function closeLitReviewView() {
   litReviewViewItem.value = null
 }
 
+function openExpPlanView(item: PaperExperimentPlanItem) {
+  expPlanViewItem.value = item
+}
+
+function closeExpPlanView() {
+  expPlanViewItem.value = null
+}
+
+async function openLinkedLiteratureReviewFromExpPlan(item: PaperExperimentPlanItem) {
+  const lrId = item.literature_review_id?.trim()
+  const ms = manuscriptId.value
+  if (!lrId || !ms) {
+    ElMessage.warning('未关联文献综述')
+    return
+  }
+  expPlanLitReviewLoading.value = true
+  try {
+    const detail = await fetchLiteratureReviewDetail(ms, lrId)
+    openLitReviewView(detail)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : '加载文献综述失败'
+    ElMessage.error(msg)
+  } finally {
+    expPlanLitReviewLoading.value = false
+  }
+}
+
 function openDeleteLitReviewConfirm(item: PaperLiteratureReviewItem) {
   litReviewDeletePending.value = item
 }
@@ -299,9 +419,13 @@ async function runModule(id: PaperModuleId): Promise<boolean> {
     }
     return true
   }
-  if (id === 'experiment-planning' && !planForm.ideaSummary.trim()) {
-    ElMessage.warning('请填写核心 idea / 假设')
-    return false
+  if (id === 'experiment-planning') {
+    await reloadExperimentPlans({ silent: true })
+    if (!expPlanItems.value.length) {
+      ElMessage.warning('暂无实验方案，请先在「文献综述」生成实验方案')
+      return false
+    }
+    return true
   }
   if (id === 'paper-writing' && writeForm.sections.length === 0) {
     ElMessage.warning('请至少选择一个章节')
@@ -317,7 +441,7 @@ async function runModule(id: PaperModuleId): Promise<boolean> {
   return true
 }
 
-defineExpose({ runModule, reloadLiteratureReviews })
+defineExpose({ runModule, reloadLiteratureReviews, reloadExperimentPlans })
 </script>
 
 <template>
@@ -362,7 +486,7 @@ defineExpose({ runModule, reloadLiteratureReviews })
                   aria-hidden="true"
                   class="paper-btn-primary paper-btn--compact wf-lit-width-ruler"
                 >
-                  生成实验方案
+                  查看实验方案
                 </button>
                 <button
                   type="button"
@@ -392,6 +516,15 @@ defineExpose({ runModule, reloadLiteratureReviews })
                   查看
                 </button>
                 <button
+                  v-if="literatureReviewHasExperimentPlan(item)"
+                  type="button"
+                  class="paper-btn-primary paper-btn--compact"
+                  @click="goToExperimentPlanningFromLitReview(item)"
+                >
+                  查看实验方案
+                </button>
+                <button
+                  v-else
                   type="button"
                   class="paper-btn-primary paper-btn--compact"
                   :disabled="isGenerateExperimentPlanDisabled(item)"
@@ -517,88 +650,78 @@ defineExpose({ runModule, reloadLiteratureReviews })
       </div>
     </Teleport>
 
-    <Teleport to="body">
-      <div
-        v-if="litReviewViewItem"
-        class="paper-modal-overlay wf-lit-view-overlay"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="wf-lit-view-title"
-      >
-        <div class="paper-message-box paper-message-box--default paper-modal-panel wf-lit-view-panel" @click.stop>
-          <header class="paper-modal-header wf-lit-view-header">
-            <h2 id="wf-lit-view-title" class="paper-modal-title wf-lit-view-title">
-              {{ litReviewRowTitle(litReviewViewItem) }}
-            </h2>
-            <button type="button" class="paper-modal-close" aria-label="关闭" @click="closeLitReviewView">
-              ×
-            </button>
-          </header>
-          <div class="paper-modal-body wf-lit-view-body">
-            <p class="wf-meta wf-lit-meta">
-              <span>版本 v{{ litReviewViewItem.version }}</span>
-              <span>·</span>
-              <span>{{ formatLitReviewCreatedAt(litReviewViewItem.created_at) }}</span>
-              <span v-if="litReviewViewItem.structure">·</span>
-              <span v-if="litReviewViewItem.structure">{{
-                LIT_STRUCTURE_LABEL[litReviewViewItem.structure] ?? litReviewViewItem.structure
-              }}</span>
-              <span>·</span>
-              <span>{{ formatLiteratureReviewStatus(litReviewViewItem.status) }}</span>
-            </p>
-            <p v-if="litReviewViewItem.summary?.trim()" class="wf-lit-summary">
-              {{ litReviewViewItem.summary }}
-            </p>
-            <pre v-if="litReviewViewItem.content_medium?.trim()" class="wf-pre wf-pre--lit">{{
-              litReviewViewItem.content_medium
-            }}</pre>
-            <p v-else class="wf-artifact-empty">暂无正文（content_medium 为空）</p>
-          </div>
-          <footer class="paper-message-box__btns wf-lit-view-btns">
-            <button type="button" class="paper-btn-primary" @click="closeLitReviewView">关闭</button>
-          </footer>
-        </div>
-      </div>
-    </Teleport>
   </div>
 
-  <!-- 实验规划 -->
+  <!-- 实验方案：paper_output_experiment_plan -->
   <div v-else-if="moduleId === 'experiment-planning'" class="wf-stack">
-    <section class="wf-panel">
-      <h2 class="wf-title">参数</h2>
-      <label class="wf-field wf-field--block">
-        <span class="wf-label">核心 idea / 假设 <em class="req">*</em></span>
-        <textarea v-model="planForm.ideaSummary" class="wf-textarea" rows="2" />
-      </label>
-      <div class="wf-grid">
-        <label class="wf-field">
-          <span class="wf-label">目标 venue</span>
-          <input v-model="planForm.venue" type="text" class="wf-input" />
-        </label>
-        <label class="wf-field">
-          <span class="wf-label">执行强度</span>
-          <PaperSelect v-model="planForm.intensity" :options="intensityOptions" />
-          <span class="wf-hint">控制检索数量、迭代轮数和输出深度。</span>
-        </label>
-        <label class="wf-field wf-field--span2">
-          <span class="wf-label">基线（逗号或换行）</span>
-          <textarea v-model="planForm.baselinesText" class="wf-textarea" rows="2" />
-        </label>
-        <label class="wf-field wf-field--span2">
-          <span class="wf-label">资源与时间</span>
-          <input v-model="planForm.resources" type="text" class="wf-input" />
-        </label>
-      </div>
+    <section v-if="!expPlanItems.length" class="wf-panel">
+      <h2 class="wf-title">实验方案</h2>
+      <p class="wf-lead">
+        当前论文尚无实验方案。请先在「文献综述」中对已完成综述点击「生成实验方案」。
+      </p>
     </section>
-    <section v-if="resultVisible['experiment-planning']" class="wf-panel wf-panel--result">
-      <h2 class="wf-title">实验计划（演示）</h2>
-      <p class="wf-kv"><span>假设</span>{{ DEMO_EXPERIMENT_PLAN.hypothesis }}</p>
-      <p class="wf-kv"><span>基线</span>{{ DEMO_EXPERIMENT_PLAN.baselines.join(' · ') }}</p>
-      <p class="wf-kv"><span>指标</span>{{ DEMO_EXPERIMENT_PLAN.metrics.join(' · ') }}</p>
-      <p class="wf-kv"><span>消融</span>{{ DEMO_EXPERIMENT_PLAN.ablations.join(' · ') }}</p>
-      <ol class="wf-list wf-list--ordered">
-        <li v-for="(s, i) in DEMO_EXPERIMENT_PLAN.steps" :key="i">{{ s }}</li>
-      </ol>
+
+    <section v-else class="wf-panel wf-lit-list-panel">
+      <table class="wf-table wf-lit-table">
+        <thead>
+          <tr>
+            <th>标题</th>
+            <th>版本</th>
+            <th>创建时间</th>
+            <th>状态</th>
+            <th class="wf-lit-col-actions">
+              <div class="wf-lit-actions">
+                <span class="wf-lit-head-slot">
+                  <button
+                    type="button"
+                    tabindex="-1"
+                    aria-hidden="true"
+                    class="paper-btn-primary paper-btn--compact wf-lit-width-ruler"
+                  >
+                    查看实验方案
+                  </button>
+                  <span class="wf-lit-col-head-label">操作</span>
+                </span>
+                <button
+                  type="button"
+                  tabindex="-1"
+                  aria-hidden="true"
+                  class="paper-btn-primary paper-btn--compact wf-lit-width-ruler"
+                >
+                  查看文献综述
+                </button>
+              </div>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="item in expPlanItems" :key="item.id">
+            <td class="wf-lit-col-title">{{ experimentPlanRowTitle(item) }}</td>
+            <td>v{{ item.version }}</td>
+            <td>{{ formatLitReviewCreatedAt(item.created_at) }}</td>
+            <td>{{ formatExperimentPlanStatus(item.status) }}</td>
+            <td class="wf-lit-col-actions">
+              <div class="wf-lit-actions">
+                <button
+                  type="button"
+                  class="paper-btn-primary paper-btn--compact"
+                  @click="openExpPlanView(item)"
+                >
+                  查看实验方案
+                </button>
+                <button
+                  type="button"
+                  class="paper-btn-primary paper-btn--compact"
+                  :disabled="expPlanLitReviewLoading || !item.literature_review_id?.trim()"
+                  @click="openLinkedLiteratureReviewFromExpPlan(item)"
+                >
+                  查看文献综述
+                </button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </section>
   </div>
 
@@ -846,6 +969,91 @@ defineExpose({ runModule, reloadLiteratureReviews })
       <p class="wf-callout wf-callout--warn"><strong>Kill argument：</strong>{{ DEMO_MANUSCRIPT_ANALYSIS.kill }}</p>
     </section>
   </div>
+
+  <Teleport to="body">
+    <div
+      v-if="litReviewViewItem"
+      class="paper-modal-overlay wf-lit-view-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="wf-lit-view-title"
+    >
+      <div class="paper-message-box paper-message-box--default paper-modal-panel wf-lit-view-panel" @click.stop>
+        <header class="paper-modal-header wf-lit-view-header">
+          <h2 id="wf-lit-view-title" class="paper-modal-title wf-lit-view-title">
+            {{ litReviewRowTitle(litReviewViewItem) }}
+          </h2>
+          <button type="button" class="paper-modal-close" aria-label="关闭" @click="closeLitReviewView">
+            ×
+          </button>
+        </header>
+        <div class="paper-modal-body wf-lit-view-body">
+          <p class="wf-meta wf-lit-meta">
+            <span>版本 v{{ litReviewViewItem.version }}</span>
+            <span>·</span>
+            <span>{{ formatLitReviewCreatedAt(litReviewViewItem.created_at) }}</span>
+            <span v-if="litReviewViewItem.structure">·</span>
+            <span v-if="litReviewViewItem.structure">{{
+              LIT_STRUCTURE_LABEL[litReviewViewItem.structure] ?? litReviewViewItem.structure
+            }}</span>
+            <span>·</span>
+            <span>{{ formatLiteratureReviewStatus(litReviewViewItem.status) }}</span>
+          </p>
+          <p v-if="litReviewViewItem.summary?.trim()" class="wf-lit-summary">
+            {{ litReviewViewItem.summary }}
+          </p>
+          <pre v-if="litReviewViewItem.content_medium?.trim()" class="wf-pre wf-pre--lit">{{
+            litReviewViewItem.content_medium
+          }}</pre>
+          <p v-else class="wf-artifact-empty">暂无正文（content_medium 为空）</p>
+        </div>
+        <footer class="paper-message-box__btns wf-lit-view-btns">
+          <button type="button" class="paper-btn-primary" @click="closeLitReviewView">关闭</button>
+        </footer>
+      </div>
+    </div>
+  </Teleport>
+
+  <Teleport to="body">
+    <div
+      v-if="expPlanViewItem"
+      class="paper-modal-overlay wf-lit-view-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="wf-exp-plan-view-title"
+      @keydown.escape="closeExpPlanView"
+    >
+      <div class="paper-message-box paper-message-box--default paper-modal-panel wf-lit-view-panel" @click.stop>
+        <header class="paper-modal-header wf-lit-view-header">
+          <h2 id="wf-exp-plan-view-title" class="paper-modal-title wf-lit-view-title">
+            {{ experimentPlanRowTitle(expPlanViewItem) }}
+          </h2>
+          <button type="button" class="paper-modal-close" aria-label="关闭" @click="closeExpPlanView">
+            ×
+          </button>
+        </header>
+        <div class="paper-modal-body wf-lit-view-body">
+          <p class="wf-meta wf-lit-meta">
+            <span>版本 v{{ expPlanViewItem.version }}</span>
+            <span>·</span>
+            <span>{{ formatLitReviewCreatedAt(expPlanViewItem.created_at) }}</span>
+            <span>·</span>
+            <span>{{ formatExperimentPlanStatus(expPlanViewItem.status) }}</span>
+          </p>
+          <p v-if="expPlanViewItem.summary?.trim()" class="wf-lit-summary">
+            {{ expPlanViewItem.summary }}
+          </p>
+          <pre v-if="expPlanViewItem.content_medium?.trim()" class="wf-pre wf-pre--lit">{{
+            expPlanViewItem.content_medium
+          }}</pre>
+          <p v-else class="wf-artifact-empty">暂无正文（content_medium 为空）</p>
+        </div>
+        <footer class="paper-message-box__btns wf-lit-view-btns">
+          <button type="button" class="paper-btn-primary" @click="closeExpPlanView">关闭</button>
+        </footer>
+      </div>
+    </div>
+  </Teleport>
   </div>
 </template>
 

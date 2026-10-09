@@ -25,6 +25,30 @@ export type PaperLiteratureReviewListResponse = {
   items: PaperLiteratureReviewItem[]
 }
 
+export async function fetchLiteratureReviewDetail(
+  manuscriptId: string,
+  literatureReviewId: string,
+): Promise<PaperLiteratureReviewItem> {
+  const msNum = Number(manuscriptId)
+  const reviewNum = Number(literatureReviewId)
+  if (!Number.isFinite(msNum) || msNum <= 0 || !Number.isFinite(reviewNum) || reviewNum <= 0) {
+    throw new Error('invalid ids')
+  }
+  const q = new URLSearchParams({
+    manuscript_id: String(msNum),
+    literature_review_id: String(reviewNum),
+  })
+  const res = await fetch(`/api/v1/paper/literature-reviews/detail?${q}`, { credentials: 'include' })
+  if (!res.ok) {
+    throw new Error(`literature-review detail http ${res.status}`)
+  }
+  const envelope = (await res.json()) as ApiEnvelope<PaperLiteratureReviewItem>
+  if (envelope.code !== 200 || !envelope.data) {
+    throw new Error(envelope.message ?? 'literature-review detail failed')
+  }
+  return envelope.data
+}
+
 export async function fetchLiteratureReviews(
   manuscriptId: string,
 ): Promise<PaperLiteratureReviewListResponse> {

@@ -27,11 +27,11 @@ export const PAPER_MODULES: PaperModuleMeta[] = [
   {
     id: 'literature-review',
     label: '文献综述',
-    description: '整理选题产出为综述；完成后顶栏继续生成实验计划（实验规划模块）',
+    description: '整理选题产出为综述；完成后可在「实验方案」模块查看或生成实验方案',
   },
   {
     id: 'experiment-planning',
-    label: '实验规划',
+    label: '实验方案',
     description: '设计假设、基线、指标与可执行实验步骤',
   },
   {

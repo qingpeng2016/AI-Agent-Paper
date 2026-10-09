@@ -141,7 +141,8 @@ const topicLastRunByMs = ref<Record<string, TopicDiscoveryRunResponse>>({})
 
 const activeModule = ref<PaperModuleId>(loadStoredActiveModule())
 
-const moduleContentLoading = ref(false)
+/** 首屏与 activeModule immediate prepare 对齐，避免子面板抢先出现模块内 loading */
+const moduleContentLoading = ref(true)
 const moduleContentKey = ref(0)
 let moduleSwitchSeq = 0
 /** 仅在不同模块间切换时递增 key，避免刷新同一模块时 remount 子组件导致重复拉数 */
@@ -201,6 +202,19 @@ async function prepareModuleContent(moduleId: PaperModuleId) {
 function selectModule(id: PaperModuleId) {
   activeModule.value = id
   persistActiveModule(id)
+}
+
+/** 文献综述「查看实验方案」：切模块并打开对应方案弹窗 */
+const pendingOpenExperimentPlanId = ref<string | null>(null)
+
+function onNavigateModule(id: PaperModuleId, openExperimentPlanId?: string) {
+  const planId = openExperimentPlanId?.trim()
+  pendingOpenExperimentPlanId.value = planId || null
+  selectModule(id)
+}
+
+function onConsumedPendingExperimentPlan() {
+  pendingOpenExperimentPlanId.value = null
 }
 
 const running = ref(false)
@@ -1419,7 +1433,7 @@ async function runExperimentPlanFromLiteratureReview(opts?: { skipLitReviewDoneC
       persistExperimentPlanFlags()
       recordModuleOperationLog('experiment-planning', '从文献综述续跑 · 生成实验计划')
       ElMessage.success(
-        `「实验规划」已生成（演示）· 论文「${currentManuscript.value?.title ?? '未命名'}」`,
+        `「实验方案」已生成（演示）· 论文「${currentManuscript.value?.title ?? '未命名'}」`,
       )
     }
   } finally {
@@ -2175,7 +2189,7 @@ watch(
 
         <div v-else-if="currentTopicRun.status === 'completed'" class="paper-flow-done">
           产出已写入当前论文（入库语料、候选 idea、新颖性结论 · 演示）。下一步请点顶栏
-          <strong>「生成文献综述」</strong>；实验方案请在「实验规划」模块单独制定。
+          <strong>「生成文献综述」</strong>；实验方案请在「实验方案」模块查看或生成。
         </div>
       </section>
       </template>
@@ -2213,6 +2227,9 @@ watch(
         :module-id="activeModule"
         :manuscript-id="activeManuscriptId"
         :manuscript-title="currentManuscript?.title ?? '未命名'"
+        :pending-open-experiment-plan-id="pendingOpenExperimentPlanId"
+        @navigate-module="onNavigateModule"
+        @consumed-pending-experiment-plan="onConsumedPendingExperimentPlan"
       />
       </div>
     </main>

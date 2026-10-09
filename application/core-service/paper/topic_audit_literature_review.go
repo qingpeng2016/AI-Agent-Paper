@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -269,10 +270,32 @@ func (s *TopicDiscoveryRunService) manuscriptIDForRun(
 }
 
 func strFromAny(v any) string {
+	if v == nil {
+		return ""
+	}
 	switch t := v.(type) {
 	case string:
 		return strings.TrimSpace(t)
+	case float64:
+		if t == float64(int64(t)) {
+			return strconv.FormatInt(int64(t), 10)
+		}
+		return strconv.FormatFloat(t, 'f', -1, 64)
+	case float32:
+		return strconv.FormatInt(int64(t), 10)
+	case int:
+		return strconv.Itoa(t)
+	case int64:
+		return strconv.FormatInt(t, 10)
+	case int32:
+		return strconv.FormatInt(int64(t), 10)
+	case uint64:
+		return strconv.FormatUint(t, 10)
+	case uint:
+		return strconv.FormatUint(uint64(t), 10)
+	case json.Number:
+		return strings.TrimSpace(t.String())
 	default:
-		return ""
+		return strings.TrimSpace(fmt.Sprint(v))
 	}
 }

@@ -45,3 +45,50 @@ func (r *PaperOutputExperimentPlanImpl) Create(ctx context.Context, row *entity.
 		return tx.Create(row).Error
 	})
 }
+
+func (r *PaperOutputExperimentPlanImpl) ListByManuscript(
+	ctx context.Context,
+	manuscriptID uint64,
+) ([]entity.PaperOutputExperimentPlan, error) {
+	var rows []entity.PaperOutputExperimentPlan
+	err := r.db.WithContext(ctx).
+		Where("manuscript_id = ? AND status <> ?", manuscriptID, "deleted").
+		Order("created_at DESC, id DESC").
+		Find(&rows).Error
+	return rows, err
+}
+
+func (r *PaperOutputExperimentPlanImpl) GetByIDForUser(
+	ctx context.Context,
+	id, manuscriptID uint64,
+	userID uint,
+) (*entity.PaperOutputExperimentPlan, error) {
+	var row entity.PaperOutputExperimentPlan
+	err := r.db.WithContext(ctx).
+		Where("id = ? AND manuscript_id = ? AND user_id = ?", id, manuscriptID, userID).
+		First(&row).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *PaperOutputExperimentPlanImpl) GetByIDForManuscript(
+	ctx context.Context,
+	id, manuscriptID uint64,
+) (*entity.PaperOutputExperimentPlan, error) {
+	var row entity.PaperOutputExperimentPlan
+	err := r.db.WithContext(ctx).
+		Where("id = ? AND manuscript_id = ?", id, manuscriptID).
+		First(&row).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &row, nil
+}

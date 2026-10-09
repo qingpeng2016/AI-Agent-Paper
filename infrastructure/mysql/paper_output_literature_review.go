@@ -221,3 +221,23 @@ func (r *PaperOutputLiteratureReviewImpl) FailExperimentPlanGeneration(
 	}
 	return res.RowsAffected > 0, nil
 }
+
+func (r *PaperOutputLiteratureReviewImpl) GetIDByExperimentPlanID(
+	ctx context.Context,
+	planID, manuscriptID uint64,
+) (uint64, error) {
+	var id uint64
+	err := r.db.WithContext(ctx).
+		Model(&entity.PaperOutputLiteratureReview{}).
+		Select("id").
+		Where(
+			"experiment_plan_id = ? AND manuscript_id = ? AND status <> ?",
+			planID, manuscriptID, "deleted",
+		).
+		Limit(1).
+		Scan(&id).Error
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
+}
