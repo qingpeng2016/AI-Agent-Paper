@@ -7,7 +7,6 @@ import {
   softDeleteLiteratureReview,
   type PaperLiteratureReviewItem,
 } from '@/api/literatureReviews'
-import { paperConfirm } from '@/utils/paperDialog'
 import {
   DEMO_AUTO_REVIEW,
   DEMO_EXPERIMENT_PLAN,
@@ -71,7 +70,8 @@ const resultVisible = ref<Partial<Record<PaperModuleId, boolean>>>({})
 const litReviewItems = ref<PaperLiteratureReviewItem[]>([])
 const litReviewsLoading = ref(false)
 const litReviewViewItem = ref<PaperLiteratureReviewItem | null>(null)
-const litReviewDeletingId = ref('')
+const litReviewDeletePending = ref<PaperLiteratureReviewItem | null>(null)
+const litReviewDeleteSubmitting = ref(false)
 
 const LIT_STRUCTURE_LABEL: Record<string, string> = {
   thematic: '按主题',
@@ -189,28 +189,31 @@ function closeLitReviewView() {
   litReviewViewItem.value = null
 }
 
-async function confirmDeleteLitReview(item: PaperLiteratureReviewItem) {
+function openDeleteLitReviewConfirm(item: PaperLiteratureReviewItem) {
+  litReviewDeletePending.value = item
+}
+
+function closeDeleteLitReviewConfirm() {
+  if (litReviewDeleteSubmitting.value) return
+  litReviewDeletePending.value = null
+}
+
+async function submitDeleteLitReviewConfirm() {
+  const item = litReviewDeletePending.value
   const ms = manuscriptId.value
-  if (!ms) return
-  try {
-    await paperConfirm('删除后列表将不再展示该条记录（数据仍保留，状态为 deleted）。', '删除文献综述', {
-      confirmButtonText: '删除',
-      variant: 'danger',
-    })
-  } catch {
-    return
-  }
-  litReviewDeletingId.value = item.id
+  if (!item || !ms) return
+  litReviewDeleteSubmitting.value = true
   try {
     await softDeleteLiteratureReview(ms, item.id)
     ElMessage.success('已删除')
+    litReviewDeletePending.value = null
     if (litReviewViewItem.value?.id === item.id) closeLitReviewView()
     await reloadLiteratureReviews()
   } catch (e) {
     const msg = e instanceof Error ? e.message : '删除失败'
     ElMessage.error(msg)
   } finally {
-    litReviewDeletingId.value = ''
+    litReviewDeleteSubmitting.value = false
   }
 }
 
@@ -271,7 +274,37 @@ defineExpose({ runModule, reloadLiteratureReviews })
             <th>版本</th>
             <th>创建时间</th>
             <th>状态</th>
-            <th class="wf-lit-col-actions">操作</th>
+            <th class="wf-lit-col-actions">
+              <div class="wf-lit-actions">
+                <span class="wf-lit-head-slot">
+                  <button
+                    type="button"
+                    tabindex="-1"
+                    aria-hidden="true"
+                    class="paper-btn-primary paper-btn--compact wf-lit-width-ruler"
+                  >
+                    查看
+                  </button>
+                  <span class="wf-lit-col-head-label">操作</span>
+                </span>
+                <button
+                  type="button"
+                  tabindex="-1"
+                  aria-hidden="true"
+                  class="paper-btn-primary paper-btn--compact wf-lit-width-ruler"
+                >
+                  生成实验方案
+                </button>
+                <button
+                  type="button"
+                  tabindex="-1"
+                  aria-hidden="true"
+                  class="paper-btn-danger paper-btn--compact wf-lit-width-ruler"
+                >
+                  删除
+                </button>
+              </div>
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -282,23 +315,26 @@ defineExpose({ runModule, reloadLiteratureReviews })
             <td>{{ formatLiteratureReviewStatus(item.status) }}</td>
             <td class="wf-lit-col-actions">
               <div class="wf-lit-actions">
-                <button type="button" class="wf-lit-action" @click="openLitReviewView(item)">
+                <button
+                  type="button"
+                  class="paper-btn-primary paper-btn--compact"
+                  @click="openLitReviewView(item)"
+                >
                   查看
                 </button>
                 <button
                   type="button"
-                  class="wf-lit-action"
+                  class="paper-btn-primary paper-btn--compact"
                   @click="onGenerateExperimentPlanFromRow"
                 >
                   生成实验方案
                 </button>
                 <button
                   type="button"
-                  class="wf-lit-action wf-lit-action--danger"
-                  :disabled="litReviewDeletingId === item.id"
-                  @click="confirmDeleteLitReview(item)"
+                  class="paper-btn-danger paper-btn--compact"
+                  @click="openDeleteLitReviewConfirm(item)"
                 >
-                  {{ litReviewDeletingId === item.id ? '删除中…' : '删除' }}
+                  删除
                 </button>
               </div>
             </td>
@@ -306,6 +342,58 @@ defineExpose({ runModule, reloadLiteratureReviews })
         </tbody>
       </table>
     </section>
+
+    <Teleport to="body">
+      <div
+        v-if="litReviewDeletePending"
+        class="paper-modal-overlay wf-lit-delete-overlay"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="wf-lit-delete-title"
+        @keydown.escape="closeDeleteLitReviewConfirm"
+      >
+        <div
+          class="paper-message-box paper-message-box--danger paper-modal-panel wf-lit-delete-panel"
+          @click.stop
+        >
+          <header class="paper-modal-header">
+            <h2 id="wf-lit-delete-title" class="paper-modal-title">删除文献综述</h2>
+            <button
+              type="button"
+              class="paper-modal-close"
+              aria-label="关闭"
+              :disabled="litReviewDeleteSubmitting"
+              @click="closeDeleteLitReviewConfirm"
+            >
+              ×
+            </button>
+          </header>
+          <div class="paper-modal-body">
+            <p class="wf-lit-delete-lead">
+              确定删除「{{ litReviewRowTitle(litReviewDeletePending) }}」？
+            </p>
+          </div>
+          <footer class="paper-message-box__btns">
+            <button
+              type="button"
+              class="paper-btn-danger wf-lit-delete-dialog-btn"
+              :disabled="litReviewDeleteSubmitting"
+              @click="submitDeleteLitReviewConfirm"
+            >
+              {{ litReviewDeleteSubmitting ? '删除中…' : '删除' }}
+            </button>
+            <button
+              type="button"
+              class="paper-btn-primary wf-lit-delete-dialog-btn"
+              :disabled="litReviewDeleteSubmitting"
+              @click="closeDeleteLitReviewConfirm"
+            >
+              取消
+            </button>
+          </footer>
+        </div>
+      </div>
+    </Teleport>
 
     <Teleport to="body">
       <div
@@ -345,7 +433,7 @@ defineExpose({ runModule, reloadLiteratureReviews })
             <p v-else class="wf-artifact-empty">暂无正文（content_medium 为空）</p>
           </div>
           <footer class="paper-message-box__btns wf-lit-view-btns">
-            <el-button type="primary" @click="closeLitReviewView">关闭</el-button>
+            <button type="button" class="paper-btn-primary" @click="closeLitReviewView">关闭</button>
           </footer>
         </div>
       </div>
@@ -764,46 +852,63 @@ defineExpose({ runModule, reloadLiteratureReviews })
 }
 
 .wf-lit-col-actions {
-  width: 240px;
-  white-space: nowrap;
+  min-width: 280px;
 }
 
 .wf-lit-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+  justify-content: flex-end;
 }
 
-.wf-lit-action {
-  padding: 4px 0;
+.wf-lit-head-slot {
+  position: relative;
+  display: inline-flex;
+}
+
+.wf-lit-width-ruler {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.wf-lit-col-head-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
   font-size: 13px;
-  font-weight: 600;
-  color: #6366f1;
-  cursor: pointer;
-  background: none;
-  border: none;
+  font-weight: 700;
+  color: #64748b;
+  pointer-events: none;
 }
 
-.wf-lit-action:hover:not(:disabled) {
-  color: #4f46e5;
-  text-decoration: underline;
-}
-
-.wf-lit-action--danger {
-  color: #dc2626;
-}
-
-.wf-lit-action--danger:hover:not(:disabled) {
-  color: #b91c1c;
-}
-
-.wf-lit-action:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
+.wf-lit-delete-overlay,
 .wf-lit-view-overlay {
   z-index: 3200;
+}
+
+.wf-lit-delete-panel {
+  width: min(420px, calc(100vw - 32px));
+}
+
+.wf-lit-delete-panel .paper-message-box__btns {
+  flex-direction: row-reverse;
+  justify-content: flex-start;
+}
+
+.wf-lit-delete-panel .paper-message-box__btns .wf-lit-delete-dialog-btn {
+  min-width: 88px;
+  box-sizing: border-box;
+}
+
+.wf-lit-delete-lead {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--atm-text, #1e1b4b);
+  line-height: 1.5;
 }
 
 .wf-lit-view-panel {
@@ -832,7 +937,8 @@ defineExpose({ runModule, reloadLiteratureReviews })
 }
 
 .wf-lit-view-btns {
-  justify-content: flex-end;
+  flex-direction: row-reverse;
+  justify-content: flex-start;
 }
 
 .wf-lit-meta {

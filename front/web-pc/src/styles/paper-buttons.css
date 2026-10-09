@@ -1,0 +1,82 @@
+/* 论文工作台统一按钮（选题检查点、文献综述表格操作等） */
+
+.paper-btn-primary {
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--atm-gradient, linear-gradient(135deg, #7c3aed, #6366f1));
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.paper-btn-primary:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.paper-btn-primary:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.paper-btn-secondary {
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #4338ca;
+  background: var(--atm-primary-light, #ede9fe);
+  border: 1px solid #c4b5fd;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.paper-btn-secondary:hover:not(:disabled) {
+  color: #3730a3;
+  border-color: #a78bfa;
+  background: #e0e7ff;
+}
+
+.paper-btn-secondary:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.paper-btn--compact {
+  padding: 6px 12px;
+  font-size: 13px;
+  border-radius: 8px;
+}
+
+.paper-btn-secondary.paper-btn--danger {
+  color: #b91c1c;
+  background: #fee2e2;
+  border-color: #fecaca;
+}
+
+.paper-btn-secondary.paper-btn--danger:hover:not(:disabled) {
+  color: #991b1b;
+  border-color: #f87171;
+  background: #fecaca;
+}
+
+.paper-btn-danger {
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(220, 38, 38, 0.28);
+}
+
+.paper-btn-danger:hover:not(:disabled) {
+  filter: brightness(1.05);
+}
+
+.paper-btn-danger:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}

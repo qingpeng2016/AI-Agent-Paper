@@ -2919,9 +2919,9 @@ watch(
   padding: 10px 18px;
   font-size: 14px;
   font-weight: 600;
-  color: var(--atm-text, #1e1b4b);
-  background: #fff;
-  border: 1px solid #e2e8f0;
+  color: #4338ca;
+  background: var(--atm-primary-light, #ede9fe);
+  border: 1px solid #c4b5fd;
   border-radius: 10px;
   cursor: pointer;
 }

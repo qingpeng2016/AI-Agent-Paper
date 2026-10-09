@@ -9,6 +9,7 @@ import { installAuthRouteGuard } from './bootstrap/routeGuards'
 import './styles/global.css'
 import './styles/theme.css'
 import './styles/paper-message-box.css'
+import './styles/paper-buttons.css'
 import './styles/auth-form.css'
 
 if (typeof history !== 'undefined' && 'scrollRestoration' in history) {

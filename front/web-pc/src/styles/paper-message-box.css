@@ -308,3 +308,15 @@
   vertical-align: middle;
   transform: translateY(-1px);
 }
+
+.paper-message-box--danger .paper-modal-title::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: #dc2626;
+  vertical-align: middle;
+  transform: translateY(-1px);
+}
