@@ -796,7 +796,7 @@ INSERT INTO `paper_llm_model_config` (
 ) VALUES (
   'Claude Sonnet（平台默认）',
   'anthropic',
-  'claude-sonnet-4-20250514',
+  'claude-sonnet-5-5',
   'https://api.anthropic.com',
   'PASTE_YOUR_ANTHROPIC_API_KEY_HERE',
   120000,
