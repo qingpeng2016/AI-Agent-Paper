@@ -30,3 +30,15 @@ func (r *PaperRefLiteratureSourceImpl) FindActiveByCode(ctx context.Context, cod
 	}
 	return &row, nil
 }
+
+func (r *PaperRefLiteratureSourceImpl) ListActiveOrdered(ctx context.Context) ([]entity.PaperRefLiteratureSource, error) {
+	var rows []entity.PaperRefLiteratureSource
+	err := r.db.WithContext(ctx).
+		Where("status = ?", "active").
+		Order("priority ASC, id ASC").
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	return rows, nil
+}

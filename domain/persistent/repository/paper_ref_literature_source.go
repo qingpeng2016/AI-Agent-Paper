@@ -8,4 +8,5 @@ import (
 
 type PaperRefLiteratureSourceRepo interface {
 	FindActiveByCode(ctx context.Context, code string) (*entity.PaperRefLiteratureSource, error)
+	ListActiveOrdered(ctx context.Context) ([]entity.PaperRefLiteratureSource, error)
 }

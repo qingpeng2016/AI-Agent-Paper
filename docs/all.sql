@@ -283,11 +283,14 @@ CREATE TABLE IF NOT EXISTS `paper_ref_literature_source` (
   `config_schema`   JSON         DEFAULT NULL COMMENT '连接参数 JSON Schema（Key 名、必填项）',
   `default_config`  JSON         DEFAULT NULL COMMENT '默认非密钥配置',
   `rate_limit_hint` VARCHAR(256) DEFAULT NULL COMMENT '限流说明',
+  `priority`        INT          NOT NULL DEFAULT 100 COMMENT '检索与 UI 展示顺序，越小越优先',
+  `default_selected` TINYINT(1)  NOT NULL DEFAULT 0 COMMENT '选题表单默认勾选',
   `status`          VARCHAR(16)  NOT NULL DEFAULT 'active' COMMENT 'active|disabled',
   `created_at`      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at`      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_paper_ref_literature_source_code` (`code`)
+  UNIQUE KEY `uk_paper_ref_literature_source_code` (`code`),
+  KEY `idx_paper_ref_literature_source_active_priority` (`status`, `priority`, `id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文献/API 数据源';
 
 CREATE TABLE IF NOT EXISTS `paper_ref_execution_intensity` (
@@ -754,20 +757,24 @@ SELECT 'ml_top3', 'NeurIPS/ICLR/ICML', 'conference', d.id,
 FROM `paper_ref_discipline` d WHERE d.code = 'cs_ai' LIMIT 1
 ON DUPLICATE KEY UPDATE `name` = VALUES(`name`);
 
-INSERT INTO `paper_ref_literature_source` (`code`, `name`, `api_kind`, `base_url`, `auth_type`, `default_config`, `config_schema`) VALUES
-  ('arxiv', 'arXiv', 'rest', 'https://export.arxiv.org/api/query', 'none', NULL, NULL),
+INSERT INTO `paper_ref_literature_source` (`code`, `name`, `api_kind`, `base_url`, `auth_type`, `default_config`, `config_schema`, `priority`, `default_selected`) VALUES
+  ('arxiv', 'arXiv', 'rest', 'https://export.arxiv.org/api/query', 'none', NULL, NULL, 1, 1),
   ('openalex', 'OpenAlex', 'rest', 'https://api.openalex.org/works', 'none',
    JSON_OBJECT('mailto', ''),
-   JSON_OBJECT('type', 'object', 'properties', JSON_OBJECT('mailto', JSON_OBJECT('type', 'string', 'description', 'User-Agent 礼貌池')))),
+   JSON_OBJECT('type', 'object', 'properties', JSON_OBJECT('mailto', JSON_OBJECT('type', 'string', 'description', 'User-Agent 礼貌池'))), 2, 1),
   ('semantic_scholar', 'Semantic Scholar', 'rest', 'https://api.semanticscholar.org/graph/v1/paper/search', 'api_key',
    NULL,
-   JSON_OBJECT('type', 'object', 'properties', JSON_OBJECT('api_key', JSON_OBJECT('type', 'string', 'description', 'Header x-api-key；可选'))))
+   JSON_OBJECT('type', 'object', 'properties', JSON_OBJECT('api_key', JSON_OBJECT('type', 'string', 'description', 'Header x-api-key；可选'))), 3, 1),
+  ('crossref', 'Crossref', 'rest', 'https://api.crossref.org/works', 'none', NULL, NULL, 4, 0),
+  ('pubmed', 'PubMed', 'rest', 'https://eutils.ncbi.nlm.nih.gov/entrez/eutils', 'none', NULL, NULL, 5, 0)
 ON DUPLICATE KEY UPDATE
   `name` = VALUES(`name`),
   `base_url` = VALUES(`base_url`),
   `auth_type` = VALUES(`auth_type`),
   `default_config` = VALUES(`default_config`),
-  `config_schema` = VALUES(`config_schema`);
+  `config_schema` = VALUES(`config_schema`),
+  `priority` = VALUES(`priority`),
+  `default_selected` = VALUES(`default_selected`);
 
 -- ---------------------------------------------------------------------------
 -- 11. 种子 — LLM（model 首次插入后请 UPDATE api_key；重复跑请跳过 11.1 或自行去重）

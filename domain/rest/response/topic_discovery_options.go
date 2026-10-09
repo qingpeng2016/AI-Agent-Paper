@@ -1,9 +1,17 @@
 package response
 
 type TopicDiscoveryFormOptions struct {
-	Disciplines      []TopicDiscoveryDisciplineOption      `json:"disciplines"`
-	ExecutionIntents []TopicDiscoveryExecutionIntensityOption `json:"execution_intensities"`
-	AuditLevels      []TopicDiscoveryAuditLevelOption      `json:"audit_levels"`
+	Disciplines       []TopicDiscoveryDisciplineOption           `json:"disciplines"`
+	ExecutionIntents  []TopicDiscoveryExecutionIntensityOption   `json:"execution_intensities"`
+	AuditLevels       []TopicDiscoveryAuditLevelOption           `json:"audit_levels"`
+	LiteratureSources []TopicDiscoveryLiteratureSourceOption     `json:"literature_sources"`
+}
+
+type TopicDiscoveryLiteratureSourceOption struct {
+	Code            string `json:"code"`
+	Label           string `json:"label"`
+	Priority        int    `json:"priority"`
+	DefaultSelected bool   `json:"default_selected"`
 }
 
 type TopicDiscoveryDisciplineOption struct {

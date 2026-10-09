@@ -15,8 +15,10 @@ type PaperRefLiteratureSource struct {
 	AuthType       string         `gorm:"column:auth_type;size:32;not null;default:none"`
 	ConfigSchema   datatypes.JSON `gorm:"column:config_schema"`
 	DefaultConfig  datatypes.JSON `gorm:"column:default_config"`
-	RateLimitHint  *string        `gorm:"column:rate_limit_hint;size:256"`
-	Status         string         `gorm:"column:status;size:16;not null;default:active"`
+	RateLimitHint   *string        `gorm:"column:rate_limit_hint;size:256"`
+	Priority        int            `gorm:"column:priority;not null;default:100"`
+	DefaultSelected bool           `gorm:"column:default_selected;not null;default:0"`
+	Status          string         `gorm:"column:status;size:16;not null;default:active"`
 	CreatedAt      time.Time      `gorm:"column:created_at"`
 	UpdatedAt      time.Time      `gorm:"column:updated_at"`
 }

@@ -63,9 +63,10 @@ func DownloadLiteraturePDF(ctx context.Context, pdfURL, absPath string) error {
 
 // LiteratureDownloadItem extra.literature_downloads 单项。
 type LiteratureDownloadItem struct {
-	ExternalKey string `json:"external_key"`
-	PdfURL      string `json:"pdf_url"`
-	LocalPath   string `json:"local_path"`
+	ExternalKey   string `json:"external_key"`
+	PdfURL        string `json:"pdf_url"`
+	LocalPath     string `json:"local_path"`
+	DownloadError string `json:"download_error,omitempty"`
 }
 
 // ParseLiteratureDownloads 从 step.extra 解析 literature_downloads。
@@ -113,4 +114,40 @@ func LiteratureDownloadsReady(items []LiteratureDownloadItem) bool {
 		}
 	}
 	return true
+}
+
+// LiteratureDownloadFailureReason 汇总未就绪原因；空表示已全部落盘或无需下载。
+func LiteratureDownloadFailureReason(items []LiteratureDownloadItem) string {
+	var parts []string
+	for _, it := range items {
+		pdfURL := strings.TrimSpace(it.PdfURL)
+		if pdfURL == "" {
+			continue
+		}
+		rel := strings.TrimSpace(it.LocalPath)
+		if rel == "" {
+			parts = append(parts, it.ExternalKey+": 缺少 local_path")
+			continue
+		}
+		abs := LiteratureLocalAbsPath(rel)
+		st, err := os.Stat(abs)
+		if err != nil || st.Size() == 0 {
+			msg := strings.TrimSpace(it.DownloadError)
+			if msg == "" {
+				msg = "PDF 未落盘"
+			}
+			parts = append(parts, it.ExternalKey+": "+msg)
+		}
+	}
+	return strings.Join(parts, "; ")
+}
+
+// LiteratureDownloadsNeedWork 是否存在需要 PDF 的条目。
+func LiteratureDownloadsNeedWork(items []LiteratureDownloadItem) bool {
+	for _, it := range items {
+		if strings.TrimSpace(it.PdfURL) != "" {
+			return true
+		}
+	}
+	return false
 }

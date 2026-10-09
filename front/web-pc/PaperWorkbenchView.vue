@@ -21,9 +21,7 @@ import {
   formatTopicDirectionText,
   parseTopicKeywords,
   DEMO_PAPER_MANUSCRIPTS,
-  LITERATURE_SOURCE_OPTIONS,
   PAPER_MODULE_GROUPS,
-  getLiteratureSourceLabel,
   appendOperationLog,
   TOPIC_DISCOVERY_FLOW_STEPS,
   getPaperModuleMeta,
@@ -187,6 +185,9 @@ const {
   auditOptions,
   ready: topicFormOptionsReady,
   applyCatalogIntensityAuditDefaults,
+  literatureSourceOptions,
+  literatureSourceLabel,
+  applyDefaultLiteratureSourceCodes,
 } = useTopicDiscoveryFormOptions()
 
 const envPreferenceFromStorage = ref(false)
@@ -213,8 +214,10 @@ function loadEnvFromStorage() {
 watch(topicFormOptionsReady, (ready) => {
   if (!ready || envPreferenceFromStorage.value) return
   applyCatalogIntensityAuditDefaults(envPreference)
+  applyDefaultLiteratureSourceCodes(envPreference)
   topicForm.intensity = envPreference.intensity
   topicForm.auditLevel = envPreference.auditLevel
+  topicForm.sourceCodes = [...envPreference.literatureSourceCodes]
 })
 
 function loadLitReviewFlagsFromStorage() {
@@ -505,7 +508,7 @@ const topicDiscoveryArtifact = computed((): TopicDiscoveryArtifactSnapshot => {
   const novelty = run.steps.find((s) => s.stageCode === 'novelty')
   const corpusReady = retrieve?.status === 'completed'
   const runCompleted = run.status === 'completed'
-  const sourceLabels = topicForm.sourceCodes.map((c) => getLiteratureSourceLabel(c))
+  const sourceLabels = topicForm.sourceCodes.map((c) => literatureSourceLabel(c))
   const direction =
     formatTopicDirectionText(topicForm).trim() ||
     (corpusReady ? '（本次 run 未保留方向文案 · 演示）' : '（尚未填写研究方向）')
@@ -823,6 +826,7 @@ async function hydrateTopicRunFromServer(msId: string) {
     applyStoredTopicRunInputToForm(topicForm, data)
     topicLastRunByMs.value = { ...topicLastRunByMs.value, [msId]: data }
     persistTopicRun(msId, topicRunFromApi(data))
+    requestScrollToTopicFlowIfNeeded()
   } catch {
     /* 未登录或无 run 时忽略 */
   }
@@ -880,7 +884,7 @@ async function scrollToTopicFlowPanel() {
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
   const panel = topicFlowPanelRef.value
   const scroller = paperMainRef.value
-  if (!panel) return
+  if (!panel) return false
   if (scroller) {
     const top =
       panel.getBoundingClientRect().top -
@@ -888,25 +892,46 @@ async function scrollToTopicFlowPanel() {
       scroller.scrollTop -
       12
     scroller.scrollTo({ top: Math.max(0, top), behavior: 'smooth' })
-    return
+    return true
   }
   panel.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  return true
 }
 
+let scrollToTopicFlowSeq = 0
+
+/** 等模块 DOM（含 v-else 解除 loading）挂载后再滚，避免刷新时 hydrate 先于 form-options 完成 */
 async function scrollToTopicFlowPanelWhenReady() {
-  await scrollToTopicFlowPanel()
-  if (topicRunVisible.value && !topicFlowPanelRef.value) {
-    await nextTick()
-    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
-    await scrollToTopicFlowPanel()
+  const seq = ++scrollToTopicFlowSeq
+  const deadline = Date.now() + 4000
+  while (Date.now() < deadline) {
+    if (seq !== scrollToTopicFlowSeq) return
+    if (!isTopicDiscoveryModule.value || !topicRunVisible.value) return
+    if (moduleContentLoading.value) {
+      await new Promise<void>((r) => window.setTimeout(r, 50))
+      continue
+    }
+    if (await scrollToTopicFlowPanel()) return
+    await new Promise<void>((r) => window.setTimeout(r, 50))
   }
 }
 
-/** 刷新 hydrate 或切回选题模块后，有进行中的 run 则滚到「运行进度」 */
+function requestScrollToTopicFlowIfNeeded() {
+  if (!isTopicDiscoveryModule.value || !topicRunVisible.value) return
+  void scrollToTopicFlowPanelWhenReady()
+}
+
+/** 刷新 hydrate、切回选题模块、或 loading 结束且仍有 run 时滚到「运行进度」 */
 watch(
-  () => topicRunVisible.value,
-  (visible) => {
-    if (!visible) return
+  () =>
+    [
+      topicRunVisible.value,
+      moduleContentLoading.value,
+      activeModule.value,
+      moduleContentKey.value,
+    ] as const,
+  ([visible, loading, module]) => {
+    if (module !== 'topic-discovery' || !visible || loading) return
     void scrollToTopicFlowPanelWhenReady()
   },
   { flush: 'post' },
@@ -1357,7 +1382,7 @@ async function onPrimaryAction() {
           <span class="paper-label">文献来源（检索用）</span>
           <div class="paper-check-group">
             <label
-              v-for="src in LITERATURE_SOURCE_OPTIONS"
+              v-for="src in literatureSourceOptions"
               :key="src.code"
               class="paper-check paper-check--inline"
             >

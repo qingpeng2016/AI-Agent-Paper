@@ -443,33 +443,71 @@ func (s *TopicDiscoveryRunService) executeStage(ctx context.Context, userID uint
 	return s.steps.SaveStep(ctx, step)
 }
 
+func (s *TopicDiscoveryRunService) orderSourceCodesByPriority(ctx context.Context, selected []string) []string {
+	active, err := s.litSource.ListActiveOrdered(ctx)
+	if err != nil || len(active) == 0 {
+		return selected
+	}
+	sel := map[string]struct{}{}
+	for _, c := range selected {
+		c = strings.TrimSpace(c)
+		if c != "" {
+			sel[c] = struct{}{}
+		}
+	}
+	var ordered []string
+	for _, row := range active {
+		if _, ok := sel[row.Code]; ok {
+			ordered = append(ordered, row.Code)
+		}
+	}
+	seen := map[string]struct{}{}
+	for _, c := range ordered {
+		seen[c] = struct{}{}
+	}
+	for _, c := range selected {
+		c = strings.TrimSpace(c)
+		if c == "" {
+			continue
+		}
+		if _, ok := seen[c]; !ok {
+			ordered = append(ordered, c)
+		}
+	}
+	return ordered
+}
+
 func (s *TopicDiscoveryRunService) stageRetrieve(ctx context.Context, step *entity.PaperOutputTopicStep, input topicRunInput) error {
 	query := literatureSearchQueryFromInput(input)
-	perSource := input.MaxPapers / len(input.SourceCodes)
-	if perSource < 5 {
-		perSource = 5
-	}
-	if perSource > 50 {
-		perSource = 50
-	}
 
 	seen := map[string]struct{}{}
 	hits := make([]storedLiteratureHit, 0, input.MaxPapers)
-	for _, code := range input.SourceCodes {
+	for _, code := range s.orderSourceCodesByPriority(ctx, input.SourceCodes) {
+		if len(hits) >= input.MaxPapers {
+			break
+		}
 		code = strings.TrimSpace(code)
 		if code == "" {
 			continue
+		}
+		need := input.MaxPapers - len(hits)
+		if need <= 0 {
+			break
+		}
+		limit := need
+		if limit > 50 {
+			limit = 50
 		}
 		srcRow, _ := s.litSource.FindActiveByCode(ctx, code)
 		var searchResult *response.PaperLiteratureSearchResult
 		var searchErr error
 		switch code {
 		case sourceArxiv:
-			searchResult, searchErr = s.litSearch.SearchArxiv(ctx, query, perSource)
+			searchResult, searchErr = s.litSearch.SearchArxiv(ctx, query, limit)
 		case sourceOpenAlex:
-			searchResult, searchErr = s.litSearch.SearchOpenAlex(ctx, query, perSource)
+			searchResult, searchErr = s.litSearch.SearchOpenAlex(ctx, query, limit)
 		case sourceSemanticScholar:
-			searchResult, searchErr = s.litSearch.SearchSemanticScholar(ctx, query, perSource)
+			searchResult, searchErr = s.litSearch.SearchSemanticScholar(ctx, query, limit)
 		default:
 			continue
 		}

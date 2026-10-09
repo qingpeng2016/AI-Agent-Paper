@@ -23,6 +23,19 @@ export type TopicDiscoveryFormOptionsResponse = {
     audit_rounds: number
     is_default?: boolean
   }>
+  literature_sources?: Array<{
+    code: string
+    label: string
+    priority: number
+    default_selected: boolean
+  }>
+}
+
+export type LiteratureSourceOption = {
+  code: string
+  label: string
+  priority: number
+  defaultSelected: boolean
 }
 
 type ApiEnvelope<T> = { code: number; message?: string; data: T }
@@ -236,10 +249,18 @@ function pickDefaultCode(items: Array<{ code: string; is_default?: boolean }>): 
   return items.find((x) => x.is_default)?.code ?? items[0]?.code ?? ''
 }
 
+export function defaultLiteratureSourceCodesFromOptions(
+  sources: LiteratureSourceOption[],
+): string[] {
+  return sources.filter((s) => s.defaultSelected).map((s) => s.code)
+}
+
 export async function fetchTopicDiscoveryFormOptions(): Promise<{
   disciplineSelectOptions: PaperSelectOption[]
   intensityOptions: PaperSelectOption[]
   auditOptions: PaperSelectOption[]
+  literatureSources: LiteratureSourceOption[]
+  defaultLiteratureSourceCodes: string[]
   defaultIntensityCode: string
   defaultAuditLevelCode: string
 }> {
@@ -261,10 +282,21 @@ export async function fetchTopicDiscoveryFormOptions(): Promise<{
     throw new Error(body.message ?? 'form-options failed')
   }
   const d = body.data
+  const literatureSources = (d.literature_sources ?? [])
+    .slice()
+    .sort((a, b) => a.priority - b.priority || a.code.localeCompare(b.code))
+    .map((x) => ({
+      code: x.code,
+      label: x.label,
+      priority: x.priority,
+      defaultSelected: Boolean(x.default_selected),
+    }))
   return {
     disciplineSelectOptions: d.disciplines.map((x) => ({ value: x.code, label: x.label })),
     intensityOptions: d.execution_intensities.map((x) => ({ value: x.code, label: x.label })),
     auditOptions: d.audit_levels.map((x) => ({ value: x.code, label: x.label })),
+    literatureSources,
+    defaultLiteratureSourceCodes: defaultLiteratureSourceCodesFromOptions(literatureSources),
     defaultIntensityCode: pickDefaultCode(d.execution_intensities),
     defaultAuditLevelCode: pickDefaultCode(d.audit_levels),
   }

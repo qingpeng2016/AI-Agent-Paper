@@ -9,11 +9,15 @@ import (
 )
 
 type TopicDiscoveryOptionsService struct {
-	catalog repository.PaperRefCatalogRepo
+	catalog   repository.PaperRefCatalogRepo
+	litSource repository.PaperRefLiteratureSourceRepo
 }
 
-func NewTopicDiscoveryOptionsService(catalog repository.PaperRefCatalogRepo) *TopicDiscoveryOptionsService {
-	return &TopicDiscoveryOptionsService{catalog: catalog}
+func NewTopicDiscoveryOptionsService(
+	catalog repository.PaperRefCatalogRepo,
+	litSource repository.PaperRefLiteratureSourceRepo,
+) *TopicDiscoveryOptionsService {
+	return &TopicDiscoveryOptionsService{catalog: catalog, litSource: litSource}
 }
 
 func (s *TopicDiscoveryOptionsService) GetFormOptions(ctx context.Context) (*response.TopicDiscoveryFormOptions, error) {
@@ -75,6 +79,20 @@ func (s *TopicDiscoveryOptionsService) GetFormOptions(ctx context.Context) (*res
 			KillArgumentStrength: a.KillArgumentStrength,
 			AuditRounds:          a.AuditRounds,
 			IsDefault:            a.IsDefault,
+		})
+	}
+
+	sources, err := s.litSource.ListActiveOrdered(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out.LiteratureSources = make([]response.TopicDiscoveryLiteratureSourceOption, 0, len(sources))
+	for _, src := range sources {
+		out.LiteratureSources = append(out.LiteratureSources, response.TopicDiscoveryLiteratureSourceOption{
+			Code:            src.Code,
+			Label:           src.Name,
+			Priority:        src.Priority,
+			DefaultSelected: src.DefaultSelected,
 		})
 	}
 

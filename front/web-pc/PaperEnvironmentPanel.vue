@@ -5,7 +5,6 @@ import PaperSelect from './PaperSelect.vue'
 import { useTopicDiscoveryFormOptions } from '@/composables/useTopicDiscoveryFormOptions'
 import {
   ENV_PREFERENCE_STORAGE_KEY,
-  LITERATURE_SOURCE_OPTIONS,
   type EnvironmentPreferenceForm,
 } from './types'
 
@@ -28,6 +27,7 @@ const {
   disciplineSelectOptions,
   intensityOptions,
   auditOptions,
+  literatureSourceOptions,
 } = useTopicDiscoveryFormOptions()
 
 function isLiteratureSourceChecked(code: string) {
@@ -96,7 +96,7 @@ async function saveEnvironment() {
       <div class="pc-field pc-field--block">
         <span class="pc-label">默认文献来源</span>
         <div class="pc-check-group">
-          <label v-for="src in LITERATURE_SOURCE_OPTIONS" :key="src.code" class="pc-check pc-check--inline">
+          <label v-for="src in literatureSourceOptions" :key="src.code" class="pc-check pc-check--inline">
             <input
               type="checkbox"
               :checked="isLiteratureSourceChecked(src.code)"
