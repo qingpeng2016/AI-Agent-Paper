@@ -496,40 +496,20 @@ func (s *TopicDiscoveryRunService) stageRetrieve(ctx context.Context, step *enti
 	}
 
 	result := map[string]any{"literature_hits": hits}
+	brief := fallbackLiteratureBrief(hits)
+	mergeLiteratureBriefIntoResult(result, brief)
 	step.Result = mustJSON(result)
-	step.Extra = mustJSON(map[string]any{
+	extra := map[string]any{
 		"hit_count":        len(hits),
 		"verified_count":   len(hits),
 		"search_query":     query,
 		"literature_links": links,
-	})
-
-	titles := make([]string, 0, min(12, len(hits)))
-	for i, h := range hits {
-		if i >= 12 {
-			break
-		}
-		if h.URL != "" {
-			titles = append(titles, fmt.Sprintf("- %s (%s) %s", h.Title, h.ExternalKey, h.URL))
-		} else {
-			titles = append(titles, fmt.Sprintf("- %s (%s)", h.Title, h.ExternalKey))
-		}
 	}
-	contextBlock := strings.Join(titles, "\n")
-	if contextBlock == "" {
-		contextBlock = "(no literature hits from configured sources)"
+	if b, e := json.Marshal(brief); e == nil {
+		extra["literature_brief"] = json.RawMessage(b)
 	}
-
-	summary, usage, err := s.callStageLLM(ctx, step, "retrieve", map[string]string{
-		"direction": input.Direction,
-		"venue":     input.Venue,
-	}, contextBlock+"\n\nSummarize coverage and gaps in concise Chinese.")
-	if err != nil {
-		step.SummaryText = ptrString(fmt.Sprintf("检索完成，共 %d 篇文献（模型摘要未生成）", len(hits)))
-		return nil
-	}
-	step.SummaryText = ptrString(summary)
-	appendUsageMeta(step, usage)
+	step.Extra = mustJSON(extra)
+	step.SummaryText = ptrString(fmt.Sprintf("检索完成，共 %d 篇文献", len(hits)))
 	return nil
 }
 
@@ -581,7 +561,6 @@ Use Chinese.`, input.Direction, ctxBlock)
 }
 
 func (s *TopicDiscoveryRunService) stageAudit(ctx context.Context, userID uint, runVersion int, step *entity.PaperOutputTopicStep, input topicRunInput) error {
-	ctxBlock, _ := s.stageContext(ctx, userID, runVersion)
 	rounds := input.AuditRounds
 	if rounds < 1 {
 		rounds = 1
@@ -590,14 +569,12 @@ func (s *TopicDiscoveryRunService) stageAudit(ctx context.Context, userID uint, 
 	var lastText string
 	var totalUsage LLMUsage
 	for r := 1; r <= rounds; r++ {
-		userMsg := fmt.Sprintf(`Audit round %d/%d for venue %s (audit level %s).
-
-Context:
-%s
-
-Return ONLY valid JSON: {"issues":[{"severity":"blocker|major|minor","claim":"","fix":""}],"summary":""}
-Use Chinese.`, r, rounds, input.Venue, input.AuditLevel, ctxBlock)
-		text, usage, err := s.callStageLLM(ctx, step, "audit", map[string]string{"direction": input.Direction}, userMsg)
+		userMsg := s.buildAuditUserExtra(ctx, userID, runVersion, input, r, rounds)
+		text, usage, err := s.callStageLLM(ctx, step, "audit", map[string]string{
+			"direction": compactDirectionForPrompt(input),
+			"keywords":  keywordsLine(input),
+			"venue":     input.Venue,
+		}, userMsg)
 		if err != nil {
 			return err
 		}

@@ -816,7 +816,7 @@ INSERT INTO `paper_llm_prompt_template` (`stage_code`, `stage_name`, `template_b
    'Stage: novelty check for {{direction}}. Compare each idea to ingested literature; flag overlap and suggest differentiation.',
    'active'),
   ('audit', '选题断言初审',
-   'Stage: topic audit. Review claims like a strict reviewer: unsupported claims, missing baselines, vague contributions. Output blocker/major/minor issues.',
+   '环节：选题审计。方向：{{direction}}。目标期刊：{{venue}}。以严格审稿人视角检查论断是否有文献支持、是否缺少基线/对照、贡献是否清晰；并评估 idea/新颖性是否偏题。输出 JSON 以用户消息为准。',
    'active')
 ON DUPLICATE KEY UPDATE
   `stage_name` = VALUES(`stage_name`),
