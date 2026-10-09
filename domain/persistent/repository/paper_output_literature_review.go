@@ -17,4 +17,28 @@ type PaperOutputLiteratureReviewRepo interface {
 		userID uint,
 		status string,
 	) (bool, error)
+	GetByIDForUser(
+		ctx context.Context,
+		id, manuscriptID uint64,
+		userID uint,
+	) (*entity.PaperOutputLiteratureReview, error)
+	ListByStatus(ctx context.Context, status string, limit int) ([]entity.PaperOutputLiteratureReview, error)
+	CompleteExperimentPlanLink(
+		ctx context.Context,
+		reviewID, manuscriptID uint64,
+		userID uint,
+		planID uint64,
+		metaJSON []byte,
+	) (bool, error)
+	FailExperimentPlanGeneration(
+		ctx context.Context,
+		reviewID, manuscriptID uint64,
+		userID uint,
+		metaJSON []byte,
+	) (bool, error)
+	TryBeginExperimentPlanGeneration(
+		ctx context.Context,
+		reviewID, manuscriptID uint64,
+		userID uint,
+	) (bool, error)
 }

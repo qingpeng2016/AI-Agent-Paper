@@ -1,9 +1,10 @@
 package response
 
 type PaperLiteratureReviewItemView struct {
-	ID            string `json:"id"`
-	Version       int    `json:"version"`
-	Status        string `json:"status"`
+	ID                         string `json:"id"`
+	Version                    int    `json:"version"`
+	Status                     string `json:"status"`
+	PaperOutputExperimentPlanID string `json:"paper_output_experiment_plan_id,omitempty"`
 	Structure     string `json:"structure,omitempty"`
 	Title         string `json:"title,omitempty"`
 	Summary       string `json:"summary,omitempty"`

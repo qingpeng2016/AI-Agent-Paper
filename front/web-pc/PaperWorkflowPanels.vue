@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { reactive, ref, toRefs, watch } from 'vue'
+import { onUnmounted, reactive, ref, toRefs, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   fetchLiteratureReviews,
   formatLiteratureReviewStatus,
+  generateExperimentPlanFromLiteratureReview,
+  isLiteratureReviewGeneratingExperimentPlan,
   softDeleteLiteratureReview,
   type PaperLiteratureReviewItem,
 } from '@/api/literatureReviews'
@@ -49,10 +51,6 @@ const props = withDefaults(
 )
 const { moduleId, manuscriptId, manuscriptTitle } = toRefs(props)
 
-const emit = defineEmits<{
-  generateExperimentPlan: []
-}>()
-
 const planForm = reactive<ExperimentPlanningForm>({ ...DEFAULT_EXPERIMENT_PLANNING })
 const reviewForm = reactive<AutoReviewForm>({ ...DEFAULT_AUTO_REVIEW })
 const writeForm = reactive<PaperWritingForm>({
@@ -72,6 +70,9 @@ const litReviewsLoading = ref(false)
 const litReviewViewItem = ref<PaperLiteratureReviewItem | null>(null)
 const litReviewDeletePending = ref<PaperLiteratureReviewItem | null>(null)
 const litReviewDeleteSubmitting = ref(false)
+const litReviewGeneratePending = ref<PaperLiteratureReviewItem | null>(null)
+const litReviewGenerateSubmitting = ref(false)
+let litReviewPollTimer: ReturnType<typeof setInterval> | null = null
 
 const LIT_STRUCTURE_LABEL: Record<string, string> = {
   thematic: '按主题',
@@ -99,7 +100,10 @@ async function reloadLiteratureReviews() {
     const msg = e instanceof Error ? e.message : '加载文献综述失败'
     ElMessage.error(msg)
   } finally {
-    if (seq === litReviewReloadSeq) litReviewsLoading.value = false
+    if (seq === litReviewReloadSeq) {
+      litReviewsLoading.value = false
+      syncLitReviewPollTimer()
+    }
   }
 }
 
@@ -116,6 +120,73 @@ watch(
   },
   { immediate: true },
 )
+
+function litReviewHasGeneratingExperimentPlan(): boolean {
+  return litReviewItems.value.some((it) => isLiteratureReviewGeneratingExperimentPlan(it.status))
+}
+
+function syncLitReviewPollTimer() {
+  if (moduleId.value !== 'literature-review') {
+    if (litReviewPollTimer) {
+      clearInterval(litReviewPollTimer)
+      litReviewPollTimer = null
+    }
+    return
+  }
+  if (litReviewHasGeneratingExperimentPlan()) {
+    if (!litReviewPollTimer) {
+      litReviewPollTimer = setInterval(() => {
+        void reloadLiteratureReviews()
+      }, 4000)
+    }
+  } else if (litReviewPollTimer) {
+    clearInterval(litReviewPollTimer)
+    litReviewPollTimer = null
+  }
+}
+
+watch(litReviewItems, () => syncLitReviewPollTimer(), { deep: true })
+watch(moduleId, () => syncLitReviewPollTimer())
+
+onUnmounted(() => {
+  if (litReviewPollTimer) {
+    clearInterval(litReviewPollTimer)
+    litReviewPollTimer = null
+  }
+})
+
+function isGenerateExperimentPlanDisabled(item: PaperLiteratureReviewItem): boolean {
+  return isLiteratureReviewGeneratingExperimentPlan(item.status)
+}
+
+function openGenerateExperimentPlanConfirm(item: PaperLiteratureReviewItem) {
+  if (isGenerateExperimentPlanDisabled(item)) return
+  litReviewGeneratePending.value = item
+}
+
+function closeGenerateExperimentPlanConfirm() {
+  if (litReviewGenerateSubmitting.value) return
+  litReviewGeneratePending.value = null
+}
+
+async function submitGenerateExperimentPlanConfirm() {
+  const item = litReviewGeneratePending.value
+  const ms = manuscriptId.value
+  if (!item || !ms) return
+  litReviewGenerateSubmitting.value = true
+  try {
+    await generateExperimentPlanFromLiteratureReview(ms, item.id)
+    ElMessage.success('已开始生成实验方案，请稍候')
+    litReviewGeneratePending.value = null
+    await reloadLiteratureReviews()
+    syncLitReviewPollTimer()
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : '提交失败'
+    ElMessage.error(msg)
+  } finally {
+    litReviewGenerateSubmitting.value = false
+  }
+}
 
 const intensityOptions = [
   { value: 'fast', label: '更快' },
@@ -215,10 +286,6 @@ async function submitDeleteLitReviewConfirm() {
   } finally {
     litReviewDeleteSubmitting.value = false
   }
-}
-
-function onGenerateExperimentPlanFromRow() {
-  emit('generateExperimentPlan')
 }
 
 async function runModule(id: PaperModuleId): Promise<boolean> {
@@ -325,7 +392,8 @@ defineExpose({ runModule, reloadLiteratureReviews })
                 <button
                   type="button"
                   class="paper-btn-primary paper-btn--compact"
-                  @click="onGenerateExperimentPlanFromRow"
+                  :disabled="isGenerateExperimentPlanDisabled(item)"
+                  @click="openGenerateExperimentPlanConfirm(item)"
                 >
                   生成实验方案
                 </button>
@@ -342,6 +410,58 @@ defineExpose({ runModule, reloadLiteratureReviews })
         </tbody>
       </table>
     </section>
+
+    <Teleport to="body">
+      <div
+        v-if="litReviewGeneratePending"
+        class="paper-modal-overlay wf-lit-generate-overlay"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="wf-lit-generate-title"
+        @keydown.escape="closeGenerateExperimentPlanConfirm"
+      >
+        <div
+          class="paper-message-box paper-message-box--default paper-modal-panel wf-lit-generate-panel"
+          @click.stop
+        >
+          <header class="paper-modal-header">
+            <h2 id="wf-lit-generate-title" class="paper-modal-title">生成实验方案</h2>
+            <button
+              type="button"
+              class="paper-modal-close"
+              aria-label="关闭"
+              :disabled="litReviewGenerateSubmitting"
+              @click="closeGenerateExperimentPlanConfirm"
+            >
+              ×
+            </button>
+          </header>
+          <div class="paper-modal-body">
+            <p class="wf-lit-delete-lead">
+              确定为「{{ litReviewRowTitle(litReviewGeneratePending) }}」生成实验方案？
+            </p>
+          </div>
+          <footer class="paper-message-box__btns">
+            <button
+              type="button"
+              class="paper-btn-primary wf-lit-delete-dialog-btn"
+              :disabled="litReviewGenerateSubmitting"
+              @click="submitGenerateExperimentPlanConfirm"
+            >
+              {{ litReviewGenerateSubmitting ? '提交中…' : '确定' }}
+            </button>
+            <button
+              type="button"
+              class="paper-btn-primary wf-lit-delete-dialog-btn"
+              :disabled="litReviewGenerateSubmitting"
+              @click="closeGenerateExperimentPlanConfirm"
+            >
+              取消
+            </button>
+          </footer>
+        </div>
+      </div>
+    </Teleport>
 
     <Teleport to="body">
       <div
@@ -885,8 +1005,13 @@ defineExpose({ runModule, reloadLiteratureReviews })
 }
 
 .wf-lit-delete-overlay,
+.wf-lit-generate-overlay,
 .wf-lit-view-overlay {
   z-index: 3200;
+}
+
+.wf-lit-generate-panel {
+  width: min(420px, calc(100vw - 32px));
 }
 
 .wf-lit-delete-panel {

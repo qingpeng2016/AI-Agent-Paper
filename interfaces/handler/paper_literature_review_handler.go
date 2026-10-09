@@ -10,11 +10,15 @@ import (
 )
 
 type PaperLiteratureReviewHandler struct {
-	svc *papersvc.LiteratureReviewService
+	svc      *papersvc.LiteratureReviewService
+	expPlans *papersvc.ExperimentPlanService
 }
 
-func NewPaperLiteratureReviewHandler(svc *papersvc.LiteratureReviewService) *PaperLiteratureReviewHandler {
-	return &PaperLiteratureReviewHandler{svc: svc}
+func NewPaperLiteratureReviewHandler(
+	svc *papersvc.LiteratureReviewService,
+	expPlans *papersvc.ExperimentPlanService,
+) *PaperLiteratureReviewHandler {
+	return &PaperLiteratureReviewHandler{svc: svc, expPlans: expPlans}
 }
 
 // GetLiteratureReviews GET /api/v1/paper/literature-reviews?manuscript_id=
@@ -59,4 +63,35 @@ func (h *PaperLiteratureReviewHandler) PostSoftDeleteLiteratureReview(c *gin.Con
 		return
 	}
 	response.ResponseSuccess(c, gin.H{"ok": true})
+}
+
+// PostGenerateExperimentPlan POST /api/v1/paper/literature-reviews/generate-experiment-plan
+func (h *PaperLiteratureReviewHandler) PostGenerateExperimentPlan(c *gin.Context) {
+	userID, ok := middleware.UserIDFromContext(c)
+	if !ok {
+		response.ResponseErr(c, errorx.ErrParamsError)
+		return
+	}
+	var body request.PaperLiteratureReviewGenerateExperimentPlanBody
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.ResponseErr(c, errorx.ErrParamsError)
+		return
+	}
+	if h.expPlans == nil {
+		response.ResponseErr(c, errorx.ErrParamsError.WithDetail("实验方案服务未配置"))
+		return
+	}
+	if err := h.expPlans.EnqueueGenerate(
+		c.Request.Context(),
+		userID,
+		body.ManuscriptID,
+		body.LiteratureReviewID,
+	); err != nil {
+		response.ResponseErr(c, err)
+		return
+	}
+	response.ResponseSuccess(c, gin.H{
+		"ok":     true,
+		"status": papersvc.LitReviewStatusGeneratingExperimentPlan,
+	})
 }

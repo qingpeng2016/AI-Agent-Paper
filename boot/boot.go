@@ -3,6 +3,7 @@ package boot
 import (
 	bot "github.com/qingpeng2016/ai-agent-paper/application/bot"
 	couponexpire "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/coupon_expire"
+	experimentplan "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/experiment_plan"
 	topicaudit "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/topic_audit"
 	topicgenerateideas "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/topic_generate_ideas"
 	topicliteraturedownload "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/topic_literature_download"
@@ -58,6 +59,7 @@ func BuildContainer() *dig.Container {
 	_ = c.Provide(papersvc.NewTopicDiscoveryRunService)
 	_ = c.Provide(papersvc.NewManuscriptService)
 	_ = c.Provide(papersvc.NewLiteratureReviewService)
+	_ = c.Provide(papersvc.NewExperimentPlanService)
 	_ = c.Provide(papersvc.NewLLMChatService)
 	_ = c.Provide(couponSvc.NewService)
 	_ = c.Provide(inviteRebateSvc.NewService)
@@ -70,6 +72,7 @@ func BuildContainer() *dig.Container {
 	_ = c.Provide(topicliteraturedownload.NewTopicLiteratureDownloadJob)
 	_ = c.Provide(topicgenerateideas.NewTopicGenerateIdeasJob)
 	_ = c.Provide(topicaudit.NewTopicAuditJob)
+	_ = c.Provide(experimentplan.NewExperimentPlanJob)
 	_ = c.Provide(bot.NewScheduler)
 	_ = c.Provide(bot.NewEntry)
 
@@ -92,6 +95,7 @@ func BuildContainer() *dig.Container {
 	_ = c.Provide(mysql.NewPaperManuscriptImpl)
 	_ = c.Provide(mysql.NewPaperOutputTopicStepImpl)
 	_ = c.Provide(mysql.NewPaperOutputLiteratureReviewImpl)
+	_ = c.Provide(mysql.NewPaperOutputExperimentPlanImpl)
 	_ = c.Provide(mysql.NewPaperLLMImpl)
 	_ = c.Provide(redis.NewClient)
 	_ = c.Provide(http.NewHTTPClient)

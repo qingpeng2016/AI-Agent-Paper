@@ -8,6 +8,7 @@ import (
 	"time"
 
 	couponexpire "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/coupon_expire"
+	experimentplan "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/experiment_plan"
 	topicaudit "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/topic_audit"
 	topicgenerateideas "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/topic_generate_ideas"
 	topicliteraturedownload "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/topic_literature_download"
@@ -30,6 +31,7 @@ type Scheduler struct {
 	topicLiteratureDownloadJob   *topicliteraturedownload.TopicLiteratureDownloadJob
 	topicGenerateIdeasJob        *topicgenerateideas.TopicGenerateIdeasJob
 	topicAuditJob                *topicaudit.TopicAuditJob
+	experimentPlanJob            *experimentplan.ExperimentPlanJob
 	ns                       *gocron.Scheduler
 	jobMap                   map[string]*gocron.Job
 	configMap                map[string]float64
@@ -45,6 +47,7 @@ func NewScheduler(
 	topicLiteratureDownloadJob *topicliteraturedownload.TopicLiteratureDownloadJob,
 	topicGenerateIdeasJob *topicgenerateideas.TopicGenerateIdeasJob,
 	topicAuditJob *topicaudit.TopicAuditJob,
+	experimentPlanJob *experimentplan.ExperimentPlanJob,
 ) *Scheduler {
 	return &Scheduler{
 		botScheduleConfigService:   botScheduleConfigService,
@@ -53,6 +56,7 @@ func NewScheduler(
 		topicLiteratureDownloadJob: topicLiteratureDownloadJob,
 		topicGenerateIdeasJob:      topicGenerateIdeasJob,
 		topicAuditJob:              topicAuditJob,
+		experimentPlanJob:          experimentPlanJob,
 		ns:                       gocron.NewScheduler(time.Local),
 		jobMap:                   make(map[string]*gocron.Job),
 		configMap:                make(map[string]float64),
@@ -252,6 +256,10 @@ func (s *Scheduler) getAIAgentPaperHandleFunc(taskName string) func() {
 	case topicaudit.TaskTopicAuditLLM:
 		return func() {
 			s.topicAuditJob.Run(context.Background())
+		}
+	case experimentplan.TaskExperimentPlanLLM:
+		return func() {
+			s.experimentPlanJob.Run(context.Background())
 		}
 	default:
 		return nil

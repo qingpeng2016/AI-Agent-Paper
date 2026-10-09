@@ -1401,12 +1401,6 @@ async function markLiteratureReviewDone(msId: string) {
   persistLitReviewFlags()
 }
 
-async function onGenerateExperimentPlanFromReviewRow() {
-  const msId = activeManuscriptId.value
-  if (msId) await markLiteratureReviewDone(msId)
-  await runExperimentPlanFromLiteratureReview({ skipLitReviewDoneCheck: true })
-}
-
 async function runExperimentPlanFromLiteratureReview(opts?: { skipLitReviewDoneCheck?: boolean }) {
   const msId = activeManuscriptId.value
   if (!msId) return
@@ -2219,7 +2213,6 @@ watch(
         :module-id="activeModule"
         :manuscript-id="activeManuscriptId"
         :manuscript-title="currentManuscript?.title ?? '未命名'"
-        @generate-experiment-plan="onGenerateExperimentPlanFromReviewRow"
       />
       </div>
     </main>

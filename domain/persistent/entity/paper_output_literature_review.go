@@ -20,8 +20,9 @@ type PaperOutputLiteratureReview struct {
 	Format         string         `gorm:"column:format;size:16;not null;default:md"`
 	Citations      datatypes.JSON `gorm:"column:citations"`
 	InputParams    datatypes.JSON `gorm:"column:input_params"`
-	Meta           datatypes.JSON `gorm:"column:meta"`
-	CreatedAt      time.Time      `gorm:"column:created_at"`
+	Meta                         datatypes.JSON `gorm:"column:meta"`
+	PaperOutputExperimentPlanID  *uint64        `gorm:"column:paper_output_experiment_plan_id"`
+	CreatedAt                    time.Time      `gorm:"column:created_at"`
 	UpdatedAt      time.Time      `gorm:"column:updated_at"`
 }
 

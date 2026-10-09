@@ -477,7 +477,7 @@ CREATE TABLE IF NOT EXISTS `paper_output_literature_review` (
   `manuscript_id`     BIGINT UNSIGNED NOT NULL COMMENT '论文 ID',
   `user_id`           BIGINT UNSIGNED NOT NULL COMMENT '用户 ID',
   `version`           INT          NOT NULL DEFAULT 1 COMMENT '版本号',
-  `status`            VARCHAR(16)  NOT NULL DEFAULT 'completed' COMMENT 'draft|completed|deleted（软删）',
+  `status`            VARCHAR(16)  NOT NULL DEFAULT 'completed' COMMENT 'draft|completed|generating_experiment_plan|deleted（软删）',
   `structure`         VARCHAR(32)  DEFAULT NULL COMMENT 'thematic|chronological|method',
   `title`             VARCHAR(256) DEFAULT NULL COMMENT '标题',
   `summary`           TEXT         DEFAULT NULL COMMENT '摘要',
@@ -487,10 +487,12 @@ CREATE TABLE IF NOT EXISTS `paper_output_literature_review` (
   `citations`         JSON         DEFAULT NULL COMMENT '引用表 / cite key 列表',
   `input_params`      JSON         DEFAULT NULL COMMENT '生成参数快照',
   `meta`              JSON         DEFAULT NULL COMMENT '扩展元数据',
+  `paper_output_experiment_plan_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '关联 paper_output_experiment_plan.id',
   `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
-  KEY `idx_paper_output_lit_review_ms` (`manuscript_id`, `created_at`)
+  KEY `idx_paper_output_lit_review_ms` (`manuscript_id`, `created_at`),
+  KEY `idx_paper_output_lit_review_exp_plan` (`paper_output_experiment_plan_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文献综述';
 
 CREATE TABLE IF NOT EXISTS `paper_output_experiment_plan` (
@@ -720,6 +722,14 @@ INSERT INTO `bot_schedule_config` (
     '选题 audit=running：异步调用 LLM 审查结论+文献综述并写入 paper_output_literature_review',
     1,
     1
+  ),
+  (
+    'ai_agent_paper',
+    'experiment_plan_llm',
+    15,
+    '文献综述 generating_experiment_plan：异步 LLM 生成实验方案',
+    1,
+    1
   )
 ON DUPLICATE KEY UPDATE
   `interval_seconds` = VALUES(`interval_seconds`),
@@ -828,7 +838,8 @@ INSERT INTO `paper_llm_workflow_binding` (`stage_code`, `stage_name`, `model_con
   ('retrieve', '多源文献检索与校验入库', @paper_llm_model_id, 'active'),
   ('generate_ideas', '脑暴选题', @paper_llm_model_id, 'active'),
   ('novelty', '新颖性检查', @paper_llm_model_id, 'active'),
-  ('audit', '审查结论+生成文献综述', @paper_llm_model_id, 'active')
+  ('audit', '审查结论+生成文献综述', @paper_llm_model_id, 'active'),
+  ('experiment_plan', '生成实验方案', @paper_llm_model_id, 'active')
 ON DUPLICATE KEY UPDATE
   `stage_name` = VALUES(`stage_name`),
   `model_config_id` = VALUES(`model_config_id`),
@@ -850,6 +861,9 @@ INSERT INTO `paper_llm_prompt_template` (`stage_code`, `stage_name`, `template_b
    'active'),
   ('audit', '审查结论+生成文献综述',
    '环节：审查结论 + 生成文献综述。方向：{{direction}}。目标期刊：{{venue}}。须再次审查第二步 generate_ideas（含 novelty）是否贴题；以严格审稿人视角给出 issues/summary/off_topic；并基于 Corpus 生成文献综述（structure/content_medium/citations）。输出 JSON 以用户消息 schema 为准（含 audit 与 literature_review）。',
+   'active'),
+  ('experiment_plan', '生成实验方案',
+   '环节：生成实验方案（experiment planning）。方向：{{direction}}。目标期刊/会议：{{venue}}。须以用户消息中的 LiteratureReview（文献综述全文/摘要）与选题 Corpus 为依据，不得编造未给出的基线或数据。输出可审稿的实验计划：核心假设、主实验与对照基线、评价指标、消融设计、算力/数据资源与时间线（写入 paper_output_experiment_plan：title、summary、content_medium、meta）。严格 JSON，字段以用户消息 schema 为准（含 experiment_plan）。',
    'active')
 ON DUPLICATE KEY UPDATE
   `stage_name` = VALUES(`stage_name`),
