@@ -1,11 +1,13 @@
 <script setup lang="ts">
-import { computed, reactive, ref, toRefs, watch } from 'vue'
+import { reactive, ref, toRefs, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   fetchLiteratureReviews,
-  formatLiteratureReviewTabLabel,
+  formatLiteratureReviewStatus,
+  softDeleteLiteratureReview,
   type PaperLiteratureReviewItem,
 } from '@/api/literatureReviews'
+import { paperConfirm } from '@/utils/paperDialog'
 import {
   DEMO_AUTO_REVIEW,
   DEMO_EXPERIMENT_PLAN,
@@ -48,6 +50,10 @@ const props = withDefaults(
 )
 const { moduleId, manuscriptId, manuscriptTitle } = toRefs(props)
 
+const emit = defineEmits<{
+  generateExperimentPlan: []
+}>()
+
 const planForm = reactive<ExperimentPlanningForm>({ ...DEFAULT_EXPERIMENT_PLANNING })
 const reviewForm = reactive<AutoReviewForm>({ ...DEFAULT_AUTO_REVIEW })
 const writeForm = reactive<PaperWritingForm>({
@@ -63,15 +69,9 @@ const analysisForm = reactive<ManuscriptAnalysisForm>({ ...DEFAULT_MANUSCRIPT_AN
 const resultVisible = ref<Partial<Record<PaperModuleId, boolean>>>({})
 
 const litReviewItems = ref<PaperLiteratureReviewItem[]>([])
-const activeLitReviewId = ref('')
 const litReviewsLoading = ref(false)
-
-const activeLitReview = computed(
-  () =>
-    litReviewItems.value.find((i) => i.id === activeLitReviewId.value) ??
-    litReviewItems.value[0] ??
-    null,
-)
+const litReviewViewItem = ref<PaperLiteratureReviewItem | null>(null)
+const litReviewDeletingId = ref('')
 
 const LIT_STRUCTURE_LABEL: Record<string, string> = {
   thematic: '按主题',
@@ -79,37 +79,40 @@ const LIT_STRUCTURE_LABEL: Record<string, string> = {
   method: '按方法族',
 }
 
+let litReviewReloadSeq = 0
+
 async function reloadLiteratureReviews() {
   const ms = manuscriptId.value
   if (!ms || !/^\d+$/.test(ms)) {
     litReviewItems.value = []
-    activeLitReviewId.value = ''
     return
   }
+  const seq = ++litReviewReloadSeq
   litReviewsLoading.value = true
   try {
     const data = await fetchLiteratureReviews(ms)
+    if (seq !== litReviewReloadSeq) return
     litReviewItems.value = data.items ?? []
-    if (
-      !activeLitReviewId.value ||
-      !litReviewItems.value.some((i) => i.id === activeLitReviewId.value)
-    ) {
-      activeLitReviewId.value = litReviewItems.value[0]?.id ?? ''
-    }
   } catch (e) {
+    if (seq !== litReviewReloadSeq) return
     litReviewItems.value = []
-    activeLitReviewId.value = ''
     const msg = e instanceof Error ? e.message : '加载文献综述失败'
     ElMessage.error(msg)
   } finally {
-    litReviewsLoading.value = false
+    if (seq === litReviewReloadSeq) litReviewsLoading.value = false
   }
 }
 
+/** 进入文献综述 / 切换当前论文 / 刷新：同一条路径拉列表（不依赖父组件 ref 时序） */
 watch(
   () => [moduleId.value, manuscriptId.value] as const,
-  ([mod]) => {
-    if (mod === 'literature-review') void reloadLiteratureReviews()
+  ([mod, ms]) => {
+    if (mod !== 'literature-review') return
+    if (!ms || !/^\d+$/.test(ms)) {
+      litReviewItems.value = []
+      return
+    }
+    void reloadLiteratureReviews()
   },
   { immediate: true },
 )
@@ -164,6 +167,57 @@ function isChartChecked(value: string) {
   return figureForm.chartTypes.includes(value)
 }
 
+function litReviewRowTitle(item: PaperLiteratureReviewItem): string {
+  const t = item.title?.trim()
+  if (t) return t
+  return `文献综述 v${item.version}`
+}
+
+function formatLitReviewCreatedAt(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString('zh-CN')
+  } catch {
+    return iso
+  }
+}
+
+function openLitReviewView(item: PaperLiteratureReviewItem) {
+  litReviewViewItem.value = item
+}
+
+function closeLitReviewView() {
+  litReviewViewItem.value = null
+}
+
+async function confirmDeleteLitReview(item: PaperLiteratureReviewItem) {
+  const ms = manuscriptId.value
+  if (!ms) return
+  try {
+    await paperConfirm('删除后列表将不再展示该条记录（数据仍保留，状态为 deleted）。', '删除文献综述', {
+      confirmButtonText: '删除',
+      variant: 'danger',
+    })
+  } catch {
+    return
+  }
+  litReviewDeletingId.value = item.id
+  try {
+    await softDeleteLiteratureReview(ms, item.id)
+    ElMessage.success('已删除')
+    if (litReviewViewItem.value?.id === item.id) closeLitReviewView()
+    await reloadLiteratureReviews()
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : '删除失败'
+    ElMessage.error(msg)
+  } finally {
+    litReviewDeletingId.value = ''
+  }
+}
+
+function onGenerateExperimentPlanFromRow() {
+  emit('generateExperimentPlan')
+}
+
 async function runModule(id: PaperModuleId): Promise<boolean> {
   if (id === 'literature-review') {
     await reloadLiteratureReviews()
@@ -209,53 +263,93 @@ defineExpose({ runModule, reloadLiteratureReviews })
       </p>
     </section>
 
-    <template v-else>
-      <div class="wf-lit-shell">
-        <div class="fig-mgmt-tabs wf-lit-tabs" role="tablist" aria-label="文献综述版本">
-          <button
-            v-for="item in litReviewItems"
-            :key="item.id"
-            type="button"
-            role="tab"
-            class="fig-mgmt-tab"
-            :class="{ 'fig-mgmt-tab--active': item.id === activeLitReviewId }"
-            :aria-selected="item.id === activeLitReviewId"
-            @click="activeLitReviewId = item.id"
-          >
-            {{ formatLiteratureReviewTabLabel(item) }}
-            <span v-if="item.is_current" class="wf-lit-tab-badge">当前</span>
-          </button>
+    <section v-else class="wf-panel wf-lit-list-panel">
+      <table class="wf-table wf-lit-table">
+        <thead>
+          <tr>
+            <th>标题</th>
+            <th>版本</th>
+            <th>创建时间</th>
+            <th>状态</th>
+            <th class="wf-lit-col-actions">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="item in litReviewItems" :key="item.id">
+            <td class="wf-lit-col-title">{{ litReviewRowTitle(item) }}</td>
+            <td>v{{ item.version }}</td>
+            <td>{{ formatLitReviewCreatedAt(item.created_at) }}</td>
+            <td>{{ formatLiteratureReviewStatus(item.status) }}</td>
+            <td class="wf-lit-col-actions">
+              <div class="wf-lit-actions">
+                <button type="button" class="wf-lit-action" @click="openLitReviewView(item)">
+                  查看
+                </button>
+                <button
+                  type="button"
+                  class="wf-lit-action"
+                  @click="onGenerateExperimentPlanFromRow"
+                >
+                  生成实验方案
+                </button>
+                <button
+                  type="button"
+                  class="wf-lit-action wf-lit-action--danger"
+                  :disabled="litReviewDeletingId === item.id"
+                  @click="confirmDeleteLitReview(item)"
+                >
+                  {{ litReviewDeletingId === item.id ? '删除中…' : '删除' }}
+                </button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <Teleport to="body">
+      <div
+        v-if="litReviewViewItem"
+        class="paper-modal-overlay wf-lit-view-overlay"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="wf-lit-view-title"
+      >
+        <div class="paper-message-box paper-message-box--default paper-modal-panel wf-lit-view-panel" @click.stop>
+          <header class="paper-modal-header wf-lit-view-header">
+            <h2 id="wf-lit-view-title" class="paper-modal-title wf-lit-view-title">
+              {{ litReviewRowTitle(litReviewViewItem) }}
+            </h2>
+            <button type="button" class="paper-modal-close" aria-label="关闭" @click="closeLitReviewView">
+              ×
+            </button>
+          </header>
+          <div class="paper-modal-body wf-lit-view-body">
+            <p class="wf-meta wf-lit-meta">
+              <span>版本 v{{ litReviewViewItem.version }}</span>
+              <span>·</span>
+              <span>{{ formatLitReviewCreatedAt(litReviewViewItem.created_at) }}</span>
+              <span v-if="litReviewViewItem.structure">·</span>
+              <span v-if="litReviewViewItem.structure">{{
+                LIT_STRUCTURE_LABEL[litReviewViewItem.structure] ?? litReviewViewItem.structure
+              }}</span>
+              <span>·</span>
+              <span>{{ formatLiteratureReviewStatus(litReviewViewItem.status) }}</span>
+            </p>
+            <p v-if="litReviewViewItem.summary?.trim()" class="wf-lit-summary">
+              {{ litReviewViewItem.summary }}
+            </p>
+            <pre v-if="litReviewViewItem.content_medium?.trim()" class="wf-pre wf-pre--lit">{{
+              litReviewViewItem.content_medium
+            }}</pre>
+            <p v-else class="wf-artifact-empty">暂无正文（content_medium 为空）</p>
+          </div>
+          <footer class="paper-message-box__btns wf-lit-view-btns">
+            <el-button type="primary" @click="closeLitReviewView">关闭</el-button>
+          </footer>
         </div>
-
-        <section v-if="activeLitReview" class="wf-panel wf-panel--lit-body wf-panel--result" role="tabpanel">
-        <div class="wf-lit-head">
-          <h2 class="wf-title wf-title--tight">
-            {{ activeLitReview.title?.trim() || `文献综述 v${activeLitReview.version}` }}
-          </h2>
-          <p class="wf-meta wf-lit-meta">
-            <span>版本 v{{ activeLitReview.version }}</span>
-            <span>·</span>
-            <span>{{ new Date(activeLitReview.created_at).toLocaleString('zh-CN') }}</span>
-            <span v-if="activeLitReview.structure">·</span>
-            <span v-if="activeLitReview.structure">{{
-              LIT_STRUCTURE_LABEL[activeLitReview.structure] ?? activeLitReview.structure
-            }}</span>
-            <span>·</span>
-            <span>{{ activeLitReview.status }}</span>
-          </p>
-        </div>
-
-        <p v-if="activeLitReview.summary?.trim()" class="wf-lit-summary">
-          {{ activeLitReview.summary }}
-        </p>
-
-        <pre v-if="activeLitReview.content_medium?.trim()" class="wf-pre wf-pre--lit">{{
-          activeLitReview.content_medium
-        }}</pre>
-        <p v-else class="wf-artifact-empty">暂无正文（content_medium 为空）</p>
-        </section>
       </div>
-    </template>
+    </Teleport>
   </div>
 
   <!-- 实验规划 -->
@@ -655,44 +749,90 @@ defineExpose({ runModule, reloadLiteratureReviews })
   margin-bottom: 8px;
 }
 
-.wf-lit-shell {
-  overflow: hidden;
-  background: #fff;
-  border: 1px solid #e8eaf0;
-  border-radius: 16px;
-  box-shadow: 0 4px 24px rgba(30, 27, 75, 0.06);
+.wf-lit-list-panel {
+  padding: 20px 22px 24px;
 }
 
-.wf-lit-tabs {
-  padding: 0 18px;
-  margin-bottom: 0;
-  background: transparent;
+.wf-lit-table {
+  margin: 0;
+}
+
+.wf-lit-col-title {
+  max-width: min(420px, 40vw);
+  font-weight: 600;
+  color: #1e1b4b;
+}
+
+.wf-lit-col-actions {
+  width: 240px;
+  white-space: nowrap;
+}
+
+.wf-lit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.wf-lit-action {
+  padding: 4px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #6366f1;
+  cursor: pointer;
+  background: none;
   border: none;
-  border-bottom: 1px solid #e2e8f0;
-  border-radius: 0;
-  box-shadow: none;
 }
 
-.wf-panel--lit-body {
-  margin-top: 0;
-  border: none;
-  border-radius: 0;
-  box-shadow: none;
+.wf-lit-action:hover:not(:disabled) {
+  color: #4f46e5;
+  text-decoration: underline;
 }
 
-.wf-lit-tab-badge {
-  margin-left: 6px;
-  padding: 1px 6px;
-  font-size: 10px;
-  font-weight: 700;
-  color: #5b21b6;
-  vertical-align: middle;
-  background: #ede9fe;
-  border-radius: 999px;
+.wf-lit-action--danger {
+  color: #dc2626;
 }
 
-.wf-lit-head {
-  margin-bottom: 12px;
+.wf-lit-action--danger:hover:not(:disabled) {
+  color: #b91c1c;
+}
+
+.wf-lit-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.wf-lit-view-overlay {
+  z-index: 3200;
+}
+
+.wf-lit-view-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(920px, calc(100vw - 32px));
+  max-height: min(90vh, 880px);
+}
+
+.wf-lit-view-header {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.wf-lit-view-title {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.wf-lit-view-body {
+  flex: 1;
+  overflow: auto;
+}
+
+.wf-lit-view-btns {
+  justify-content: flex-end;
 }
 
 .wf-lit-meta {

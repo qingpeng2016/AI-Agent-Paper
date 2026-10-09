@@ -11,7 +11,6 @@ type PaperOutputLiteratureReview struct {
 	ManuscriptID   uint64         `gorm:"column:manuscript_id;not null"`
 	UserID         uint64         `gorm:"column:user_id;not null"`
 	Version        int            `gorm:"column:version;not null;default:1"`
-	IsCurrent      bool           `gorm:"column:is_current;not null;default:1"`
 	Status         string         `gorm:"column:status;size:16;not null;default:completed"`
 	Structure      *string        `gorm:"column:structure;size:32"`
 	Title          *string        `gorm:"column:title;size:256"`

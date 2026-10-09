@@ -477,8 +477,7 @@ CREATE TABLE IF NOT EXISTS `paper_output_literature_review` (
   `manuscript_id`     BIGINT UNSIGNED NOT NULL COMMENT '论文 ID',
   `user_id`           BIGINT UNSIGNED NOT NULL COMMENT '用户 ID',
   `version`           INT          NOT NULL DEFAULT 1 COMMENT '版本号',
-  `is_current`        TINYINT(1)   NOT NULL DEFAULT 1 COMMENT '是否当前版本',
-  `status`            VARCHAR(16)  NOT NULL DEFAULT 'completed' COMMENT 'draft|completed|superseded',
+  `status`            VARCHAR(16)  NOT NULL DEFAULT 'completed' COMMENT 'draft|completed|deleted（软删）',
   `structure`         VARCHAR(32)  DEFAULT NULL COMMENT 'thematic|chronological|method',
   `title`             VARCHAR(256) DEFAULT NULL COMMENT '标题',
   `summary`           TEXT         DEFAULT NULL COMMENT '摘要',
@@ -491,7 +490,7 @@ CREATE TABLE IF NOT EXISTS `paper_output_literature_review` (
   `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
-  KEY `idx_paper_output_lit_review_ms` (`manuscript_id`, `is_current`)
+  KEY `idx_paper_output_lit_review_ms` (`manuscript_id`, `created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文献综述';
 
 CREATE TABLE IF NOT EXISTS `paper_output_experiment_plan` (
@@ -827,7 +826,7 @@ SET @paper_llm_model_id = (
 INSERT INTO `paper_llm_workflow_binding` (`stage_code`, `stage_name`, `model_config_id`, `status`) VALUES
   ('default', '默认（全局兜底）', @paper_llm_model_id, 'active'),
   ('retrieve', '多源文献检索与校验入库', @paper_llm_model_id, 'active'),
-  ('generate_ideas', '脑暴候选选题', @paper_llm_model_id, 'active'),
+  ('generate_ideas', '脑暴选题', @paper_llm_model_id, 'active'),
   ('novelty', '新颖性检查', @paper_llm_model_id, 'active'),
   ('audit', '审查结论+生成文献综述', @paper_llm_model_id, 'active')
 ON DUPLICATE KEY UPDATE
@@ -843,7 +842,7 @@ INSERT INTO `paper_llm_prompt_template` (`stage_code`, `stage_name`, `template_b
   ('retrieve', '多源文献检索与校验入库',
    'Stage: multi-source literature retrieve and validate for direction {{direction}}. Dedupe by external_key; list coverage gaps.',
    'active'),
-  ('generate_ideas', '脑暴候选选题',
+  ('generate_ideas', '脑暴选题',
    '环节：脑暴 + 新颖性（与 novelty 同一次模型调用完成）。最多 {{max_ideas}} 条 idea；仅依据用户消息 Corpus 与 CorpusFiles；输出 JSON 含 ideas 与 novelty（lines/risks/synthesis），以用户消息 schema 为准。',
    'active'),
   ('novelty', '新颖性检查',

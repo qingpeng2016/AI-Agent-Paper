@@ -3,7 +3,6 @@ package response
 type PaperLiteratureReviewItemView struct {
 	ID            string `json:"id"`
 	Version       int    `json:"version"`
-	IsCurrent     bool   `json:"is_current"`
 	Status        string `json:"status"`
 	Structure     string `json:"structure,omitempty"`
 	Title         string `json:"title,omitempty"`

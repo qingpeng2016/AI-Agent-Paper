@@ -244,7 +244,7 @@ func (s *TopicDiscoveryRunService) persistLiteratureReviewFromLLM(
 	if structure != "" {
 		row.Structure = &structure
 	}
-	if err := s.litReviews.CreateAsCurrent(ctx, row); err != nil {
+	if err := s.litReviews.Create(ctx, row); err != nil {
 		return 0, err
 	}
 	return row.ID, nil

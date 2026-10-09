@@ -7,7 +7,6 @@ type ApiEnvelope<T> = {
 export type PaperLiteratureReviewItem = {
   id: string
   version: number
-  is_current: boolean
   status: string
   structure?: string
   title?: string
@@ -41,6 +40,43 @@ export async function fetchLiteratureReviews(
     throw new Error(envelope.message ?? 'literature-reviews failed')
   }
   return envelope.data
+}
+
+export async function softDeleteLiteratureReview(
+  manuscriptId: string,
+  literatureReviewId: string,
+): Promise<void> {
+  const msNum = Number(manuscriptId)
+  const reviewNum = Number(literatureReviewId)
+  if (!Number.isFinite(msNum) || msNum <= 0 || !Number.isFinite(reviewNum) || reviewNum <= 0) {
+    throw new Error('invalid ids')
+  }
+  const res = await fetch('/api/v1/paper/literature-reviews/soft-delete', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      manuscript_id: msNum,
+      literature_review_id: reviewNum,
+    }),
+  })
+  if (!res.ok) {
+    throw new Error(`literature-reviews soft-delete http ${res.status}`)
+  }
+  const envelope = (await res.json()) as ApiEnvelope<{ ok?: boolean }>
+  if (envelope.code !== 200) {
+    throw new Error(envelope.message ?? 'soft-delete failed')
+  }
+}
+
+export function formatLiteratureReviewStatus(status: string): string {
+  if (status === 'superseded') return '已完成'
+  const map: Record<string, string> = {
+    completed: '已完成',
+    draft: '草稿',
+    deleted: '已删除',
+  }
+  return map[status] ?? status
 }
 
 export function formatLiteratureReviewTabLabel(item: PaperLiteratureReviewItem): string {

@@ -36,3 +36,27 @@ func (h *PaperLiteratureReviewHandler) GetLiteratureReviews(c *gin.Context) {
 	}
 	response.ResponseSuccess(c, data)
 }
+
+// PostSoftDeleteLiteratureReview POST /api/v1/paper/literature-reviews/soft-delete
+func (h *PaperLiteratureReviewHandler) PostSoftDeleteLiteratureReview(c *gin.Context) {
+	userID, ok := middleware.UserIDFromContext(c)
+	if !ok {
+		response.ResponseErr(c, errorx.ErrParamsError)
+		return
+	}
+	var body request.PaperLiteratureReviewSoftDeleteBody
+	if err := c.ShouldBindJSON(&body); err != nil {
+		response.ResponseErr(c, errorx.ErrParamsError)
+		return
+	}
+	if err := h.svc.SoftDelete(
+		c.Request.Context(),
+		userID,
+		body.ManuscriptID,
+		body.LiteratureReviewID,
+	); err != nil {
+		response.ResponseErr(c, err)
+		return
+	}
+	response.ResponseSuccess(c, gin.H{"ok": true})
+}

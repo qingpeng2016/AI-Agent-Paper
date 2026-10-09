@@ -31,6 +31,7 @@ import {
   formatTopicDirectionText,
   parseTopicKeywords,
   PAPER_MODULE_GROUPS,
+  PAPER_MODULES,
   appendOperationLog,
   TOPIC_DISCOVERY_FLOW_STEPS,
   getPaperModuleMeta,
@@ -113,25 +114,80 @@ const EXPERIMENT_PLAN_RUN_STORAGE_KEY = 'atm:paper:experiment-plan-run:v1'
 
 const MANUSCRIPTS_STORAGE_KEY = 'atm:paper:manuscripts:v1'
 const LEGACY_PROJECTS_STORAGE_KEY = 'atm:paper:projects:v1'
+const ACTIVE_MODULE_STORAGE_KEY = 'atm:paper:active-module:v1'
+
+function loadStoredActiveModule(): PaperModuleId {
+  try {
+    const raw = localStorage.getItem(ACTIVE_MODULE_STORAGE_KEY)?.trim()
+    if (raw && PAPER_MODULES.some((m) => m.id === raw && m.id !== 'environment')) {
+      return raw as PaperModuleId
+    }
+  } catch {
+    /* ignore */
+  }
+  return 'topic-discovery'
+}
+
+function persistActiveModule(id: PaperModuleId) {
+  if (id === 'environment') return
+  try {
+    localStorage.setItem(ACTIVE_MODULE_STORAGE_KEY, id)
+  } catch {
+    /* ignore */
+  }
+}
 
 const topicLastRunByMs = ref<Record<string, TopicDiscoveryRunResponse>>({})
 
-const activeModule = ref<PaperModuleId>('topic-discovery')
+const activeModule = ref<PaperModuleId>(loadStoredActiveModule())
 
 const moduleContentLoading = ref(false)
 const moduleContentKey = ref(0)
 let moduleSwitchSeq = 0
+/** 仅在不同模块间切换时递增 key，避免刷新同一模块时 remount 子组件导致重复拉数 */
+let lastPreparedModuleId: PaperModuleId | undefined
+
+const showGenericModuleLoading = computed(
+  () =>
+    moduleContentLoading.value &&
+    activeModule.value !== 'topic-discovery' &&
+    activeModule.value !== 'literature-review',
+)
+
+const topicDiscoveryPageLoading = computed(
+  () => activeModule.value === 'topic-discovery' && moduleContentLoading.value,
+)
+
+let manuscriptsBootstrapOnce: Promise<void> | null = null
+
+function ensureManuscriptsReady(): Promise<void> {
+  if (!manuscriptsBootstrapOnce) {
+    manuscriptsBootstrapOnce = (async () => {
+      const ok = await loadManuscriptsFromServer(undefined, { initial: true })
+      if (!ok) loadManuscriptsFromStorage()
+    })()
+  }
+  return manuscriptsBootstrapOnce
+}
 
 async function prepareModuleContent(moduleId: PaperModuleId) {
   const seq = ++moduleSwitchSeq
   moduleContentLoading.value = true
   try {
+    await ensureManuscriptsReady()
     await loadWorkbenchModuleContent(moduleId, {
       reloadManuscriptsFromStorage: loadManuscriptsFromStorage,
     })
+    if (moduleId === 'topic-discovery') {
+      const msId = activeManuscriptId.value
+      if (msId) await hydrateTopicRunFromServer(msId)
+    }
   } finally {
     if (seq === moduleSwitchSeq) {
-      moduleContentKey.value++
+      if (lastPreparedModuleId !== undefined && lastPreparedModuleId !== moduleId) {
+        moduleContentKey.value++
+      }
+      lastPreparedModuleId = moduleId
       moduleContentLoading.value = false
     }
   }
@@ -140,22 +196,12 @@ async function prepareModuleContent(moduleId: PaperModuleId) {
   if (moduleId === 'personal-center') {
     await personalCenterPanelRef.value?.reloadFromMenu?.()
   }
-  if (moduleId === 'literature-review') {
-    await workflowPanelsRef.value?.reloadLiteratureReviews?.()
-  }
 }
 
 function selectModule(id: PaperModuleId) {
   activeModule.value = id
+  persistActiveModule(id)
 }
-
-watch(
-  activeModule,
-  (id) => {
-    void prepareModuleContent(id)
-  },
-  { immediate: true },
-)
 
 const running = ref(false)
 const topicTerminateLoading = ref(false)
@@ -459,11 +505,6 @@ async function loadManuscriptsFromServer(
   }
 }
 
-async function bootstrapManuscriptSwitcher() {
-  const ok = await loadManuscriptsFromServer(undefined, { initial: true })
-  if (!ok) loadManuscriptsFromStorage()
-}
-
 function applyOptimisticCurrentManuscript(id: string) {
   activeManuscriptId.value = id
   manuscripts.value = manuscripts.value.map((m) => ({
@@ -485,9 +526,6 @@ async function onManuscriptChange(id: string) {
   manuscriptSwitchPendingId.value = id
   manuscriptSwitching.value = true
   applyOptimisticCurrentManuscript(id)
-  if (isTopicDiscoveryModule.value) {
-    void hydrateTopicRunFromServer(id)
-  }
 
   try {
     const data = await setCurrentPaperManuscript(id)
@@ -496,7 +534,7 @@ async function onManuscriptChange(id: string) {
   } catch (e) {
     applyOptimisticCurrentManuscript(previousId)
     if (isTopicDiscoveryModule.value && previousId) {
-      void hydrateTopicRunFromServer(previousId)
+      void refreshTopicDiscoveryForManuscript(previousId)
     }
     const msg = e instanceof Error ? e.message : '切换当前论文失败'
     ElMessage.error(msg)
@@ -512,7 +550,7 @@ function onManuscriptsListUpdate(list: PaperManuscriptItem[]) {
 }
 
 loadEnvFromStorage()
-void bootstrapManuscriptSwitcher()
+loadManuscriptsFromStorage()
 loadLitReviewFlagsFromStorage()
 loadExperimentPlanFlagsFromStorage()
 topicForm.venue = envPreference.defaultVenueText || topicForm.venue
@@ -551,13 +589,6 @@ const isUtilityModule = computed(
 )
 const isTopicDiscoveryModule = computed(() => activeModule.value === 'topic-discovery')
 
-watch(isTopicDiscoveryModule, (on) => {
-  if (!on) return
-  void (async () => {
-    const msId = await ensureManuscriptWhenEmpty()
-    if (msId) void hydrateTopicRunFromServer(msId)
-  })()
-}, { immediate: true })
 const isLiteratureReviewModule = computed(() => activeModule.value === 'literature-review')
 
 const personalCenterPanelRef = ref<InstanceType<typeof PaperPersonalCenterPanel> | null>(null)
@@ -613,16 +644,19 @@ function ensureTopicRunForManuscript(id: string) {
   }
 }
 
-watch(
-  activeManuscriptId,
-  (id) => {
-    if (id) {
-      ensureTopicRunForManuscript(id)
-      void hydrateTopicRunFromServer(id)
-    }
-  },
-  { immediate: true },
-)
+watch(activeManuscriptId, (id, prev) => {
+  if (!id) return
+  ensureTopicRunForManuscript(id)
+  if (activeModule.value !== 'topic-discovery') return
+  // 首次从空写入 id（bootstrap）已在 prepareModuleContent 里 hydrate，避免第二次 loading
+  if (!prev) return
+  if (id === prev) return
+  if (moduleContentLoading.value) {
+    void hydrateTopicRunFromServer(id)
+    return
+  }
+  void refreshTopicDiscoveryForManuscript(id)
+})
 
 const currentTopicRun = computed((): TopicRunDemo => {
   const id = activeManuscriptId.value
@@ -780,6 +814,7 @@ const litReviewReadyForExperimentPlan = computed(
 
 const showPrimaryAction = computed(() => {
   if (isUtilityModule.value) return false
+  if (isLiteratureReviewModule.value) return false
   if (activeModule.value === 'figure-generation' && figureManagementTab.value === 'upload') return false
   return true
 })
@@ -871,7 +906,7 @@ function stepStatusFromApi(raw: string): TopicFlowStepStatus {
 
 const TOPIC_STEP_RUNNING_HINT: Record<string, string> = {
   retrieve: '文献 PDF 下载与入库中…',
-  generate_ideas: 'AI 脑暴候选选题与新颖性分析中…',
+  generate_ideas: 'AI 脑暴选题与新颖性分析中…',
   audit: 'AI 审查结论与文献综述生成中…',
 }
 
@@ -1136,26 +1171,58 @@ function buildTopicRunRequest(action: 'start' | 'continue') {
   }
 }
 
-async function hydrateTopicRunFromServer(msId: string) {
+let hydrateTopicRunInflight: Promise<void> | null = null
+let hydrateTopicRunInflightMs = ''
+
+async function hydrateTopicRunFromServer(msId: string): Promise<void> {
+  if (hydrateTopicRunInflight && hydrateTopicRunInflightMs === msId) {
+    return hydrateTopicRunInflight
+  }
+  hydrateTopicRunInflightMs = msId
+  hydrateTopicRunInflight = (async () => {
+    try {
+      const data = await fetchCurrentTopicDiscoveryRun(msId)
+      if (!data) {
+        const next = { ...topicLastRunByMs.value }
+        delete next[msId]
+        topicLastRunByMs.value = next
+        persistTopicRun(msId, createIdleTopicRun())
+        return
+      }
+      if (!isTopicRunTerminalCompleted(data)) {
+        applyStoredTopicRunInputToForm(topicForm, data)
+      }
+      syncTopicDisciplineFromCurrentManuscript()
+      syncTopicRunUiAfterServer(msId, data)
+      if (!isTopicRunTerminalCompleted(data)) {
+        requestScrollToTopicFlowIfNeeded()
+      }
+    } catch {
+      /* 未登录或无 run 时忽略 */
+    }
+  })()
   try {
-    const data = await fetchCurrentTopicDiscoveryRun(msId)
-    if (!data) {
-      const next = { ...topicLastRunByMs.value }
-      delete next[msId]
-      topicLastRunByMs.value = next
-      persistTopicRun(msId, createIdleTopicRun())
-      return
+    await hydrateTopicRunInflight
+  } finally {
+    if (hydrateTopicRunInflightMs === msId) {
+      hydrateTopicRunInflight = null
+      hydrateTopicRunInflightMs = ''
     }
-    if (!isTopicRunTerminalCompleted(data)) {
-      applyStoredTopicRunInputToForm(topicForm, data)
-    }
-    syncTopicDisciplineFromCurrentManuscript()
-    syncTopicRunUiAfterServer(msId, data)
-    if (!isTopicRunTerminalCompleted(data)) {
-      requestScrollToTopicFlowIfNeeded()
-    }
-  } catch {
-    /* 未登录或无 run 时忽略 */
+  }
+}
+
+/** 选题页：单次 loading 壳 + hydrate（切换论文 / 论文 id 就绪后补拉） */
+async function refreshTopicDiscoveryForManuscript(msId: string) {
+  if (!msId || activeModule.value !== 'topic-discovery') return
+  if (moduleContentLoading.value) {
+    await hydrateTopicRunFromServer(msId)
+    return
+  }
+  moduleContentLoading.value = true
+  try {
+    await hydrateTopicRunFromServer(msId)
+  } finally {
+    moduleContentLoading.value = false
   }
 }
 
@@ -1299,7 +1366,7 @@ async function scrollToTopicFlowPanelWhenReady() {
   while (Date.now() < deadline) {
     if (seq !== scrollToTopicFlowSeq) return
     if (!isTopicDiscoveryModule.value || !topicRunVisible.value) return
-    if (moduleContentLoading.value) {
+    if (topicDiscoveryPageLoading.value) {
       await new Promise<void>((r) => window.setTimeout(r, 50))
       continue
     }
@@ -1318,7 +1385,7 @@ watch(
   () =>
     [
       topicRunVisible.value,
-      moduleContentLoading.value,
+      topicDiscoveryPageLoading.value,
       activeModule.value,
       moduleContentKey.value,
     ] as const,
@@ -1334,10 +1401,16 @@ async function markLiteratureReviewDone(msId: string) {
   persistLitReviewFlags()
 }
 
-async function runExperimentPlanFromLiteratureReview() {
+async function onGenerateExperimentPlanFromReviewRow() {
+  const msId = activeManuscriptId.value
+  if (msId) await markLiteratureReviewDone(msId)
+  await runExperimentPlanFromLiteratureReview({ skipLitReviewDoneCheck: true })
+}
+
+async function runExperimentPlanFromLiteratureReview(opts?: { skipLitReviewDoneCheck?: boolean }) {
   const msId = activeManuscriptId.value
   if (!msId) return
-  if (!litReviewDoneForManuscript.value) {
+  if (!opts?.skipLitReviewDoneCheck && !litReviewDoneForManuscript.value) {
     ElMessage.warning('请先生成文献综述')
     return
   }
@@ -1653,6 +1726,16 @@ async function onPrimaryAction() {
     running.value = false
   }
 }
+
+// 须在 loadManuscriptsFromServer / hydrateTopicRunFromServer 等定义之后注册，immediate 否则会 TDZ 导致整页不发请求
+watch(
+  activeModule,
+  (id) => {
+    persistActiveModule(id)
+    void prepareModuleContent(id)
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
@@ -1722,17 +1805,27 @@ async function onPrimaryAction() {
       role="dialog"
       aria-modal="true"
       aria-labelledby="paper-topic-complete-title"
-      @click="dismissTopicCompletionPromptToLiteratureReview"
       @keydown.escape="dismissTopicCompletionPromptToLiteratureReview"
     >
-      <div class="paper-message-box paper-message-box--default paper-modal-panel paper-topic-complete-panel">
+      <div
+        class="paper-message-box paper-message-box--default paper-modal-panel paper-topic-complete-panel"
+        @click.stop
+      >
         <header class="paper-modal-header">
           <h2 id="paper-topic-complete-title" class="paper-modal-title">选题发现已完成</h2>
         </header>
         <div class="paper-modal-body">
           <p class="paper-topic-complete-lead">文献综述已生成完成。</p>
-          <p class="paper-topic-complete-hint">点击任意处前往「文献综述」查看与继续编辑。</p>
         </div>
+        <footer class="paper-message-box__btns paper-topic-complete-btns">
+          <el-button
+            class="paper-message-box__confirm"
+            type="primary"
+            @click="dismissTopicCompletionPromptToLiteratureReview"
+          >
+            确认
+          </el-button>
+        </footer>
       </div>
     </div>
   </Teleport>
@@ -1803,9 +1896,9 @@ async function onPrimaryAction() {
       <header class="paper-main-head">
         <div>
           <h1 class="paper-main-title">{{ currentMeta.label }}</h1>
-          <p v-if="currentManuscript" class="paper-main-manuscript">
-            当前论文：<strong>{{ currentManuscript.title }}</strong>
-            <span v-if="currentManuscript.venueHint"> · {{ currentManuscript.venueHint }}</span>
+          <p class="paper-main-manuscript">
+            当前论文：<strong>{{ currentManuscript?.title ?? '' }}</strong>
+            <span v-if="currentManuscript?.venueHint"> · {{ currentManuscript.venueHint }}</span>
           </p>
           <p class="paper-main-desc">{{ currentMeta.description }}</p>
         </div>
@@ -1831,7 +1924,7 @@ async function onPrimaryAction() {
 
       <div class="paper-module-body">
       <div
-        v-if="moduleContentLoading"
+        v-if="showGenericModuleLoading"
         class="paper-module-loading"
         role="status"
         aria-live="polite"
@@ -1839,9 +1932,18 @@ async function onPrimaryAction() {
         <div class="paper-module-loading-spinner" aria-hidden="true" />
         <p class="paper-module-loading-text">加载中…</p>
       </div>
-      <template v-else>
+
       <!-- 选题发现（与运行进度同属一块，避免 v-else-if 链误绑） -->
-      <template v-if="activeModule === 'topic-discovery'">
+      <template v-else-if="activeModule === 'topic-discovery'">
+      <section
+        v-if="topicDiscoveryPageLoading"
+        class="paper-wf-panel"
+        role="status"
+        aria-live="polite"
+      >
+        <p class="paper-wf-meta">正在加载选题发现…</p>
+      </section>
+      <template v-else>
       <section class="paper-panel">
         <label class="paper-field paper-field--block">
           <span class="paper-label">检索关键词 <em class="req">*</em></span>
@@ -2083,6 +2185,7 @@ async function onPrimaryAction() {
         </div>
       </section>
       </template>
+      </template>
 
       <PaperMyManuscriptsPanel
         v-else-if="activeModule === 'my-manuscripts'"
@@ -2110,14 +2213,14 @@ async function onPrimaryAction() {
 
       <PaperWorkflowPanels
         v-else-if="isSecondaryWorkflowModule"
-        :key="`${activeModule}-${moduleContentKey}`"
+        :key="activeModule"
         ref="workflowPanelsRef"
         v-model:figure-tab="figureManagementTab"
         :module-id="activeModule"
         :manuscript-id="activeManuscriptId"
         :manuscript-title="currentManuscript?.title ?? '未命名'"
+        @generate-experiment-plan="onGenerateExperimentPlanFromReviewRow"
       />
-      </template>
       </div>
     </main>
   </div>
@@ -2375,6 +2478,20 @@ async function onPrimaryAction() {
   flex-direction: column;
   gap: 18px;
   min-height: 200px;
+}
+
+.paper-wf-panel {
+  padding: 24px 26px 28px;
+  background: #fff;
+  border: 1px solid #e8eaf0;
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(30, 27, 75, 0.06);
+}
+
+.paper-wf-meta {
+  margin: 0;
+  font-size: 13px;
+  color: #64748b;
 }
 
 .paper-module-loading {

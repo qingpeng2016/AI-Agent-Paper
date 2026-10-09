@@ -278,13 +278,15 @@
 }
 
 .paper-topic-complete-overlay {
-  cursor: pointer;
   z-index: 3100;
 }
 
 .paper-topic-complete-panel {
-  cursor: pointer;
   max-width: min(440px, calc(100vw - 32px));
+}
+
+.paper-topic-complete-btns {
+  justify-content: flex-end;
 }
 
 .paper-topic-complete-lead {
@@ -293,13 +295,6 @@
   font-weight: 600;
   color: var(--atm-text);
   line-height: 1.5;
-}
-
-.paper-topic-complete-hint {
-  margin: 0;
-  font-size: 14px;
-  color: var(--atm-text-muted);
-  line-height: 1.6;
 }
 
 .paper-message-box--default .paper-modal-title::before {

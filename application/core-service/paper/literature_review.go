@@ -52,11 +52,35 @@ func (s *LiteratureReviewService) ListByManuscript(
 	return out, nil
 }
 
+func (s *LiteratureReviewService) SoftDelete(
+	ctx context.Context,
+	userID uint,
+	manuscriptID, reviewID uint64,
+) error {
+	if manuscriptID == 0 || reviewID == 0 {
+		return errorx.ErrParamsError
+	}
+	ms, err := s.manuscripts.GetByIDForUser(ctx, uint(manuscriptID), userID)
+	if err != nil {
+		return err
+	}
+	if ms == nil {
+		return errorx.ErrParamsError.WithDetail("manuscript 不存在或无权访问")
+	}
+	ok, err := s.reviews.UpdateStatusForManuscript(ctx, reviewID, manuscriptID, userID, "deleted")
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return errorx.ErrParamsError.WithDetail("文献综述不存在或无权操作")
+	}
+	return nil
+}
+
 func literatureReviewItemView(row entity.PaperOutputLiteratureReview) response.PaperLiteratureReviewItemView {
 	item := response.PaperLiteratureReviewItemView{
 		ID:        strconv.FormatUint(row.ID, 10),
 		Version:   row.Version,
-		IsCurrent: row.IsCurrent,
 		Status:    row.Status,
 		Format:    row.Format,
 		CreatedAt: row.CreatedAt.UTC().Format(time.RFC3339),
