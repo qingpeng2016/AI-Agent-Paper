@@ -12,6 +12,7 @@ import {
   type TopicDiscoveryStepDTO,
 } from '@/api/topicDiscovery'
 import { ElMessage } from 'element-plus'
+import { paperConfirm } from '@/utils/paperDialog'
 import {
   DEFAULT_ENV_PREFERENCE,
   ENV_PREFERENCE_STORAGE_KEY,
@@ -166,6 +167,7 @@ watch(
 )
 
 const running = ref(false)
+const topicTerminateLoading = ref(false)
 const topicRunToken = ref(0)
 const topicRunsByManuscript = ref<Record<string, TopicRunDemo>>({})
 const litReviewDoneByManuscript = ref<Record<string, boolean>>({})
@@ -933,13 +935,29 @@ async function abandonCurrentTopicRun(msId: string) {
 
 async function rejectTopicCheckpoint() {
   const msId = activeManuscriptId.value
-  if (!msId) return
+  if (!msId || topicTerminateLoading.value) return
+  try {
+    await paperConfirm(
+      '终止后本轮进度将作废，确定终止吗？',
+      '终止并返回',
+      {
+        confirmButtonText: '确定终止',
+        cancelButtonText: '取消',
+        variant: 'danger',
+      },
+    )
+  } catch {
+    return
+  }
+  topicTerminateLoading.value = true
   try {
     await abandonCurrentTopicRun(msId)
     ElMessage.info('已终止本轮')
   } catch (e) {
     const msg = e instanceof Error ? e.message : '终止失败'
     ElMessage.error(msg)
+  } finally {
+    topicTerminateLoading.value = false
   }
 }
 
@@ -1319,10 +1337,20 @@ async function onPrimaryAction() {
             确认后继续下一步；终止会取消本轮进度，刷新后不会再加载。
           </p>
           <div class="paper-checkpoint-actions">
-            <button type="button" class="paper-btn-secondary" @click="rejectTopicCheckpoint">
-              终止并返回
+            <button
+              type="button"
+              class="paper-btn-secondary"
+              :disabled="topicTerminateLoading || running"
+              @click="rejectTopicCheckpoint"
+            >
+              {{ topicTerminateLoading ? '终止中…' : '终止并返回' }}
             </button>
-            <button type="button" class="paper-btn-primary" @click="continueTopicAfterCheckpoint">
+            <button
+              type="button"
+              class="paper-btn-primary"
+              :disabled="topicTerminateLoading || running"
+              @click="continueTopicAfterCheckpoint"
+            >
               确认并继续
             </button>
           </div>

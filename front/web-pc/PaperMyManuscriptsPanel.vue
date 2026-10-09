@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
+import { paperConfirm, paperPrompt } from '@/utils/paperDialog'
 import type { PaperManuscriptItem } from './types'
 
 const props = defineProps<{
@@ -32,23 +33,27 @@ function setList(next: PaperManuscriptItem[]) {
 
 async function editManuscript(item: PaperManuscriptItem) {
   try {
-    const { value } = await ElMessageBox.prompt('标题与目标 venue 可在下方分别编辑。', '编辑论文', {
+    const title = await paperPrompt('标题与目标 venue 可在下方分别编辑。', '编辑论文', {
       confirmButtonText: '保存',
       cancelButtonText: '取消',
       inputValue: item.title,
       inputPlaceholder: '论文标题',
     })
-    const title = value?.trim()
     if (!title) return
-    const { value: venue } = await ElMessageBox.prompt('可选', '目标会议/期刊', {
-      confirmButtonText: '保存',
-      cancelButtonText: '跳过',
-      inputValue: item.venueHint,
-      inputPlaceholder: '如 NeurIPS 2026',
-    })
+    let venue = item.venueHint
+    try {
+      venue = await paperPrompt('可选', '目标会议/期刊', {
+        confirmButtonText: '保存',
+        cancelButtonText: '跳过',
+        inputValue: item.venueHint,
+        inputPlaceholder: '如 NeurIPS 2026',
+      })
+    } catch {
+      /* 跳过 venue */
+    }
     const next = props.manuscripts.map((m) =>
       m.id === item.id
-        ? { ...m, title, venueHint: venue?.trim() ?? m.venueHint }
+        ? { ...m, title, venueHint: venue.trim() || m.venueHint }
         : m,
     )
     setList(next)
@@ -60,11 +65,15 @@ async function editManuscript(item: PaperManuscriptItem) {
 
 async function archiveManuscript(item: PaperManuscriptItem) {
   try {
-    await ElMessageBox.confirm(`归档后「${item.title}」不会出现在侧栏当前论文下拉中，可随时恢复。`, '归档论文', {
-      type: 'warning',
-      confirmButtonText: '归档',
-      cancelButtonText: '取消',
-    })
+    await paperConfirm(
+      `归档后「${item.title}」不会出现在侧栏当前论文下拉中，可随时恢复。`,
+      '归档论文',
+      {
+        variant: 'warning',
+        confirmButtonText: '归档',
+        cancelButtonText: '取消',
+      },
+    )
     const next = props.manuscripts.map((m) =>
       m.id === item.id ? { ...m, status: 'archived' as const } : m,
     )

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
+import { paperConfirm } from '@/utils/paperDialog'
 import {
   FIGURE_UPLOAD_ACCEPT,
   FIGURE_UPLOAD_STORAGE_KEY,
@@ -94,10 +95,10 @@ async function removeItem(id: string) {
   const target = items.value.find((it) => it.id === id)
   if (!target) return
   try {
-    await ElMessageBox.confirm(`确定移除「${target.title}」？`, '删除图表', {
+    await paperConfirm(`确定移除「${target.title}」？`, '删除图表', {
       confirmButtonText: '删除',
       cancelButtonText: '取消',
-      type: 'warning',
+      variant: 'danger',
     })
     items.value = items.value.filter((it) => it.id !== id)
     ElMessage.success('已移除')
