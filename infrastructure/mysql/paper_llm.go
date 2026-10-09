@@ -65,3 +65,13 @@ func (r *PaperLLMImpl) InsertCallLog(ctx context.Context, row *entity.PaperLLMCa
 	}
 	return r.db.WithContext(ctx).Create(row).Error
 }
+
+func (r *PaperLLMImpl) AddTokensUsedTotal(ctx context.Context, modelConfigID uint, delta int) error {
+	if modelConfigID == 0 || delta <= 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).
+		Model(&entity.PaperLLMModelConfig{}).
+		Where("id = ?", modelConfigID).
+		UpdateColumn("tokens_used_total", gorm.Expr("tokens_used_total + ?", delta)).Error
+}

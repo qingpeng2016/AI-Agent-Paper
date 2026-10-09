@@ -10,6 +10,7 @@ import (
 	httpentity "github.com/qingpeng2016/ai-agent-paper/domain/http/entity"
 	httprepo "github.com/qingpeng2016/ai-agent-paper/domain/http/repository"
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
+	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/repository"
 )
 
 type LLMUsage struct {
@@ -17,22 +18,40 @@ type LLMUsage struct {
 	CompletionTokens int `json:"completion_tokens"`
 }
 
+func (u LLMUsage) TotalTokens() int {
+	return u.PromptTokens + u.CompletionTokens
+}
+
 type LLMChatService struct {
 	anthropic httprepo.AnthropicRepo
 	gemini    httprepo.GoogleGeminiRepo
 	openai    httprepo.OpenAIChatRepo
+	llmRepo   repository.PaperLLMRepo
 }
 
 func NewLLMChatService(
 	anthropic httprepo.AnthropicRepo,
 	gemini httprepo.GoogleGeminiRepo,
 	openai httprepo.OpenAIChatRepo,
+	llmRepo repository.PaperLLMRepo,
 ) *LLMChatService {
 	return &LLMChatService{
 		anthropic: anthropic,
 		gemini:    gemini,
 		openai:    openai,
+		llmRepo:   llmRepo,
 	}
+}
+
+func (s *LLMChatService) accumulateModelTokens(ctx context.Context, model *entity.PaperLLMModelConfig, usage LLMUsage) {
+	if s.llmRepo == nil || model == nil || model.ID == 0 {
+		return
+	}
+	delta := usage.TotalTokens()
+	if delta <= 0 {
+		return
+	}
+	_ = s.llmRepo.AddTokensUsedTotal(ctx, model.ID, delta)
 }
 
 func (s *LLMChatService) Complete(ctx context.Context, model *entity.PaperLLMModelConfig, systemPrompt, userPrompt string) (text string, usage LLMUsage, err error) {
@@ -68,7 +87,9 @@ func (s *LLMChatService) Complete(ctx context.Context, model *entity.PaperLLMMod
 		if callErr != nil {
 			return "", usage, errorx.ErrLLMCallFailed.WithDetail(callErr.Error())
 		}
-		return res.Text, LLMUsage{PromptTokens: res.InputTokens, CompletionTokens: res.OutputTokens}, nil
+		usage = LLMUsage{PromptTokens: res.InputTokens, CompletionTokens: res.OutputTokens}
+		s.accumulateModelTokens(ctx, model, usage)
+		return res.Text, usage, nil
 	case "google", "gemini":
 		res, callErr := s.gemini.ChatCompletions(ctx, httpentity.OpenAIChatCompletionRequest{
 			URL:       url,
@@ -81,7 +102,9 @@ func (s *LLMChatService) Complete(ctx context.Context, model *entity.PaperLLMMod
 		if callErr != nil {
 			return "", usage, errorx.ErrLLMCallFailed.WithDetail(callErr.Error())
 		}
-		return res.Text, LLMUsage{PromptTokens: res.PromptTokens, CompletionTokens: res.CompletionTokens}, nil
+		usage = LLMUsage{PromptTokens: res.PromptTokens, CompletionTokens: res.CompletionTokens}
+		s.accumulateModelTokens(ctx, model, usage)
+		return res.Text, usage, nil
 	default:
 		res, callErr := s.openai.ChatCompletions(ctx, httpentity.OpenAIChatCompletionRequest{
 			URL:       url,
@@ -94,7 +117,9 @@ func (s *LLMChatService) Complete(ctx context.Context, model *entity.PaperLLMMod
 		if callErr != nil {
 			return "", usage, errorx.ErrLLMCallFailed.WithDetail(callErr.Error())
 		}
-		return res.Text, LLMUsage{PromptTokens: res.PromptTokens, CompletionTokens: res.CompletionTokens}, nil
+		usage = LLMUsage{PromptTokens: res.PromptTokens, CompletionTokens: res.CompletionTokens}
+		s.accumulateModelTokens(ctx, model, usage)
+		return res.Text, usage, nil
 	}
 }
 

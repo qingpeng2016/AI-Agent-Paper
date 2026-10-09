@@ -11,4 +11,6 @@ type PaperLLMRepo interface {
 	GetActiveBindingByStage(ctx context.Context, stageCode string) (*entity.PaperLLMWorkflowBinding, error)
 	GetActivePromptByStage(ctx context.Context, stageCode string) (*entity.PaperLLMPromptTemplate, error)
 	InsertCallLog(ctx context.Context, row *entity.PaperLLMCallLog) error
+	// AddTokensUsedTotal 原子累加 tokens_used_total（delta = prompt + completion）。
+	AddTokensUsedTotal(ctx context.Context, modelConfigID uint, delta int) error
 }

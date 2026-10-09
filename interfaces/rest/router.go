@@ -24,7 +24,8 @@ type Router struct {
 	trackingHandler        *handler.TrackingHandler
 	paperLiteratureHandler    *handler.PaperLiteratureHandler
 	paperTopicDiscoveryHandler *handler.PaperTopicDiscoveryHandler
-	paperManuscriptHandler     *handler.PaperManuscriptHandler
+	paperManuscriptHandler       *handler.PaperManuscriptHandler
+	paperLiteratureReviewHandler *handler.PaperLiteratureReviewHandler
 }
 
 func NewRouter(
@@ -36,16 +37,18 @@ func NewRouter(
 	paperLiteratureHandler *handler.PaperLiteratureHandler,
 	paperTopicDiscoveryHandler *handler.PaperTopicDiscoveryHandler,
 	paperManuscriptHandler *handler.PaperManuscriptHandler,
+	paperLiteratureReviewHandler *handler.PaperLiteratureReviewHandler,
 ) *Router {
 	return &Router{
-		setting:                    setting,
-		userHandler:                userHandler,
-		inviteRebateHandler:        inviteRebateHandler,
-		couponHandler:              couponHandler,
-		trackingHandler:            trackingHandler,
-		paperLiteratureHandler:     paperLiteratureHandler,
-		paperTopicDiscoveryHandler: paperTopicDiscoveryHandler,
-		paperManuscriptHandler:     paperManuscriptHandler,
+		setting:                      setting,
+		userHandler:                  userHandler,
+		inviteRebateHandler:          inviteRebateHandler,
+		couponHandler:                couponHandler,
+		trackingHandler:              trackingHandler,
+		paperLiteratureHandler:       paperLiteratureHandler,
+		paperTopicDiscoveryHandler:   paperTopicDiscoveryHandler,
+		paperManuscriptHandler:       paperManuscriptHandler,
+		paperLiteratureReviewHandler: paperLiteratureReviewHandler,
 	}
 }
 
@@ -76,6 +79,7 @@ func (r *Router) setupRouters() *gin.Engine {
 		paperAuth.GET("/manuscripts", r.paperManuscriptHandler.GetManuscripts)
 		paperAuth.POST("/manuscripts", r.paperManuscriptHandler.PostCreateManuscript)
 		paperAuth.POST("/manuscripts/set-current", r.paperManuscriptHandler.PostSetCurrentManuscript)
+		paperAuth.GET("/literature-reviews", r.paperLiteratureReviewHandler.GetLiteratureReviews)
 	}
 
 	userAuth := engine.Group("/api/v1", ginMiddleware.RequireAuth)

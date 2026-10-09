@@ -12,6 +12,7 @@ import {
   commitTopicDiscoveryManuscript,
   parseRetrieveLiteratureLinks,
   applyStoredTopicRunInputToForm,
+  isTopicRunTerminalCompleted,
   type TopicDiscoveryRunResponse,
   type TopicDiscoveryStepDTO,
 } from '@/api/topicDiscovery'
@@ -37,11 +38,9 @@ import {
   type PaperManuscriptItem,
   type PaperModuleId,
   type TopicCheckpointKey,
-  type TopicDiscoveryArtifactSnapshot,
   type TopicDiscoveryForm,
   type TopicFlowStepStatus,
 } from './types'
-import { DEMO_EXPERIMENT_PLAN } from './demoModuleOutputs'
 import { DEMO_MODULE_TOKEN_ESTIMATES } from './demoOperationLogs'
 import PaperModuleNavIcon from './PaperModuleNavIcon.vue'
 import PaperMyManuscriptsPanel from './PaperMyManuscriptsPanel.vue'
@@ -112,16 +111,6 @@ const CHECKPOINT_COPY: Record<TopicCheckpointKey, Omit<TopicCheckpointView, 'key
 const LIT_REVIEW_RUN_STORAGE_KEY = 'atm:paper:lit-review-run:v1'
 const EXPERIMENT_PLAN_RUN_STORAGE_KEY = 'atm:paper:experiment-plan-run:v1'
 
-function buildDemoExperimentPlanLines(): string[] {
-  return [
-    DEMO_EXPERIMENT_PLAN.hypothesis,
-    `基线：${DEMO_EXPERIMENT_PLAN.baselines.join(' · ')}`,
-    `指标：${DEMO_EXPERIMENT_PLAN.metrics.join(' · ')}`,
-    `消融：${DEMO_EXPERIMENT_PLAN.ablations.join(' · ')}`,
-    ...DEMO_EXPERIMENT_PLAN.steps,
-  ]
-}
-
 const MANUSCRIPTS_STORAGE_KEY = 'atm:paper:manuscripts:v1'
 const LEGACY_PROJECTS_STORAGE_KEY = 'atm:paper:projects:v1'
 
@@ -151,6 +140,9 @@ async function prepareModuleContent(moduleId: PaperModuleId) {
   if (moduleId === 'personal-center') {
     await personalCenterPanelRef.value?.reloadFromMenu?.()
   }
+  if (moduleId === 'literature-review') {
+    await workflowPanelsRef.value?.reloadLiteratureReviews?.()
+  }
 }
 
 function selectModule(id: PaperModuleId) {
@@ -172,6 +164,11 @@ const topicRunToken = ref(0)
 const topicRunStartInFlight = ref(false)
 /** 检查点「确认并继续」请求进行中 */
 const topicContinueLoading = ref(false)
+/** continue 后乐观标 running 的阶段，避免 POST/轮询仍返回 checkpoint 把转圈打掉 */
+const topicContinueOptimisticStage = ref<string | null>(null)
+/** 本轮选题 run 由用户启动/继续，完成后弹窗引导去文献综述 */
+const topicRunAwaitingCompletionPrompt = ref(false)
+const topicCompletionPromptVisible = ref(false)
 const topicRunsByManuscript = ref<Record<string, TopicRunDemo>>({})
 const litReviewDoneByManuscript = ref<Record<string, boolean>>({})
 const experimentPlanDoneByManuscript = ref<Record<string, boolean>>({})
@@ -190,7 +187,6 @@ const {
   ready: topicFormOptionsReady,
   applyCatalogIntensityAuditDefaults,
   literatureSourceOptions,
-  literatureSourceLabel,
   applyDefaultLiteratureSourceCodes,
 } = useTopicDiscoveryFormOptions()
 
@@ -759,54 +755,9 @@ const topicFailedSummary = computed((): { stageLabel: string; stageCode: string;
   }
 })
 
-/** 文献综述只读：当前论文最近一次选题 run 的 artifact 快照 */
-const topicDiscoveryArtifact = computed((): TopicDiscoveryArtifactSnapshot => {
-  const run = currentTopicRun.value
-  const retrieve = run.steps.find((s) => s.stageCode === 'retrieve')
-  const corpusReady = retrieve?.status === 'completed'
-  const runCompleted = run.status === 'completed'
-  const sourceLabels = topicForm.sourceCodes.map((c) => literatureSourceLabel(c))
-  const direction =
-    formatTopicDirectionText(topicForm).trim() ||
-    (corpusReady ? '（本次 run 未保留方向文案 · 演示）' : '（尚未填写研究方向）')
-
-  const ideasDone = run.steps.find((s) => s.stageCode === 'generate_ideas')?.status === 'completed'
-  const disciplineLabel =
-    disciplineSelectOptions.value.find((d) => d.value === topicForm.disciplineCode)?.label ??
-    topicForm.disciplineCode
-
-  const apiRun = topicLastRunByMs.value[activeManuscriptId.value]
-  const retrieveStep = apiRun?.steps.find((s) => s.stage_code === 'retrieve')
-  const ideasStep = apiRun?.steps.find((s) => s.stage_code === 'generate_ideas')
-  const retrieveExtra = (retrieveStep?.extra ?? {}) as Record<string, unknown>
-  const hitCount =
-    typeof retrieveExtra.hit_count === 'number'
-      ? retrieveExtra.hit_count
-      : corpusReady
-        ? 86
-        : 0
-  const verifiedCount =
-    typeof retrieveExtra.verified_count === 'number'
-      ? retrieveExtra.verified_count
-      : corpusReady
-        ? 79
-        : 0
-
-  return {
-    runStatus: run.status,
-    corpusReady,
-    runCompleted,
-    disciplineLabel,
-    direction,
-    venue: topicForm.venue,
-    sourceLabels,
-    literatureHitCount: corpusReady ? hitCount : 0,
-    verifiedHitCount: corpusReady ? verifiedCount : 0,
-    candidateIdeas: ideasDone ? ideaLinesFromGenerateIdeasStep(ideasStep) : [],
-    noveltyLines: ideasDone ? noveltyLinesFromTopicRun(apiRun) : [],
-    experimentPlanLines: experimentPlanDoneForManuscript.value ? buildDemoExperimentPlanLines() : [],
-  }
-})
+const topicServerRunCompleted = computed(() =>
+  isTopicRunTerminalCompleted(topicDiscoveryApiRun.value),
+)
 
 const litReviewDoneForManuscript = computed(
   () => !!litReviewDoneByManuscript.value[activeManuscriptId.value],
@@ -817,7 +768,7 @@ const experimentPlanDoneForManuscript = computed(
 )
 
 const topicReadyForLiteratureReview = computed(
-  () => currentTopicRun.value.status === 'completed' && !litReviewDoneForManuscript.value,
+  () => topicServerRunCompleted.value && !litReviewDoneForManuscript.value,
 )
 
 const litReviewReadyForExperimentPlan = computed(
@@ -850,7 +801,7 @@ const primaryActionLabel = computed(() => {
     if (currentTopicRun.value.status === 'checkpoint') return '等待确认'
     if (currentTopicRun.value.status === 'running' || running.value) return '运行中…'
     if (topicReadyForLiteratureReview.value) return '生成文献综述'
-    if (currentTopicRun.value.status === 'completed') return '再次运行'
+    if (topicServerRunCompleted.value) return '再次运行'
     if (currentTopicRun.value.status === 'failed') return '再次运行'
     return '运行'
   }
@@ -865,6 +816,31 @@ const primaryActionLabel = computed(() => {
 
 function persistTopicRun(msId: string, patch: TopicRunDemo) {
   topicRunsByManuscript.value = { ...topicRunsByManuscript.value, [msId]: patch }
+}
+
+function mergeTopicRunFromApi(msId: string, data: TopicDiscoveryRunResponse): TopicRunDemo {
+  const fromApi = topicRunFromApi(data)
+  const optStage = topicContinueOptimisticStage.value
+  if (!optStage) return fromApi
+
+  const apiStep = fromApi.steps.find((s) => s.stageCode === optStage)
+  const localStep = topicRunsByManuscript.value[msId]?.steps.find((s) => s.stageCode === optStage)
+  const apiStillPending = apiStep?.status === 'pending'
+  const localRunning = localStep?.status === 'running'
+
+  if (apiStep?.status === 'running' || apiStep?.status === 'completed' || apiStep?.status === 'failed') {
+    topicContinueOptimisticStage.value = null
+    return fromApi
+  }
+
+  if (!localRunning || !apiStillPending) return fromApi
+
+  const steps = fromApi.steps.map((s) =>
+    s.stageCode === optStage ? { ...s, status: 'running' as TopicFlowStepStatus } : s,
+  )
+  let status: TopicRunDemo['status'] = fromApi.status
+  if (status === 'checkpoint') status = 'running'
+  return { ...fromApi, status, steps, checkpoint: null }
 }
 
 /** 与后端 run_status 落盘值一一对应，不做推断 */
@@ -947,13 +923,11 @@ onUnmounted(() => {
 function startTopicRunProgressPoll(msId: string, token: number): () => void {
   const tick = async () => {
     if (token !== topicRunToken.value) return
-    if (topicRunStartInFlight.value || topicContinueLoading.value) return
+    if (topicRunStartInFlight.value) return
     try {
       const data = await fetchCurrentTopicDiscoveryRun(msId)
       if (!data || token !== topicRunToken.value) return
-      topicLastRunByMs.value = { ...topicLastRunByMs.value, [msId]: data }
-      persistTopicRun(msId, topicRunFromApi(data))
-      syncRunningFlagFromServer(msId)
+      syncTopicRunUiAfterServer(msId, data)
       if (data.manuscript_id > 0) {
         void loadManuscriptsFromServer(String(data.manuscript_id))
       }
@@ -974,33 +948,6 @@ function noveltyLinesFromResultObj(r: Record<string, unknown>): string[] {
     const t = item.idea_title ?? '选题'
     return `${t}：${item.risk ?? '—'}${item.note ? ` · ${item.note}` : ''}`
   })
-}
-
-function ideaLinesFromGenerateIdeasStep(step?: TopicDiscoveryStepDTO): string[] {
-  if (!step?.result || typeof step.result !== 'object') return linesFromApiStep(step)
-  const result = step.result as Record<string, unknown>
-  const ideas = (result.ideas as Array<{ title?: string; problem?: string }>) ?? []
-  if (!ideas.length) return linesFromApiStep(step)
-  return ideas.slice(0, 8).map((idea, i) => {
-    const t = idea.title?.trim() || `Idea ${i + 1}`
-    const p = idea.problem?.trim()
-    return p ? `${t} — ${p}` : t
-  })
-}
-
-function noveltyLinesFromTopicRun(raw: TopicDiscoveryRunResponse | null | undefined): string[] {
-  if (!raw) return []
-  const ideasStep = raw.steps.find((s) => s.stage_code === 'generate_ideas')
-  if (ideasStep?.result && typeof ideasStep.result === 'object') {
-    const root = ideasStep.result as Record<string, unknown>
-    const nov = root.novelty
-    if (nov && typeof nov === 'object') {
-      return noveltyLinesFromResultObj(nov as Record<string, unknown>)
-    }
-  }
-  const legacy = raw.steps.find((s) => s.stage_code === 'novelty')
-  if (legacy) return linesFromApiStep(legacy)
-  return []
 }
 
 function linesFromApiStep(step?: TopicDiscoveryStepDTO): string[] {
@@ -1141,6 +1088,35 @@ function topicRunFromApi(data: TopicDiscoveryRunResponse): TopicRunDemo {
   return { status, steps, checkpoint }
 }
 
+function markTopicRunForCompletionPrompt() {
+  topicRunAwaitingCompletionPrompt.value = true
+}
+
+function maybeShowTopicDiscoveryCompletionPrompt() {
+  if (!topicRunAwaitingCompletionPrompt.value) return
+  topicRunAwaitingCompletionPrompt.value = false
+  topicCompletionPromptVisible.value = true
+}
+
+function dismissTopicCompletionPromptToLiteratureReview() {
+  if (!topicCompletionPromptVisible.value) return
+  topicCompletionPromptVisible.value = false
+  selectModule('literature-review')
+}
+
+function syncTopicRunUiAfterServer(msId: string, data: TopicDiscoveryRunResponse) {
+  topicLastRunByMs.value = { ...topicLastRunByMs.value, [msId]: data }
+  if (isTopicRunTerminalCompleted(data)) {
+    persistTopicRun(msId, createIdleTopicRun())
+    running.value = false
+    topicContinueOptimisticStage.value = null
+    maybeShowTopicDiscoveryCompletionPrompt()
+    return
+  }
+  persistTopicRun(msId, mergeTopicRunFromApi(msId, data))
+  syncRunningFlagFromServer(msId)
+}
+
 function buildTopicRunRequest(action: 'start' | 'continue') {
   const direction = formatTopicDirectionText(topicForm)
   const msNum = Number(activeManuscriptId.value)
@@ -1170,11 +1146,14 @@ async function hydrateTopicRunFromServer(msId: string) {
       persistTopicRun(msId, createIdleTopicRun())
       return
     }
-    applyStoredTopicRunInputToForm(topicForm, data)
+    if (!isTopicRunTerminalCompleted(data)) {
+      applyStoredTopicRunInputToForm(topicForm, data)
+    }
     syncTopicDisciplineFromCurrentManuscript()
-    topicLastRunByMs.value = { ...topicLastRunByMs.value, [msId]: data }
-    persistTopicRun(msId, topicRunFromApi(data))
-    requestScrollToTopicFlowIfNeeded()
+    syncTopicRunUiAfterServer(msId, data)
+    if (!isTopicRunTerminalCompleted(data)) {
+      requestScrollToTopicFlowIfNeeded()
+    }
   } catch {
     /* 未登录或无 run 时忽略 */
   }
@@ -1198,14 +1177,18 @@ async function invokeTopicDiscoveryRun(action: 'start' | 'continue', token: numb
   }
   if (token !== topicRunToken.value || !data) return
 
+  if (isTopicRunTerminalCompleted(data)) {
+    syncTopicRunUiAfterServer(msId, data)
+    finalizeTopicDiscoveryRun(msId)
+    return
+  }
+
   topicLastRunByMs.value = { ...topicLastRunByMs.value, [msId]: data }
-  const run = topicRunFromApi(data)
+  const run = mergeTopicRunFromApi(msId, data)
   persistTopicRun(msId, run)
   syncRunningFlagFromServer(msId)
 
-  if (run.status === 'completed') {
-    finalizeTopicDiscoveryRun(msId)
-  } else if (run.status === 'checkpoint' && run.checkpoint) {
+  if (run.status === 'checkpoint' && run.checkpoint) {
     ElMessage.info(`流程已暂停：请确认「${run.checkpoint.title}」后再继续`)
   } else if (run.status === 'failed') {
     const errLine = topicFailedSummary.value?.error
@@ -1232,12 +1215,23 @@ function optimisticMarkFirstStepRunning(msId: string) {
 function optimisticMarkNextStepRunning(msId: string) {
   const cur = topicRunsByManuscript.value[msId] ?? createIdleTopicRun()
   const steps = cur.steps.map((s) => ({ ...s }))
-  for (let i = 0; i < steps.length - 1; i++) {
-    if (steps[i].status === 'completed' && steps[i + 1].status === 'pending') {
-      steps[i + 1].status = 'running'
-      break
+  let marked = false
+  const pendingIdx = steps.findIndex((s) => s.status === 'pending')
+  if (pendingIdx >= 0) {
+    steps[pendingIdx].status = 'running'
+    topicContinueOptimisticStage.value = steps[pendingIdx].stageCode
+    marked = true
+  } else {
+    for (let i = 0; i < steps.length - 1; i++) {
+      if (steps[i].status === 'completed' && steps[i + 1].status === 'pending') {
+        steps[i + 1].status = 'running'
+        topicContinueOptimisticStage.value = steps[i + 1].stageCode
+        marked = true
+        break
+      }
     }
   }
+  if (!marked) topicContinueOptimisticStage.value = null
   persistTopicRun(msId, {
     status: 'running',
     steps,
@@ -1263,10 +1257,11 @@ function syncRunningFlagFromServer(msId: string) {
 
 function finalizeTopicDiscoveryRun(_msId: string) {
   recordModuleOperationLog('topic-discovery', '运行工作流（retrieve → ideas → audit）')
-  ElMessage.success('选题发现已完成：可点顶栏「生成文献综述」继续')
 }
 
 function resetTopicRunForAction(msId: string) {
+  topicRunAwaitingCompletionPrompt.value = false
+  topicCompletionPromptVisible.value = false
   topicRunToken.value += 1
   persistTopicRun(msId, createIdleTopicRun())
   if (litReviewDoneByManuscript.value[msId]) {
@@ -1389,7 +1384,7 @@ async function rerunLiteratureReviewModule() {
 async function runLiteratureReviewFromTopic() {
   const msId = activeManuscriptId.value
   if (!msId) return
-  if (currentTopicRun.value.status !== 'completed') {
+  if (!topicServerRunCompleted.value) {
     ElMessage.warning('请先完成选题发现（三步含审计）')
     return
   }
@@ -1398,8 +1393,7 @@ async function runLiteratureReviewFromTopic() {
   running.value = true
   try {
     const committed = await commitTopicDiscoveryManuscript(currentManuscript.value?.title)
-    topicLastRunByMs.value = { ...topicLastRunByMs.value, [msId]: committed }
-    persistTopicRun(msId, topicRunFromApi(committed))
+    syncTopicRunUiAfterServer(msId, committed)
     await nextTick()
     const ok = await workflowPanelsRef.value?.runModule('literature-review')
     if (ok) {
@@ -1420,6 +1414,7 @@ async function startTopicDiscoveryRun() {
   if (!msId) return
 
   resetTopicRunForAction(msId)
+  markTopicRunForCompletionPrompt()
   const token = topicRunToken.value
   topicRunStartInFlight.value = true
   running.value = true
@@ -1447,6 +1442,7 @@ function continueTopicAfterCheckpoint() {
   if (topicContinueLoading.value) return
 
   const token = topicRunToken.value
+  markTopicRunForCompletionPrompt()
   optimisticMarkNextStepRunning(msId)
   running.value = true
   topicContinueLoading.value = true
@@ -1455,6 +1451,7 @@ function continueTopicAfterCheckpoint() {
   void invokeTopicDiscoveryRun('continue', token)
     .catch(async (e) => {
       if (token !== topicRunToken.value) return
+      topicContinueOptimisticStage.value = null
       await hydrateTopicRunFromServer(msId)
       const msg = e instanceof Error ? e.message : '继续失败'
       if (currentTopicRun.value.status !== 'failed') {
@@ -1464,6 +1461,16 @@ function continueTopicAfterCheckpoint() {
     .finally(() => {
       if (token !== topicRunToken.value) return
       topicContinueLoading.value = false
+      if (!topicContinueOptimisticStage.value) {
+        syncRunningFlagFromServer(msId)
+        return
+      }
+      const apiRun = topicLastRunByMs.value[msId]
+      const stage = topicContinueOptimisticStage.value
+      const apiStep = apiRun?.steps.find((s) => s.stage_code === stage)
+      if (apiStep && apiStep.status !== 'pending') {
+        topicContinueOptimisticStage.value = null
+      }
       syncRunningFlagFromServer(msId)
     })
 }
@@ -1704,6 +1711,28 @@ async function onPrimaryAction() {
             取消
           </el-button>
         </footer>
+      </div>
+    </div>
+  </Teleport>
+
+  <Teleport to="body">
+    <div
+      v-if="topicCompletionPromptVisible"
+      class="paper-modal-overlay paper-topic-complete-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="paper-topic-complete-title"
+      @click="dismissTopicCompletionPromptToLiteratureReview"
+      @keydown.escape="dismissTopicCompletionPromptToLiteratureReview"
+    >
+      <div class="paper-message-box paper-message-box--default paper-modal-panel paper-topic-complete-panel">
+        <header class="paper-modal-header">
+          <h2 id="paper-topic-complete-title" class="paper-modal-title">选题发现已完成</h2>
+        </header>
+        <div class="paper-modal-body">
+          <p class="paper-topic-complete-lead">文献综述已生成完成。</p>
+          <p class="paper-topic-complete-hint">点击任意处前往「文献综述」查看与继续编辑。</p>
+        </div>
       </div>
     </div>
   </Teleport>
@@ -2087,7 +2116,6 @@ async function onPrimaryAction() {
         :module-id="activeModule"
         :manuscript-id="activeManuscriptId"
         :manuscript-title="currentManuscript?.title ?? '未命名'"
-        :topic-artifact="topicDiscoveryArtifact"
       />
       </template>
       </div>

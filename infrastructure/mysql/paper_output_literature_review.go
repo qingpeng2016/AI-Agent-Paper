@@ -48,3 +48,28 @@ func (r *PaperOutputLiteratureReviewImpl) CreateAsCurrent(ctx context.Context, r
 		return tx.Create(row).Error
 	})
 }
+
+func (r *PaperOutputLiteratureReviewImpl) ListByManuscriptForUser(
+	ctx context.Context,
+	userID uint,
+	manuscriptID uint64,
+) ([]entity.PaperOutputLiteratureReview, error) {
+	var rows []entity.PaperOutputLiteratureReview
+	err := r.db.WithContext(ctx).
+		Where("manuscript_id = ? AND user_id = ?", manuscriptID, userID).
+		Order("created_at DESC, id DESC").
+		Find(&rows).Error
+	return rows, err
+}
+
+func (r *PaperOutputLiteratureReviewImpl) ListByManuscript(
+	ctx context.Context,
+	manuscriptID uint64,
+) ([]entity.PaperOutputLiteratureReview, error) {
+	var rows []entity.PaperOutputLiteratureReview
+	err := r.db.WithContext(ctx).
+		Where("manuscript_id = ?", manuscriptID).
+		Order("created_at DESC, id DESC").
+		Find(&rows).Error
+	return rows, err
+}

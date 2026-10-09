@@ -1,3 +1,5 @@
+import { TOPIC_DISCOVERY_FLOW_STEPS } from '@paper/types'
+
 export type TopicDiscoveryFormOptionsResponse = {
   disciplines: Array<{
     code: string
@@ -91,6 +93,7 @@ export function applyStoredTopicRunInputToForm(
   run?: TopicDiscoveryRunResponse | null,
 ): void {
   if (!run) return
+  if (isTopicRunTerminalCompleted(run)) return
   const retrieve = run.steps.find((s) => s.stage_code === 'retrieve')
   const p = retrieve?.input_params
   if (!p || typeof p !== 'object') return
@@ -170,6 +173,18 @@ export type TopicDiscoveryRunResponse = {
   human_checkpoint: boolean
   pause_after_stage?: string
   steps: TopicDiscoveryStepDTO[]
+}
+
+/** 三步均 completed（或 run_status=completed）：终态，不再把 retrieve 输入回填到表单 */
+export function isTopicRunTerminalCompleted(
+  data: TopicDiscoveryRunResponse | null | undefined,
+): boolean {
+  if (!data) return false
+  if (data.run_status === 'completed') return true
+  return TOPIC_DISCOVERY_FLOW_STEPS.every((def) => {
+    const st = data.steps.find((s) => s.stage_code === def.stageCode)?.status
+    return st === 'completed'
+  })
 }
 
 const RUN_TIMEOUT_MS = 600_000

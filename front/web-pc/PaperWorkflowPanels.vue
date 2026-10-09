@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref, toRefs, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import {
+  fetchLiteratureReviews,
+  formatLiteratureReviewTabLabel,
+  type PaperLiteratureReviewItem,
+} from '@/api/literatureReviews'
 import {
   DEMO_AUTO_REVIEW,
   DEMO_EXPERIMENT_PLAN,
   DEMO_FIGURES,
-  DEMO_LIT_REVIEW,
   DEMO_MANUSCRIPT,
   DEMO_MANUSCRIPT_ANALYSIS,
 } from './demoModuleOutputs'
@@ -15,7 +19,6 @@ import {
   DEFAULT_AUTO_REVIEW,
   DEFAULT_EXPERIMENT_PLANNING,
   DEFAULT_FIGURE_GENERATION,
-  DEFAULT_LITERATURE_REVIEW,
   DEFAULT_MANUSCRIPT_ANALYSIS,
   DEFAULT_PAPER_WRITING,
   FIGURE_CHART_OPTIONS,
@@ -23,31 +26,28 @@ import {
   type AutoReviewForm,
   type ExperimentPlanningForm,
   type FigureGenerationForm,
-  type LiteratureReviewForm,
   type ManuscriptAnalysisForm,
   type PaperModuleId,
   type PaperWritingForm,
-  EMPTY_TOPIC_DISCOVERY_ARTIFACT,
-  type TopicDiscoveryArtifactSnapshot,
 } from './types'
 
 export type FigureManagementTabId = 'upload' | 'generate'
 
 const figureTab = defineModel<FigureManagementTabId>('figureTab', { default: 'upload' })
 
-const {
-  moduleId,
-  topicArtifact = EMPTY_TOPIC_DISCOVERY_ARTIFACT,
-  manuscriptId = '',
-  manuscriptTitle = '未命名',
-} = defineProps<{
-  moduleId: PaperModuleId
-  topicArtifact?: TopicDiscoveryArtifactSnapshot
-  manuscriptId?: string
-  manuscriptTitle?: string
-}>()
+const props = withDefaults(
+  defineProps<{
+    moduleId: PaperModuleId
+    manuscriptId?: string
+    manuscriptTitle?: string
+  }>(),
+  {
+    manuscriptId: '',
+    manuscriptTitle: '未命名',
+  },
+)
+const { moduleId, manuscriptId, manuscriptTitle } = toRefs(props)
 
-const litForm = reactive<LiteratureReviewForm>({ ...DEFAULT_LITERATURE_REVIEW })
 const planForm = reactive<ExperimentPlanningForm>({ ...DEFAULT_EXPERIMENT_PLANNING })
 const reviewForm = reactive<AutoReviewForm>({ ...DEFAULT_AUTO_REVIEW })
 const writeForm = reactive<PaperWritingForm>({
@@ -61,6 +61,58 @@ const figureForm = reactive<FigureGenerationForm>({
 const analysisForm = reactive<ManuscriptAnalysisForm>({ ...DEFAULT_MANUSCRIPT_ANALYSIS })
 
 const resultVisible = ref<Partial<Record<PaperModuleId, boolean>>>({})
+
+const litReviewItems = ref<PaperLiteratureReviewItem[]>([])
+const activeLitReviewId = ref('')
+const litReviewsLoading = ref(false)
+
+const activeLitReview = computed(
+  () =>
+    litReviewItems.value.find((i) => i.id === activeLitReviewId.value) ??
+    litReviewItems.value[0] ??
+    null,
+)
+
+const LIT_STRUCTURE_LABEL: Record<string, string> = {
+  thematic: '按主题',
+  chronological: '按时间线',
+  method: '按方法族',
+}
+
+async function reloadLiteratureReviews() {
+  const ms = manuscriptId.value
+  if (!ms || !/^\d+$/.test(ms)) {
+    litReviewItems.value = []
+    activeLitReviewId.value = ''
+    return
+  }
+  litReviewsLoading.value = true
+  try {
+    const data = await fetchLiteratureReviews(ms)
+    litReviewItems.value = data.items ?? []
+    if (
+      !activeLitReviewId.value ||
+      !litReviewItems.value.some((i) => i.id === activeLitReviewId.value)
+    ) {
+      activeLitReviewId.value = litReviewItems.value[0]?.id ?? ''
+    }
+  } catch (e) {
+    litReviewItems.value = []
+    activeLitReviewId.value = ''
+    const msg = e instanceof Error ? e.message : '加载文献综述失败'
+    ElMessage.error(msg)
+  } finally {
+    litReviewsLoading.value = false
+  }
+}
+
+watch(
+  () => [moduleId.value, manuscriptId.value] as const,
+  ([mod]) => {
+    if (mod === 'literature-review') void reloadLiteratureReviews()
+  },
+  { immediate: true },
+)
 
 const intensityOptions = [
   { value: 'fast', label: '更快' },
@@ -114,19 +166,12 @@ function isChartChecked(value: string) {
 
 async function runModule(id: PaperModuleId): Promise<boolean> {
   if (id === 'literature-review') {
-    if (!topicArtifact.runCompleted) {
-      ElMessage.warning('请先在「选题发现」完成检索 → 脑暴 → 审计，再整理成综述')
+    await reloadLiteratureReviews()
+    if (!litReviewItems.value.length) {
+      ElMessage.warning('暂无文献综述，请先在「选题发现」完成审计步骤')
       return false
     }
-    if (
-      !litForm.includeFieldSurvey &&
-      !litForm.includeIdeaAndNovelty &&
-      !litForm.includeExperimentContext &&
-      !litForm.includeGap
-    ) {
-      ElMessage.warning('请至少选择一项要纳入综述的内容')
-      return false
-    }
+    return true
   }
   if (id === 'experiment-planning' && !planForm.ideaSummary.trim()) {
     ElMessage.warning('请填写核心 idea / 假设')
@@ -146,135 +191,71 @@ async function runModule(id: PaperModuleId): Promise<boolean> {
   return true
 }
 
-defineExpose({ runModule })
+defineExpose({ runModule, reloadLiteratureReviews })
 </script>
 
 <template>
   <div class="wf-root">
-  <!-- 文献综述 -->
+  <!-- 文献综述：paper_output_literature_review -->
   <div v-if="moduleId === 'literature-review'" class="wf-stack">
-    <section class="wf-panel">
-      <h2 class="wf-title">整理选题产出 → 一篇综述</h2>
+    <section v-if="litReviewsLoading" class="wf-panel">
+      <p class="wf-meta">正在加载文献综述…</p>
+    </section>
+
+    <section v-else-if="!litReviewItems.length" class="wf-panel">
+      <h2 class="wf-title">文献综述</h2>
       <p class="wf-lead">
-        本步<strong>不查文献、不填检索参数</strong>。把「选题发现」产出（入库语料、候选 idea、新颖性）与可选「实验规划」语境合并成可引用的
-        <code>literature_review</code> artifact，供论文写作 Related Work 使用。
+        当前论文尚无文献综述。请先在「选题发现」完成审计步骤（第三步会自动生成并入库）。
       </p>
-      <div class="wf-pipeline" aria-label="文献综述流程">
-        <span>读选题 artifact</span>
-        <span class="wf-pipeline-sep" aria-hidden="true">→</span>
-        <span>分节归纳</span>
-        <span class="wf-pipeline-sep" aria-hidden="true">→</span>
-        <span>统一综述文稿</span>
-        <span class="wf-pipeline-sep" aria-hidden="true">→</span>
-        <span>gap + 引用表</span>
-      </div>
+    </section>
 
-      <p v-if="!topicArtifact.runCompleted" class="wf-callout wf-callout--warn">
-        当前选题 run 状态：<strong>{{ topicArtifact.runStatus }}</strong>。
-        请先在「选题发现」完成脑暴与审计后再点运行；下方为只读预览（有则显示）。
-      </p>
-
-      <h3 class="wf-subhead">输入 · 选题发现产出（只读）</h3>
-      <div class="wf-artifact-grid">
-        <article class="wf-artifact-card wf-artifact-card--wide">
-          <h4 class="wf-artifact-title">学科 · 方向 · venue</h4>
-          <p class="wf-artifact-meta">学科：{{ topicArtifact.disciplineLabel }}</p>
-          <p class="wf-artifact-body">{{ topicArtifact.direction }}</p>
-          <p class="wf-artifact-meta">目标：{{ topicArtifact.venue }}</p>
-        </article>
-        <article class="wf-artifact-card">
-          <h4 class="wf-artifact-title">文献语料（retrieve）</h4>
-          <p class="wf-artifact-stat">
-            {{ topicArtifact.corpusReady ? topicArtifact.verifiedHitCount : '—' }}
-            <span>/ {{ topicArtifact.corpusReady ? topicArtifact.literatureHitCount : '—' }} 已验证</span>
-          </p>
-          <p class="wf-artifact-meta">
-            {{
-              topicArtifact.sourceLabels.length
-                ? topicArtifact.sourceLabels.join(' · ')
-                : '尚未检索'
-            }}
-          </p>
-        </article>
-        <article class="wf-artifact-card wf-artifact-card--wide">
-          <h4 class="wf-artifact-title">候选 idea · 新颖性</h4>
-          <ul v-if="topicArtifact.candidateIdeas.length" class="wf-list wf-list--tight">
-            <li v-for="(line, i) in topicArtifact.candidateIdeas" :key="`idea-${i}`">{{ line }}</li>
-          </ul>
-          <ul v-if="topicArtifact.noveltyLines.length" class="wf-list wf-list--tight">
-            <li v-for="(line, i) in topicArtifact.noveltyLines" :key="`nov-${i}`">{{ line }}</li>
-          </ul>
-          <p
-            v-if="!topicArtifact.candidateIdeas.length && !topicArtifact.noveltyLines.length"
-            class="wf-artifact-empty"
+    <template v-else>
+      <div class="wf-lit-shell">
+        <div class="fig-mgmt-tabs wf-lit-tabs" role="tablist" aria-label="文献综述版本">
+          <button
+            v-for="item in litReviewItems"
+            :key="item.id"
+            type="button"
+            role="tab"
+            class="fig-mgmt-tab"
+            :class="{ 'fig-mgmt-tab--active': item.id === activeLitReviewId }"
+            :aria-selected="item.id === activeLitReviewId"
+            @click="activeLitReviewId = item.id"
           >
-            选题 run 尚未完成脑暴
+            {{ formatLiteratureReviewTabLabel(item) }}
+            <span v-if="item.is_current" class="wf-lit-tab-badge">当前</span>
+          </button>
+        </div>
+
+        <section v-if="activeLitReview" class="wf-panel wf-panel--lit-body wf-panel--result" role="tabpanel">
+        <div class="wf-lit-head">
+          <h2 class="wf-title wf-title--tight">
+            {{ activeLitReview.title?.trim() || `文献综述 v${activeLitReview.version}` }}
+          </h2>
+          <p class="wf-meta wf-lit-meta">
+            <span>版本 v{{ activeLitReview.version }}</span>
+            <span>·</span>
+            <span>{{ new Date(activeLitReview.created_at).toLocaleString('zh-CN') }}</span>
+            <span v-if="activeLitReview.structure">·</span>
+            <span v-if="activeLitReview.structure">{{
+              LIT_STRUCTURE_LABEL[activeLitReview.structure] ?? activeLitReview.structure
+            }}</span>
+            <span>·</span>
+            <span>{{ activeLitReview.status }}</span>
           </p>
-        </article>
-        <article class="wf-artifact-card wf-artifact-card--wide">
-          <h4 class="wf-artifact-title">实验规划摘要（可选）</h4>
-          <ul v-if="topicArtifact.experimentPlanLines.length" class="wf-list wf-list--tight">
-            <li v-for="(line, i) in topicArtifact.experimentPlanLines" :key="i">{{ line }}</li>
-          </ul>
-          <p v-else class="wf-artifact-empty">尚未运行「实验规划」</p>
-        </article>
-      </div>
+        </div>
 
-      <h3 class="wf-subhead">成稿方式</h3>
-      <div class="wf-radios">
-        <label><input v-model="litForm.structure" type="radio" value="thematic" /> 按主题分节（Related Work 常用）</label>
-        <label><input v-model="litForm.structure" type="radio" value="chronological" /> 按时间线</label>
-        <label><input v-model="litForm.structure" type="radio" value="method" /> 按方法族</label>
-      </div>
+        <p v-if="activeLitReview.summary?.trim()" class="wf-lit-summary">
+          {{ activeLitReview.summary }}
+        </p>
 
-      <div class="wf-check-group wf-check-group--tight">
-        <label class="wf-check wf-check--inline">
-          <input v-model="litForm.includeFieldSurvey" type="checkbox" />
-          <span>领域脉络 + 分主题文献归纳（来自入库 hit）</span>
-        </label>
-        <label class="wf-check wf-check--inline">
-          <input v-model="litForm.includeIdeaAndNovelty" type="checkbox" />
-          <span>候选 idea 与新颖性结论（写入定位段）</span>
-        </label>
-        <label class="wf-check wf-check--inline">
-          <input v-model="litForm.includeExperimentContext" type="checkbox" />
-          <span>实验规划中的基线 / 指标语境（若已有）</span>
-        </label>
-        <label class="wf-check wf-check--inline">
-          <input v-model="litForm.includeGap" type="checkbox" />
-          <span>Research gap（衔接 Introduction 贡献）</span>
-        </label>
+        <pre v-if="activeLitReview.content_medium?.trim()" class="wf-pre wf-pre--lit">{{
+          activeLitReview.content_medium
+        }}</pre>
+        <p v-else class="wf-artifact-empty">暂无正文（content_medium 为空）</p>
+        </section>
       </div>
-
-      <div class="wf-grid wf-grid--run">
-        <label class="wf-field">
-          <span class="wf-label">写作深度</span>
-          <PaperSelect v-model="litForm.intensity" :options="intensityOptions" />
-        </label>
-        <label class="wf-field">
-          <span class="wf-label">引用审计</span>
-          <PaperSelect v-model="litForm.auditLevel" :options="auditOptions" />
-        </label>
-      </div>
-    </section>
-    <section v-if="resultVisible['literature-review']" class="wf-panel wf-panel--result">
-      <h2 class="wf-title">literature_review artifact（演示）</h2>
-      <p class="wf-meta">由选题 run 合并生成 · 入库 {{ DEMO_LIT_REVIEW.verified }} 篇纳入正文引用</p>
-      <ol class="wf-list wf-list--ordered">
-        <li v-for="(item, i) in DEMO_LIT_REVIEW.outline" :key="i">{{ item }}</li>
-      </ol>
-      <div v-for="sec in DEMO_LIT_REVIEW.sections" :key="sec.title" class="wf-block">
-        <h3 class="wf-subtitle">{{ sec.title }}</h3>
-        <ul class="wf-list">
-          <li v-for="(p, i) in sec.papers" :key="i">{{ p }}</li>
-        </ul>
-      </div>
-      <p class="wf-callout"><strong>Research gap：</strong>{{ DEMO_LIT_REVIEW.gap }}</p>
-      <pre class="wf-pre">{{ DEMO_LIT_REVIEW.unifiedExcerpt }}</pre>
-      <p class="wf-callout wf-callout--next">
-        综述已就绪。返回本页顶栏点击 <strong>「生成实验计划」</strong>，将跳转「实验规划」并产出可执行方案（演示）。
-      </p>
-    </section>
+    </template>
   </div>
 
   <!-- 实验规划 -->
@@ -668,6 +649,69 @@ defineExpose({ runModule })
   font-size: 16px;
   font-weight: 700;
   color: #1e1b4b;
+}
+
+.wf-title--tight {
+  margin-bottom: 8px;
+}
+
+.wf-lit-shell {
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #e8eaf0;
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(30, 27, 75, 0.06);
+}
+
+.wf-lit-tabs {
+  padding: 0 18px;
+  margin-bottom: 0;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid #e2e8f0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.wf-panel--lit-body {
+  margin-top: 0;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.wf-lit-tab-badge {
+  margin-left: 6px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #5b21b6;
+  vertical-align: middle;
+  background: #ede9fe;
+  border-radius: 999px;
+}
+
+.wf-lit-head {
+  margin-bottom: 12px;
+}
+
+.wf-lit-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.wf-lit-summary {
+  margin: 0 0 16px;
+  font-size: 14px;
+  line-height: 1.65;
+  color: #334155;
+}
+
+.wf-pre--lit {
+  max-height: min(60vh, 720px);
+  overflow: auto;
 }
 
 .wf-subtitle {

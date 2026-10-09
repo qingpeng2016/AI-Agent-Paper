@@ -373,6 +373,7 @@ CREATE TABLE IF NOT EXISTS `paper_llm_model_config` (
   `max_retries`          TINYINT UNSIGNED NOT NULL DEFAULT 2 COMMENT '最大重试次数',
   `supports_vision`      TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '是否支持视觉',
   `context_window_hint`  INT UNSIGNED DEFAULT NULL COMMENT '上下文长度提示',
+  `tokens_used_total`    BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '累计消耗 token（prompt+completion）',
   `extra`                JSON         DEFAULT NULL COMMENT '扩展配置',
   `status`               VARCHAR(16)  NOT NULL DEFAULT 'active' COMMENT 'active|disabled',
   `created_at`           DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
