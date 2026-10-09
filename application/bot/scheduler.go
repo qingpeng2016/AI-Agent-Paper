@@ -8,6 +8,7 @@ import (
 	"time"
 
 	couponexpire "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/coupon_expire"
+	topicgenerateideas "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/topic_generate_ideas"
 	topicliteraturedownload "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/topic_literature_download"
 	viplevelsync "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/vip_level_sync"
 	botscheduleconfig "github.com/qingpeng2016/ai-agent-paper/application/core-service/bot_schedule_config"
@@ -26,6 +27,7 @@ type Scheduler struct {
 	vipLevelSyncJob              *viplevelsync.VipLevelSyncJob
 	couponExpireJob              *couponexpire.CouponExpireJob
 	topicLiteratureDownloadJob   *topicliteraturedownload.TopicLiteratureDownloadJob
+	topicGenerateIdeasJob        *topicgenerateideas.TopicGenerateIdeasJob
 	ns                       *gocron.Scheduler
 	jobMap                   map[string]*gocron.Job
 	configMap                map[string]float64
@@ -39,12 +41,14 @@ func NewScheduler(
 	vipLevelSyncJob *viplevelsync.VipLevelSyncJob,
 	couponExpireJob *couponexpire.CouponExpireJob,
 	topicLiteratureDownloadJob *topicliteraturedownload.TopicLiteratureDownloadJob,
+	topicGenerateIdeasJob *topicgenerateideas.TopicGenerateIdeasJob,
 ) *Scheduler {
 	return &Scheduler{
 		botScheduleConfigService:   botScheduleConfigService,
 		vipLevelSyncJob:            vipLevelSyncJob,
 		couponExpireJob:            couponExpireJob,
 		topicLiteratureDownloadJob: topicLiteratureDownloadJob,
+		topicGenerateIdeasJob:      topicGenerateIdeasJob,
 		ns:                       gocron.NewScheduler(time.Local),
 		jobMap:                   make(map[string]*gocron.Job),
 		configMap:                make(map[string]float64),
@@ -236,6 +240,10 @@ func (s *Scheduler) getAIAgentPaperHandleFunc(taskName string) func() {
 	case topicliteraturedownload.TaskTopicLiteratureDownload:
 		return func() {
 			s.topicLiteratureDownloadJob.Run(context.Background())
+		}
+	case topicgenerateideas.TaskTopicGenerateIdeasLLM:
+		return func() {
+			s.topicGenerateIdeasJob.Run(context.Background())
 		}
 	default:
 		return nil

@@ -22,7 +22,7 @@ export const PAPER_MODULES: PaperModuleMeta[] = [
   {
     id: 'topic-discovery',
     label: '选题发现',
-    description: '多源检索与校验入库，脑暴 idea 与新颖性检查；完成后在顶栏继续生成文献综述',
+    description: '多源检索与校验入库，脑暴 idea（含新颖性分析）与审计；完成后在顶栏继续生成文献综述',
   },
   {
     id: 'literature-review',
@@ -340,7 +340,6 @@ export type TopicDiscoveryForm = {
 export type TopicCheckpointKey =
   | 'retrieve_ready'
   | 'generate_ideas_ready'
-  | 'novelty_ready'
   | 'audit_ready'
 
 export type TopicFlowStepDef = {
@@ -357,13 +356,8 @@ export const TOPIC_DISCOVERY_FLOW_STEPS: TopicFlowStepDef[] = [
   },
   {
     stageCode: 'generate_ideas',
-    label: '脑暴候选选题（含新颖性预生成）',
+    label: '脑暴候选选题+新颖性检查',
     checkpointKey: 'generate_ideas_ready',
-  },
-  {
-    stageCode: 'novelty',
-    label: '新颖性检查',
-    checkpointKey: 'novelty_ready',
   },
   {
     stageCode: 'audit',
@@ -387,7 +381,7 @@ export type TopicDiscoveryArtifactSnapshot = {
   runStatus: 'idle' | 'running' | 'checkpoint' | 'completed' | 'failed'
   /** retrieve 已完成，语料已入库 */
   corpusReady: boolean
-  /** 选题发现已完成（至新颖性 + audit），可生成文献综述 */
+  /** 选题发现已完成（脑暴 + audit），可生成文献综述 */
   runCompleted: boolean
   disciplineLabel: string
   direction: string

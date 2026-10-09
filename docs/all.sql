@@ -453,7 +453,7 @@ CREATE TABLE IF NOT EXISTS `paper_output_topic_step` (
   `manuscript_id`     BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '论文 ID；选题未确认综述前为 0，确认后反填',
   `user_id`           BIGINT UNSIGNED NOT NULL COMMENT '用户 ID',
   `run_version`       INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '该用户选题第几轮（同轮四步相同）',
-  `stage_code`        VARCHAR(32)  NOT NULL COMMENT 'retrieve|generate_ideas|novelty|audit',
+  `stage_code`        VARCHAR(32)  NOT NULL COMMENT 'retrieve|generate_ideas|audit（旧 run 可有 novelty）',
   `status`            VARCHAR(16)  NOT NULL DEFAULT 'pending' COMMENT 'pending|running|completed|failed|cancelled',
   `result`            JSON         DEFAULT NULL COMMENT '本步产出：retrieve→literature_hits[]；generate_ideas→ideas[]；novelty/audit→报告结构',
   `summary_text`      MEDIUMTEXT   DEFAULT NULL COMMENT '本步可读摘要/报告',
@@ -701,6 +701,14 @@ INSERT INTO `bot_schedule_config` (
     'topic_literature_pdf_download',
     15,
     '选题 retrieve=running：下载 literature_downloads PDF 至 storage/literature',
+    1,
+    1
+  ),
+  (
+    'ai_agent_paper',
+    'topic_generate_ideas_llm',
+    15,
+    '选题 generate_ideas=running：异步调用 LLM 脑暴+新颖性预填',
     1,
     1
   )

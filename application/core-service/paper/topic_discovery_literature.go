@@ -256,8 +256,7 @@ func (s *TopicDiscoveryRunService) buildAuditUserExtra(
 		refsLine = "（无）"
 	}
 	ideasJSON := s.stepResultText(ctx, userID, runVersion, "generate_ideas")
-	noveltyJSON := s.stepResultText(ctx, userID, runVersion, "novelty")
-	noveltySummary := s.stepSummaryText(ctx, userID, runVersion, "novelty")
+	noveltyJSON, noveltySummary := s.noveltyBlockForAudit(ctx, userID, runVersion)
 
 	return fmt.Sprintf(`审计轮次 %d/%d
 目标期刊：%s

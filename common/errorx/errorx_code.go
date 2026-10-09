@@ -28,7 +28,7 @@ var (
 	ErrManuscriptNotFound    = NewRespErr(100401, "论文不存在或无权访问", "論文不存在或無權訪問", "Manuscript not found or forbidden.")
 	ErrTopicRunNotFound      = NewRespErr(100402, "选题 run 不存在", "選題 run 不存在", "Topic discovery run not found.")
 	ErrTopicStepInvalid      = NewRespErr(100403, "选题步骤无效或顺序错误", "選題步驟無效或順序錯誤", "Invalid topic discovery step.")
-	ErrTopicRunNotComplete   = NewRespErr(100406, "选题四步尚未完成，不能生成文献综述", "選題四步尚未完成，不能生成文獻綜述", "Topic discovery is not complete.")
+	ErrTopicRunNotComplete   = NewRespErr(100406, "选题三步尚未完成，不能生成文献综述", "選題三步尚未完成，不能生成文獻綜述", "Topic discovery is not complete.")
 	ErrLLMNotConfigured      = NewRespErr(100404, "LLM 未配置或 Key 无效", "LLM 未配置或 Key 無效", "LLM is not configured.")
 	ErrLLMCallFailed         = NewRespErr(100405, "模型调用失败", "模型調用失敗", "LLM call failed.")
 )

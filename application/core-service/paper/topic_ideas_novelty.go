@@ -5,23 +5,47 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
 )
 
-// stageIdeasAndNovelty 一次 LLM：generate_ideas 落盘并 completed；novelty 预填 result/summary/extra，status 保持 pending。
-func (s *TopicDiscoveryRunService) stageIdeasAndNovelty(
+// stageBeginGenerateIdeasAsync 仅标记 running，由 bot 异步调用 LLM（与 retrieve PDF 下载同理）。
+func (s *TopicDiscoveryRunService) stageBeginGenerateIdeasAsync(
+	ctx context.Context,
+	userID uint,
+	runVersion int,
+	step *entity.PaperOutputTopicStep,
+) error {
+	ret, err := s.steps.GetStep(ctx, uint64(userID), runVersion, "retrieve")
+	if err != nil || ret == nil || strings.TrimSpace(ret.Status) != "completed" {
+		return fmt.Errorf("retrieve 未完成，无法开始脑暴")
+	}
+	if len(step.Result) > 0 && strings.TrimSpace(step.Status) == "completed" {
+		return nil
+	}
+	sum := "脑暴与新颖性分析中…"
+	step.SummaryText = &sum
+	step.Status = "running"
+	step.CompletedAt = nil
+	meta := LoadStepExtra(step)
+	meta["async_llm"] = true
+	step.Extra = mustJSON(meta)
+	return s.steps.SaveStep(ctx, step)
+}
+
+// RunIdeasAndNoveltyLLM bot：一次 LLM，generate_ideas completed（novelty 写入同一步 result）。
+func (s *TopicDiscoveryRunService) RunIdeasAndNoveltyLLM(
 	ctx context.Context,
 	userID uint,
 	runVersion int,
 	ideasStep *entity.PaperOutputTopicStep,
 	input topicRunInput,
 ) error {
-	noveltyStep, err := s.steps.GetStep(ctx, uint64(userID), runVersion, "novelty")
-	if err != nil || noveltyStep == nil {
-		return fmt.Errorf("novelty step not found")
+	ret, err := s.steps.GetStep(ctx, uint64(userID), runVersion, "retrieve")
+	if err != nil || ret == nil || strings.TrimSpace(ret.Status) != "completed" {
+		return fmt.Errorf("retrieve 未完成")
 	}
-
 	ctxBlock, _ := s.stageContextCompact(ctx, userID, runVersion, "retrieve")
 	filesBlock := s.formatRetrieveCorpusFilesBlock(ctx, userID, runVersion)
 
@@ -58,36 +82,26 @@ Return ONLY valid JSON（一次输出脑暴 + 新颖性，不要分两次）:
 	}
 
 	ideasResult, noveltyResult, summary := parseIdeasNoveltyLLMResponse(text)
+	if len(noveltyResult) > 0 {
+		ideasResult["novelty"] = noveltyResult
+	}
 	ideasStep.Result = mustJSON(ideasResult)
 	if summary != "" {
 		ideasStep.SummaryText = ptrString(summary)
+	} else if syn := noveltySummaryFromResult(noveltyResult); syn != "" {
+		ideasStep.SummaryText = ptrString(syn)
 	}
 	appendUsageMeta(ideasStep, usage)
 	meta := LoadStepExtra(ideasStep)
-	meta["llm_combined_with"] = "novelty"
+	meta["includes_novelty"] = true
+	delete(meta, "async_llm")
+	meta["async_llm_done"] = true
 	ideasStep.Extra = mustJSON(meta)
 
-	noveltyStep.Result = mustJSON(noveltyResult)
-	noveltySummary := noveltySummaryFromResult(noveltyResult)
-	if noveltySummary != "" {
-		noveltyStep.SummaryText = ptrString(noveltySummary)
-	} else if summary != "" {
-		noveltyStep.SummaryText = ptrString(summary)
-	}
-	novMeta := LoadStepExtra(noveltyStep)
-	novMeta["llm_combined_with"] = "generate_ideas"
-	novMeta["prefilled"] = true
-	noveltyStep.Extra = mustJSON(novMeta)
-	// 保持 pending：不在此改 status / started_at / completed_at
-	return s.steps.SaveStep(ctx, noveltyStep)
-}
-
-// stageNoveltyAck 用户确认检查点：novelty 已在 generate_ideas 预填，不再调模型。
-func (s *TopicDiscoveryRunService) stageNoveltyAck(_ context.Context, step *entity.PaperOutputTopicStep) error {
-	if len(step.Result) == 0 {
-		return fmt.Errorf("novelty 无预填 result，无法确认")
-	}
-	return nil
+	done := time.Now()
+	ideasStep.Status = "completed"
+	ideasStep.CompletedAt = &done
+	return s.steps.SaveStep(ctx, ideasStep)
 }
 
 func parseIdeasNoveltyLLMResponse(text string) (ideas map[string]any, novelty map[string]any, summary string) {
@@ -128,6 +142,29 @@ func parseIdeasNoveltyLLMResponse(text string) (ideas map[string]any, novelty ma
 		summary = noveltySummaryFromResult(novelty)
 	}
 	return ideas, novelty, summary
+}
+
+// noveltyBlockForAudit 新颖性取自 generate_ideas.result.novelty；旧 run 回退 novelty 步。
+func (s *TopicDiscoveryRunService) noveltyBlockForAudit(ctx context.Context, userID uint, runVersion int) (noveltyJSON, noveltySummary string) {
+	ideasRaw := strings.TrimSpace(s.stepResultText(ctx, userID, runVersion, "generate_ideas"))
+	if ideasRaw != "" {
+		var root map[string]any
+		if err := json.Unmarshal([]byte(ideasRaw), &root); err == nil {
+			if nov, ok := root["novelty"]; ok && nov != nil {
+				if b, err := json.Marshal(nov); err == nil {
+					noveltyJSON = string(b)
+				}
+				if mm, ok := nov.(map[string]any); ok {
+					noveltySummary = noveltySummaryFromResult(mm)
+				}
+			}
+		}
+	}
+	if strings.TrimSpace(noveltyJSON) == "" {
+		noveltyJSON = s.stepResultText(ctx, userID, runVersion, "novelty")
+		noveltySummary = s.stepSummaryText(ctx, userID, runVersion, "novelty")
+	}
+	return noveltyJSON, noveltySummary
 }
 
 func noveltySummaryFromResult(novelty map[string]any) string {

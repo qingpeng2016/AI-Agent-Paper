@@ -20,7 +20,7 @@ export const DEMO_OPERATION_LOG_SEED: PaperOperationLogEntry[] = [
     occurredAt: '2026-10-05T09:12:04.000Z',
     moduleId: 'topic-discovery',
     moduleLabel: '选题发现',
-    action: '运行工作流（retrieve → ideas → novelty → audit）',
+    action: '运行工作流（retrieve → ideas → audit）',
     tokensPrompt: 18_400,
     tokensCompletion: 6_200,
     tokensTotal: 24_600,

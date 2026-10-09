@@ -17,7 +17,7 @@ import (
 	"gorm.io/datatypes"
 )
 
-var topicDiscoveryStages = []string{"retrieve", "generate_ideas", "novelty", "audit"}
+var topicDiscoveryStages = []string{"retrieve", "generate_ideas", "audit"}
 
 type topicRunInput struct {
 	DisciplineCode  string   `json:"discipline_code"`
@@ -336,6 +336,11 @@ func (s *TopicDiscoveryRunService) CommitManuscript(ctx context.Context, userID 
 	return s.reloadView(ctx, userID, runVersion)
 }
 
+// LoadRunInputForUser 供 bot 等读取 retrieve 步表单快照。
+func (s *TopicDiscoveryRunService) LoadRunInputForUser(ctx context.Context, userID uint, runVersion int) (topicRunInput, error) {
+	return s.loadRunInput(ctx, userID, runVersion)
+}
+
 func (s *TopicDiscoveryRunService) loadRunInput(ctx context.Context, userID uint, runVersion int) (topicRunInput, error) {
 	step, err := s.steps.GetStep(ctx, uint64(userID), runVersion, "retrieve")
 	if err != nil || step == nil || len(step.InputParams) == 0 {
@@ -409,16 +414,7 @@ func (s *TopicDiscoveryRunService) executeStage(ctx context.Context, userID uint
 	case "retrieve":
 		execErr = s.stageRetrieve(ctx, step, input)
 	case "generate_ideas":
-		execErr = s.stageIdeasAndNovelty(ctx, userID, runVersion, step, input)
-	case "novelty":
-		if step.Status == "completed" {
-			return nil
-		}
-		if len(step.Result) > 0 {
-			execErr = s.stageNoveltyAck(ctx, step)
-		} else {
-			execErr = s.stageNoveltyLegacy(ctx, userID, runVersion, step, input)
-		}
+		execErr = s.stageBeginGenerateIdeasAsync(ctx, userID, runVersion, step)
 	case "audit":
 		execErr = s.stageAudit(ctx, userID, runVersion, step, input)
 	default:
@@ -437,7 +433,7 @@ func (s *TopicDiscoveryRunService) executeStage(ctx context.Context, userID uint
 		}
 		return execErr
 	}
-	if stageCode == "retrieve" && strings.TrimSpace(step.Status) == "running" {
+	if (stageCode == "retrieve" || stageCode == "generate_ideas") && strings.TrimSpace(step.Status) == "running" {
 		step.CompletedAt = nil
 		return s.steps.SaveStep(ctx, step)
 	}
@@ -635,28 +631,6 @@ func relIfExists(pdfURL, externalKey string) string {
 		return rel
 	}
 	return ""
-}
-
-// stageNoveltyLegacy 旧 run：generate_ideas 已单独完成时，仅补跑新颖性。
-func (s *TopicDiscoveryRunService) stageNoveltyLegacy(ctx context.Context, userID uint, runVersion int, step *entity.PaperOutputTopicStep, input topicRunInput) error {
-	ctxBlock, _ := s.stageContext(ctx, userID, runVersion)
-	userMsg := fmt.Sprintf(`Perform novelty analysis for direction: %s
-
-Prior steps:
-%s
-
-Return ONLY valid JSON: {"lines":["..."],"risks":[{"idea_title":"","risk":"low|medium|high","note":""}]}
-Use Chinese.`, input.Direction, ctxBlock)
-
-	text, usage, err := s.callStageLLM(ctx, step, "novelty", map[string]string{"direction": input.Direction}, userMsg)
-	if err != nil {
-		return err
-	}
-	result, summary := parseJSONOrWrap(text, "novelty")
-	step.Result = mustJSON(result)
-	step.SummaryText = ptrString(summary)
-	appendUsageMeta(step, usage)
-	return nil
 }
 
 func (s *TopicDiscoveryRunService) stageAudit(ctx context.Context, userID uint, runVersion int, step *entity.PaperOutputTopicStep, input topicRunInput) error {
@@ -1012,6 +986,11 @@ func parseJSONOrWrap(text, key string) (map[string]any, string) {
 func mustJSON(v any) datatypes.JSON {
 	b, _ := json.Marshal(v)
 	return datatypes.JSON(b)
+}
+
+// MustJSONStep 供 bot 等写入 step.extra。
+func MustJSONStep(m map[string]any) datatypes.JSON {
+	return mustJSON(m)
 }
 
 func ptrString(s string) *string { return &s }

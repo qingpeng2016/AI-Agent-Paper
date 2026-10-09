@@ -115,7 +115,7 @@ function isChartChecked(value: string) {
 async function runModule(id: PaperModuleId): Promise<boolean> {
   if (id === 'literature-review') {
     if (!topicArtifact.runCompleted) {
-      ElMessage.warning('请先在「选题发现」完成检索 → idea → 新颖性检查，再整理成综述')
+      ElMessage.warning('请先在「选题发现」完成检索 → 脑暴 → 审计，再整理成综述')
       return false
     }
     if (
@@ -171,7 +171,7 @@ defineExpose({ runModule })
 
       <p v-if="!topicArtifact.runCompleted" class="wf-callout wf-callout--warn">
         当前选题 run 状态：<strong>{{ topicArtifact.runStatus }}</strong>。
-        请先在「选题发现」完成新颖性检查后再点运行；下方为只读预览（有则显示）。
+        请先在「选题发现」完成脑暴与审计后再点运行；下方为只读预览（有则显示）。
       </p>
 
       <h3 class="wf-subhead">输入 · 选题发现产出（只读）</h3>
@@ -198,10 +198,18 @@ defineExpose({ runModule })
         </article>
         <article class="wf-artifact-card wf-artifact-card--wide">
           <h4 class="wf-artifact-title">候选 idea · 新颖性</h4>
-          <ul v-if="topicArtifact.noveltyLines.length" class="wf-list wf-list--tight">
-            <li v-for="(line, i) in topicArtifact.noveltyLines" :key="i">{{ line }}</li>
+          <ul v-if="topicArtifact.candidateIdeas.length" class="wf-list wf-list--tight">
+            <li v-for="(line, i) in topicArtifact.candidateIdeas" :key="`idea-${i}`">{{ line }}</li>
           </ul>
-          <p v-else class="wf-artifact-empty">选题 run 未到新颖性阶段</p>
+          <ul v-if="topicArtifact.noveltyLines.length" class="wf-list wf-list--tight">
+            <li v-for="(line, i) in topicArtifact.noveltyLines" :key="`nov-${i}`">{{ line }}</li>
+          </ul>
+          <p
+            v-if="!topicArtifact.candidateIdeas.length && !topicArtifact.noveltyLines.length"
+            class="wf-artifact-empty"
+          >
+            选题 run 尚未完成脑暴
+          </p>
         </article>
         <article class="wf-artifact-card wf-artifact-card--wide">
           <h4 class="wf-artifact-title">实验规划摘要（可选）</h4>
