@@ -16,8 +16,11 @@ import (
 	"github.com/qingpeng2016/ai-agent-paper/common/notification"
 	"github.com/qingpeng2016/ai-agent-paper/conf"
 	"github.com/qingpeng2016/ai-agent-paper/infrastructure/http"
+	anthropicinfra "github.com/qingpeng2016/ai-agent-paper/infrastructure/http/anthropic"
 	arxivinfra "github.com/qingpeng2016/ai-agent-paper/infrastructure/http/arxiv"
+	googleinfra "github.com/qingpeng2016/ai-agent-paper/infrastructure/http/google"
 	openalexinfra "github.com/qingpeng2016/ai-agent-paper/infrastructure/http/openalex"
+	openaichatinfra "github.com/qingpeng2016/ai-agent-paper/infrastructure/http/openaichat"
 	semanticscholarinfra "github.com/qingpeng2016/ai-agent-paper/infrastructure/http/semanticscholar"
 	"github.com/qingpeng2016/ai-agent-paper/infrastructure/mysql"
 	"github.com/qingpeng2016/ai-agent-paper/infrastructure/redis"
@@ -88,6 +91,9 @@ func BuildContainer() *dig.Container {
 	_ = c.Provide(arxivinfra.NewClient)
 	_ = c.Provide(openalexinfra.NewClient)
 	_ = c.Provide(semanticscholarinfra.NewClient)
+	_ = c.Provide(anthropicinfra.NewClient)
+	_ = c.Provide(googleinfra.NewClient)
+	_ = c.Provide(openaichatinfra.NewClient)
 
 	_ = c.Provide(notification.NewNotificationManager)
 

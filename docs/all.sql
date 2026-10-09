@@ -366,7 +366,7 @@ CREATE TABLE IF NOT EXISTS `paper_llm_model_config` (
   `label`                VARCHAR(128) NOT NULL COMMENT '展示名',
   `provider_code`        VARCHAR(32)  NOT NULL COMMENT 'openai|anthropic|azure_openai|openai_compatible|ollama|gateway|other',
   `model_name`           VARCHAR(128) NOT NULL COMMENT '上游 model 参数',
-  `api_base_url`         VARCHAR(512) NOT NULL COMMENT 'API Host / Base URL（具体 path 由 provider_code 在代码中决定）',
+  `api_base_url`         VARCHAR(512) NOT NULL COMMENT 'API Origin（仅 scheme://host；HTTP path 由 provider_code 在代码中拼接）',
   `api_key`              VARCHAR(512) DEFAULT NULL COMMENT 'LLM API Key 明文（库内存储；生产建议库权限+TLS）',
   `timeout_ms`           INT UNSIGNED NOT NULL DEFAULT 120000 COMMENT '超时毫秒',
   `max_retries`          TINYINT UNSIGNED NOT NULL DEFAULT 2 COMMENT '最大重试次数',
