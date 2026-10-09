@@ -16,7 +16,7 @@ type PaperOutputTopicStep struct {
 	Result        datatypes.JSON `gorm:"column:result"`
 	SummaryText   *string        `gorm:"column:summary_text"`
 	InputParams   datatypes.JSON `gorm:"column:input_params"`
-	Meta          datatypes.JSON `gorm:"column:meta"`
+	Extra         datatypes.JSON `gorm:"column:extra"`
 	StartedAt     *time.Time     `gorm:"column:started_at"`
 	CompletedAt   *time.Time     `gorm:"column:completed_at"`
 	CreatedAt     time.Time      `gorm:"column:created_at"`

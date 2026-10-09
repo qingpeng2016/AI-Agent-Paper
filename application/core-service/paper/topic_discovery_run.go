@@ -400,11 +400,11 @@ func (s *TopicDiscoveryRunService) executeStage(ctx context.Context, userID uint
 	if execErr != nil {
 		step.Status = "failed"
 		stepMeta := map[string]any{}
-		if len(step.Meta) > 0 {
-			_ = json.Unmarshal(step.Meta, &stepMeta)
+		if len(step.Extra) > 0 {
+			_ = json.Unmarshal(step.Extra, &stepMeta)
 		}
 		stepMeta["error"] = execErr.Error()
-		step.Meta = mustJSON(stepMeta)
+		step.Extra = mustJSON(stepMeta)
 		_ = s.steps.SaveStep(ctx, step)
 		return execErr
 	}
@@ -497,7 +497,7 @@ func (s *TopicDiscoveryRunService) stageRetrieve(ctx context.Context, step *enti
 
 	result := map[string]any{"literature_hits": hits}
 	step.Result = mustJSON(result)
-	step.Meta = mustJSON(map[string]any{
+	step.Extra = mustJSON(map[string]any{
 		"hit_count":        len(hits),
 		"verified_count":   len(hits),
 		"search_query":     query,
@@ -681,7 +681,7 @@ func llmUserMessage(userPrefix, userExtra string) string {
 	return user + "\n\n" + extra
 }
 
-// persistStepLLMInput 将发给模型的 system/user 写入 step.input_params（主存储），失败时 meta 保留副本便于接口展示。
+// persistStepLLMInput 将发给模型的 system/user 写入 step.input_params（主存储），并在 extra 保留 llm_* 副本便于接口展示。
 func persistStepLLMInput(step *entity.PaperOutputTopicStep, stageCode, system, user, modelName string) {
 	if step == nil {
 		return
@@ -708,8 +708,8 @@ func persistStepLLMInput(step *entity.PaperOutputTopicStep, stageCode, system, u
 	}
 
 	meta := map[string]any{}
-	if len(step.Meta) > 0 {
-		_ = json.Unmarshal(step.Meta, &meta)
+	if len(step.Extra) > 0 {
+		_ = json.Unmarshal(step.Extra, &meta)
 	}
 	meta["llm_stage_code"] = stageCode
 	if strings.TrimSpace(system) != "" {
@@ -721,7 +721,7 @@ func persistStepLLMInput(step *entity.PaperOutputTopicStep, stageCode, system, u
 	if strings.TrimSpace(modelName) != "" {
 		meta["llm_model_name"] = modelName
 	}
-	step.Meta = mustJSON(meta)
+	step.Extra = mustJSON(meta)
 }
 
 func (s *TopicDiscoveryRunService) persistLLMCallLog(
@@ -869,8 +869,8 @@ func (s *TopicDiscoveryRunService) buildRunView(manuscriptID uint64, runVersion 
 		if len(r.Result) > 0 {
 			sv.Result = json.RawMessage(r.Result)
 		}
-		if len(r.Meta) > 0 {
-			sv.Meta = json.RawMessage(r.Meta)
+		if len(r.Extra) > 0 {
+			sv.Extra = json.RawMessage(r.Extra)
 		}
 		if r.StartedAt != nil {
 			t := r.StartedAt.Format(time.RFC3339)
@@ -932,12 +932,12 @@ func ptrString(s string) *string { return &s }
 
 func appendUsageMeta(step *entity.PaperOutputTopicStep, usage LLMUsage) {
 	meta := map[string]any{}
-	if len(step.Meta) > 0 {
-		_ = json.Unmarshal(step.Meta, &meta)
+	if len(step.Extra) > 0 {
+		_ = json.Unmarshal(step.Extra, &meta)
 	}
 	meta["tokens_prompt"] = usage.PromptTokens
 	meta["tokens_completion"] = usage.CompletionTokens
-	step.Meta = mustJSON(meta)
+	step.Extra = mustJSON(meta)
 }
 
 func min(a, b int) int {

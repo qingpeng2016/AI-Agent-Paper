@@ -455,7 +455,7 @@ CREATE TABLE IF NOT EXISTS `paper_output_topic_step` (
   `result`            JSON         DEFAULT NULL COMMENT '本步产出：retrieve→literature_hits[]；generate_ideas→ideas[]；novelty/audit→报告结构',
   `summary_text`      MEDIUMTEXT   DEFAULT NULL COMMENT '本步可读摘要/报告',
   `input_params`      JSON         DEFAULT NULL COMMENT '本轮表单快照（通常写在 retrieve 步）',
-  `meta`              JSON         DEFAULT NULL COMMENT '扩展（token、耗时；retrieve 可存 hit_count 等）',
+  `extra`             JSON         DEFAULT NULL COMMENT '扩展（token、error、llm_*；retrieve 可存 hit_count 等）',
   `started_at`        DATETIME     DEFAULT NULL COMMENT '本步开始时间',
   `completed_at`      DATETIME     DEFAULT NULL COMMENT '本步结束时间',
   `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '入库时间',
@@ -841,5 +841,7 @@ ON DUPLICATE KEY UPDATE
 -- ALTER TABLE `paper_output_topic_step` DROP COLUMN `is_current_run`;
 -- ALTER TABLE `paper_output_topic_step` DROP INDEX `idx_paper_output_topic_step_ms`;
 -- ALTER TABLE `paper_output_topic_step` ADD KEY `idx_paper_output_topic_step_ms` (`manuscript_id`, `stage_code`);
+-- ALTER TABLE `paper_output_topic_step`
+--   CHANGE COLUMN `meta` `extra` JSON DEFAULT NULL COMMENT '扩展（token、error、llm_*；retrieve 可存 hit_count 等）';
 
 SET FOREIGN_KEY_CHECKS = 1;

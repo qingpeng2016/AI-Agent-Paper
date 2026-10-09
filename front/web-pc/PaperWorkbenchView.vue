@@ -423,8 +423,8 @@ const topicFailedSummary = computed((): { stageLabel: string; stageCode: string;
   const localStep = currentTopicRun.value.steps.find((s) => s.status === 'failed')
   const stageCode = failedDto?.stage_code ?? localStep?.stageCode ?? 'unknown'
   const def = TOPIC_DISCOVERY_FLOW_STEPS.find((s) => s.stageCode === stageCode)
-  const meta = (failedDto?.meta ?? {}) as Record<string, unknown>
-  const errRaw = meta.error
+  const extra = (failedDto?.extra ?? {}) as Record<string, unknown>
+  const errRaw = extra.error
   const error =
     typeof errRaw === 'string' && errRaw.trim()
       ? errRaw.trim()
@@ -460,16 +460,16 @@ const topicDiscoveryArtifact = computed((): TopicDiscoveryArtifactSnapshot => {
   const retrieveStep = apiRun?.steps.find((s) => s.stage_code === 'retrieve')
   const ideasStep = apiRun?.steps.find((s) => s.stage_code === 'generate_ideas')
   const noveltyStep = apiRun?.steps.find((s) => s.stage_code === 'novelty')
-  const retrieveMeta = (retrieveStep?.meta ?? {}) as Record<string, unknown>
+  const retrieveExtra = (retrieveStep?.extra ?? {}) as Record<string, unknown>
   const hitCount =
-    typeof retrieveMeta.hit_count === 'number'
-      ? retrieveMeta.hit_count
+    typeof retrieveExtra.hit_count === 'number'
+      ? retrieveExtra.hit_count
       : corpusReady
         ? 86
         : 0
   const verifiedCount =
-    typeof retrieveMeta.verified_count === 'number'
-      ? retrieveMeta.verified_count
+    typeof retrieveExtra.verified_count === 'number'
+      ? retrieveExtra.verified_count
       : corpusReady
         ? 79
         : 0
@@ -623,10 +623,10 @@ function linesFromApiStep(step?: TopicDiscoveryStepDTO): string[] {
 
   if (step.stage_code === 'retrieve') {
     const hits = (result.literature_hits as Array<{ title?: string; external_key?: string }>) ?? []
-    const meta = (step.meta ?? {}) as Record<string, unknown>
+    const extra = (step.extra ?? {}) as Record<string, unknown>
     const lines: string[] = []
-    if (typeof meta.hit_count === 'number') {
-      lines.push(`命中 ${meta.hit_count} 篇 · 验真 ${meta.verified_count ?? meta.hit_count} 篇`)
+    if (typeof extra.hit_count === 'number') {
+      lines.push(`命中 ${extra.hit_count} 篇 · 验真 ${extra.verified_count ?? extra.hit_count} 篇`)
     }
     for (const h of hits.slice(0, 6)) {
       const row = h as { title?: string; external_key?: string; url?: string; meta?: { url?: string } }

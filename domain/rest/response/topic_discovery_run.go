@@ -8,7 +8,7 @@ type TopicDiscoveryStepView struct {
 	SummaryText string          `json:"summary_text,omitempty"`
 	InputParams json.RawMessage `json:"input_params,omitempty"`
 	Result      json.RawMessage `json:"result,omitempty"`
-	Meta        json.RawMessage `json:"meta,omitempty"`
+	Extra       json.RawMessage `json:"extra,omitempty"`
 	StartedAt   *string         `json:"started_at,omitempty"`
 	CompletedAt *string         `json:"completed_at,omitempty"`
 }

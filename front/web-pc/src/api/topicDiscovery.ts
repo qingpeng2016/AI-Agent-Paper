@@ -59,7 +59,7 @@ export type TopicDiscoveryStepDTO = {
   summary_text?: string
   input_params?: Record<string, unknown>
   result?: unknown
-  meta?: unknown
+  extra?: unknown
 }
 
 /** 从 retrieve 步的 input_params 回填选题表单（刷新 / 检查点继续） */
@@ -128,10 +128,10 @@ export function parseRetrieveLiteratureLinks(
   if (!run) return []
   const step = run.steps.find((s) => s.stage_code === 'retrieve')
   if (!step) return []
-  const meta = (step.meta ?? {}) as Record<string, unknown>
-  const fromMeta = meta.literature_links as TopicDiscoveryLiteratureLink[] | undefined
-  if (Array.isArray(fromMeta) && fromMeta.length > 0) {
-    return fromMeta.filter((l) => l.url?.trim())
+  const extra = (step.extra ?? {}) as Record<string, unknown>
+  const fromExtra = extra.literature_links as TopicDiscoveryLiteratureLink[] | undefined
+  if (Array.isArray(fromExtra) && fromExtra.length > 0) {
+    return fromExtra.filter((l) => l.url?.trim())
   }
   const result = step.result as Record<string, unknown> | undefined
   const hits = (result?.literature_hits as Array<Record<string, unknown>>) ?? []
