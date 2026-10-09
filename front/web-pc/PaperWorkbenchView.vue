@@ -5,6 +5,7 @@ import { useTopicDiscoveryFormOptions } from '@/composables/useTopicDiscoveryFor
 import {
   postTopicDiscoveryRun,
   fetchCurrentTopicDiscoveryRun,
+  parseRetrieveLiteratureLinks,
   type TopicDiscoveryRunResponse,
   type TopicDiscoveryStepDTO,
 } from '@/api/topicDiscovery'
@@ -205,6 +206,10 @@ const envPreferenceFromStorage = ref(false)
 
 const manuscripts = ref<PaperManuscriptItem[]>([...DEMO_PAPER_MANUSCRIPTS])
 const activeManuscriptId = ref<string>(DEMO_PAPER_MANUSCRIPTS[0]?.id ?? '')
+
+const retrieveLiteratureLinks = computed(() =>
+  parseRetrieveLiteratureLinks(topicLastRunByMs.value[activeManuscriptId.value]),
+)
 
 function loadEnvFromStorage() {
   try {
@@ -566,7 +571,13 @@ function linesFromApiStep(step?: TopicDiscoveryStepDTO): string[] {
       lines.push(`命中 ${meta.hit_count} 篇 · 验真 ${meta.verified_count ?? meta.hit_count} 篇`)
     }
     for (const h of hits.slice(0, 6)) {
-      if (h.title) lines.push(`· ${h.title}${h.external_key ? ` (${h.external_key})` : ''}`)
+      const row = h as { title?: string; external_key?: string; url?: string; meta?: { url?: string } }
+      const url = row.url?.trim() || row.meta?.url?.trim()
+      if (row.title && url) {
+        lines.push(`· ${row.title} — ${url}`)
+      } else if (row.title) {
+        lines.push(`· ${row.title}${row.external_key ? ` (${row.external_key})` : ''}`)
+      }
     }
     return lines.length ? lines : ['检索已完成']
   }
@@ -1199,6 +1210,19 @@ async function onPrimaryAction() {
           </li>
         </ol>
 
+        <div
+          v-if="retrieveLiteratureLinks.length"
+          class="paper-retrieve-links"
+        >
+          <h3 class="paper-retrieve-links-title">检索文献（{{ retrieveLiteratureLinks.length }} 篇，可打开）</h3>
+          <ul class="paper-retrieve-links-list">
+            <li v-for="(item, i) in retrieveLiteratureLinks" :key="item.external_key ?? item.url ?? i">
+              <a :href="item.url" target="_blank" rel="noopener noreferrer">{{ item.title || item.url }}</a>
+              <span v-if="item.source_code" class="paper-retrieve-links-src">{{ item.source_code }}</span>
+            </li>
+          </ul>
+        </div>
+
         <div v-if="currentTopicRun.status === 'checkpoint' && currentTopicRun.checkpoint" class="paper-checkpoint">
           <div class="paper-checkpoint-head">
             <span class="paper-checkpoint-pause" aria-hidden="true">⏸</span>
@@ -1764,6 +1788,44 @@ async function onPrimaryAction() {
   background: #fffbeb;
   padding: 2px 8px;
   border-radius: 6px;
+}
+
+.paper-retrieve-links {
+  margin: 16px 0 0;
+  padding: 14px 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #f8fafc;
+}
+
+.paper-retrieve-links-title {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--atm-text, #1e1b4b);
+}
+
+.paper-retrieve-links-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.paper-retrieve-links-list a {
+  color: #2563eb;
+  text-decoration: none;
+}
+
+.paper-retrieve-links-list a:hover {
+  text-decoration: underline;
+}
+
+.paper-retrieve-links-src {
+  margin-left: 8px;
+  font-size: 11px;
+  color: #94a3b8;
+  font-family: ui-monospace, monospace;
 }
 
 .paper-checkpoint {

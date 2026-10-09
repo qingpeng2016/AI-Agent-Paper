@@ -45,12 +45,46 @@ export type TopicDiscoveryRunRequest = {
   action: string
 }
 
+export type TopicDiscoveryLiteratureLink = {
+  title: string
+  url: string
+  external_key?: string
+  source_code?: string
+}
+
 export type TopicDiscoveryStepDTO = {
   stage_code: string
   status: string
   summary_text?: string
   result?: unknown
   meta?: unknown
+}
+
+export function parseRetrieveLiteratureLinks(
+  run?: TopicDiscoveryRunResponse | null,
+): TopicDiscoveryLiteratureLink[] {
+  if (!run) return []
+  const step = run.steps.find((s) => s.stage_code === 'retrieve')
+  if (!step) return []
+  const meta = (step.meta ?? {}) as Record<string, unknown>
+  const fromMeta = meta.literature_links as TopicDiscoveryLiteratureLink[] | undefined
+  if (Array.isArray(fromMeta) && fromMeta.length > 0) {
+    return fromMeta.filter((l) => l.url?.trim())
+  }
+  const result = step.result as Record<string, unknown> | undefined
+  const hits = (result?.literature_hits as Array<Record<string, unknown>>) ?? []
+  return hits
+    .map((h) => {
+      const nested = (h.meta as Record<string, unknown> | undefined) ?? {}
+      const url = String(h.url ?? nested.url ?? '').trim()
+      return {
+        title: String(h.title ?? h.external_key ?? '文献'),
+        url,
+        external_key: h.external_key != null ? String(h.external_key) : undefined,
+        source_code: h.source_code != null ? String(h.source_code) : undefined,
+      }
+    })
+    .filter((h) => h.url)
 }
 
 export type TopicDiscoveryRunResponse = {

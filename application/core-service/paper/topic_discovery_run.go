@@ -36,9 +36,19 @@ type storedLiteratureHit struct {
 	ExternalKey     string   `json:"external_key"`
 	Title           string   `json:"title"`
 	Authors         []string `json:"authors,omitempty"`
+	URL             string   `json:"url,omitempty"`
+	DOI             string   `json:"doi,omitempty"`
+	PublishedYear   int      `json:"published_year,omitempty"`
 	RelevanceScore  float64  `json:"relevance_score,omitempty"`
 	QueryText       string   `json:"query_text,omitempty"`
 	Meta            any      `json:"meta,omitempty"`
+}
+
+type storedLiteratureLink struct {
+	Title       string `json:"title"`
+	URL         string `json:"url"`
+	ExternalKey string `json:"external_key,omitempty"`
+	SourceCode  string `json:"source_code,omitempty"`
 }
 
 type TopicDiscoveryRunService struct {
@@ -407,29 +417,47 @@ func (s *TopicDiscoveryRunService) stageRetrieve(ctx context.Context, step *enti
 				continue
 			}
 			seen[key] = struct{}{}
+			linkURL := resolveLiteratureHitURL(code, key, h.URL, h.DOI)
 			hits = append(hits, storedLiteratureHit{
-				SourceID:    sourceID,
-				SourceCode:  code,
-				ExternalKey: key,
-				Title:       h.Title,
-				Authors:     h.Authors,
-				QueryText:   query,
+				SourceID:      sourceID,
+				SourceCode:    code,
+				ExternalKey:   key,
+				Title:         h.Title,
+				Authors:       h.Authors,
+				URL:           linkURL,
+				DOI:           h.DOI,
+				PublishedYear: h.PublishedYear,
+				QueryText:     query,
 				Meta: map[string]any{
 					"abstract":       h.Abstract,
 					"doi":            h.DOI,
-					"url":            h.URL,
+					"url":            linkURL,
 					"published_year": h.PublishedYear,
 				},
 			})
 		}
 	}
 
+	links := make([]storedLiteratureLink, 0, len(hits))
+	for _, h := range hits {
+		if strings.TrimSpace(h.URL) == "" {
+			continue
+		}
+		links = append(links, storedLiteratureLink{
+			Title:       h.Title,
+			URL:         h.URL,
+			ExternalKey: h.ExternalKey,
+			SourceCode:  h.SourceCode,
+		})
+	}
+
 	result := map[string]any{"literature_hits": hits}
 	step.Result = mustJSON(result)
 	step.Meta = mustJSON(map[string]any{
-		"hit_count":      len(hits),
-		"verified_count": len(hits),
-		"search_query":   query,
+		"hit_count":        len(hits),
+		"verified_count":   len(hits),
+		"search_query":     query,
+		"literature_links": links,
 	})
 
 	titles := make([]string, 0, min(12, len(hits)))
@@ -437,7 +465,11 @@ func (s *TopicDiscoveryRunService) stageRetrieve(ctx context.Context, step *enti
 		if i >= 12 {
 			break
 		}
-		titles = append(titles, fmt.Sprintf("- %s (%s)", h.Title, h.ExternalKey))
+		if h.URL != "" {
+			titles = append(titles, fmt.Sprintf("- %s (%s) %s", h.Title, h.ExternalKey, h.URL))
+		} else {
+			titles = append(titles, fmt.Sprintf("- %s (%s)", h.Title, h.ExternalKey))
+		}
 	}
 	contextBlock := strings.Join(titles, "\n")
 	if contextBlock == "" {
