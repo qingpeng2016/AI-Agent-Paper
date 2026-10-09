@@ -577,7 +577,7 @@ function startTopicRunProgressPoll(msId: string, token: number): () => void {
       const data = await fetchCurrentTopicDiscoveryRun()
       if (!data || token !== topicRunToken.value) return
       topicLastRunByMs.value = { ...topicLastRunByMs.value, [msId]: data }
-      persistTopicRun(msId, topicRunFromApi(data))
+      persistTopicRun(msId, topicRunFromApi(data, { awaitPost: running.value }))
     } catch {
       /* 忽略轮询失败 */
     }
@@ -654,8 +654,13 @@ function linesFromApiStep(step?: TopicDiscoveryStepDTO): string[] {
   }
 }
 
-function topicRunFromApi(data: TopicDiscoveryRunResponse): TopicRunDemo {
-  const status = mapApiRunStatus(data.run_status)
+type TopicRunFromApiOptions = {
+  /** POST /run 尚未返回：保持步骤圈转动，避免轮询到的 checkpoint 中间态打断 UI */
+  awaitPost?: boolean
+}
+
+function topicRunFromApi(data: TopicDiscoveryRunResponse, opts?: TopicRunFromApiOptions): TopicRunDemo {
+  let status = mapApiRunStatus(data.run_status)
   let steps: TopicFlowStepRuntime[] = TOPIC_DISCOVERY_FLOW_STEPS.map((def) => {
     const st = data.steps.find((s) => s.stage_code === def.stageCode)
     return {
@@ -665,15 +670,21 @@ function topicRunFromApi(data: TopicDiscoveryRunResponse): TopicRunDemo {
       status: mapStepStatus(st?.status ?? 'pending'),
     }
   })
+
+  const awaitPost = opts?.awaitPost === true
+  if (awaitPost && status !== 'completed' && status !== 'failed') {
+    status = 'running'
+  }
+
   if (
-    (status === 'running' || data.run_status === 'running') &&
+    (status === 'running' || data.run_status === 'running' || awaitPost) &&
     !steps.some((s) => s.status === 'running')
   ) {
     steps = markTopicRunActiveStep(steps)
   }
 
   let checkpoint: TopicCheckpointView | null = null
-  if (status === 'checkpoint' && data.pause_after_stage) {
+  if (!awaitPost && status === 'checkpoint' && data.pause_after_stage) {
     const def = TOPIC_DISCOVERY_FLOW_STEPS.find((s) => s.stageCode === data.pause_after_stage)
     const step = data.steps.find((s) => s.stage_code === data.pause_after_stage)
     if (def && step) {

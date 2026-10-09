@@ -654,19 +654,17 @@ func (s *TopicDiscoveryRunService) callStageLLM(
 ) (string, LLMUsage, error) {
 	resolved, err := s.resolveStageLLM(ctx, stageCode, vars)
 	if err != nil {
-		attachLLMRequestMeta(step, stageCode, "", llmUserMessage("", userExtra), "")
+		persistStepLLMInput(step, stageCode, "", llmUserMessage("", userExtra), "")
 		return "", LLMUsage{}, err
 	}
 	user := llmUserMessage(resolved.userPrefix, userExtra)
+	modelName := resolved.model.ModelName
+	persistStepLLMInput(step, stageCode, resolved.system, user, modelName)
 	start := time.Now()
 	text, usage, err := s.llm.Complete(ctx, resolved.model, resolved.system, user)
 	s.persistLLMCallLog(ctx, step.ManuscriptID, stageCode, resolved, usage, int(time.Since(start).Milliseconds()), err)
 	if err != nil {
-		modelName := ""
-		if resolved.model != nil {
-			modelName = resolved.model.ModelName
-		}
-		attachLLMRequestMeta(step, stageCode, resolved.system, user, modelName)
+		persistStepLLMInput(step, stageCode, resolved.system, user, modelName)
 	}
 	return text, usage, err
 }
@@ -683,11 +681,32 @@ func llmUserMessage(userPrefix, userExtra string) string {
 	return user + "\n\n" + extra
 }
 
-// attachLLMRequestMeta 失败时写入发给模型的完整输入，供排错与重试对照。
-func attachLLMRequestMeta(step *entity.PaperOutputTopicStep, stageCode, system, user, modelName string) {
+// persistStepLLMInput 将发给模型的 system/user 写入 step.input_params（主存储），失败时 meta 保留副本便于接口展示。
+func persistStepLLMInput(step *entity.PaperOutputTopicStep, stageCode, system, user, modelName string) {
 	if step == nil {
 		return
 	}
+	llmInput := map[string]any{
+		"stage_code":    stageCode,
+		"system_prompt": system,
+		"user_prompt":   user,
+	}
+	if strings.TrimSpace(modelName) != "" {
+		llmInput["model_name"] = modelName
+	}
+
+	if stageCode == "retrieve" && len(step.InputParams) > 0 {
+		existing := map[string]any{}
+		_ = json.Unmarshal(step.InputParams, &existing)
+		if existing == nil {
+			existing = map[string]any{}
+		}
+		existing["llm_request"] = llmInput
+		step.InputParams = mustJSON(existing)
+	} else {
+		step.InputParams = mustJSON(llmInput)
+	}
+
 	meta := map[string]any{}
 	if len(step.Meta) > 0 {
 		_ = json.Unmarshal(step.Meta, &meta)
