@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onUnmounted, reactive, ref, watch } from 'vue'
 import { loadWorkbenchModuleContent } from '@/composables/loadWorkbenchModule'
 import { useTopicDiscoveryFormOptions } from '@/composables/useTopicDiscoveryFormOptions'
 import {
@@ -638,7 +638,7 @@ function stepStatusFromApi(raw: string): TopicFlowStepStatus {
 }
 
 const TOPIC_STEP_RUNNING_HINT: Record<string, string> = {
-  retrieve: '多源检索与 AI 摘要生成中…',
+  retrieve: '文献 PDF 下载与入库中…',
   generate_ideas: 'AI 脑暴候选选题中…',
   novelty: 'AI 新颖性分析中…',
   audit: 'AI 选题审计中…',
@@ -649,6 +649,35 @@ function topicStepRunningHint(stageCode: string) {
 }
 
 const TOPIC_RUN_POLL_MS = 1500
+
+/** 整 run 或任一步为 running 时轮询 GET /run/current（含 bot 异步 retrieve） */
+const topicRunNeedsPoll = computed(() => {
+  if (!isTopicDiscoveryModule.value || !topicRunVisible.value) return false
+  if (running.value) return true
+  if (currentTopicRun.value.status === 'running') return true
+  return currentTopicRun.value.steps.some((s) => s.status === 'running')
+})
+
+const topicRunBackgroundPollStop = ref<(() => void) | null>(null)
+
+watch(
+  topicRunNeedsPoll,
+  (need) => {
+    if (topicRunBackgroundPollStop.value) {
+      topicRunBackgroundPollStop.value()
+      topicRunBackgroundPollStop.value = null
+    }
+    if (!need) return
+    const msId = activeManuscriptId.value
+    if (!msId) return
+    topicRunBackgroundPollStop.value = startTopicRunProgressPoll(msId, topicRunToken.value)
+  },
+  { flush: 'post', immediate: true },
+)
+
+onUnmounted(() => {
+  topicRunBackgroundPollStop.value?.()
+})
 
 function startTopicRunProgressPoll(msId: string, token: number): () => void {
   const tick = async () => {

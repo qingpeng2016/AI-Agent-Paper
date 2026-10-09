@@ -691,6 +691,14 @@ INSERT INTO `bot_schedule_config` (
     '过期 available 且 valid_until 已过的 user_coupons',
     1,
     1
+  ),
+  (
+    'ai_agent_paper',
+    'topic_literature_pdf_download',
+    15,
+    '选题 retrieve=running：下载 literature_downloads PDF 至 storage/literature',
+    1,
+    1
   )
 ON DUPLICATE KEY UPDATE
   `interval_seconds` = VALUES(`interval_seconds`),

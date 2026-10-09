@@ -102,6 +102,22 @@ func (r *PaperOutputTopicStepImpl) SaveStep(ctx context.Context, step *entity.Pa
 	return r.db.WithContext(ctx).Save(step).Error
 }
 
+func (r *PaperOutputTopicStepImpl) ListByStatusAndStage(ctx context.Context, status, stageCode string, limit int) ([]entity.PaperOutputTopicStep, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
+	}
+	var rows []entity.PaperOutputTopicStep
+	err := r.db.WithContext(ctx).
+		Where("status = ? AND stage_code = ?", status, stageCode).
+		Order("updated_at ASC").
+		Limit(limit).
+		Find(&rows).Error
+	return rows, err
+}
+
 func (r *PaperOutputTopicStepImpl) CancelRun(ctx context.Context, userID uint64, runVersion int) error {
 	now := time.Now()
 	return r.db.WithContext(ctx).Model(&entity.PaperOutputTopicStep{}).

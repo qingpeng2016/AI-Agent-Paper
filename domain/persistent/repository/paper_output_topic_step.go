@@ -12,6 +12,7 @@ type PaperOutputTopicStepRepo interface {
 	GetLatestRunByUser(ctx context.Context, userID uint64) (runVersion int, steps []entity.PaperOutputTopicStep, err error)
 	GetStep(ctx context.Context, userID uint64, runVersion int, stageCode string) (*entity.PaperOutputTopicStep, error)
 	SaveStep(ctx context.Context, step *entity.PaperOutputTopicStep) error
+	ListByStatusAndStage(ctx context.Context, status, stageCode string, limit int) ([]entity.PaperOutputTopicStep, error)
 	CancelRun(ctx context.Context, userID uint64, runVersion int) error
 	BindManuscript(ctx context.Context, userID uint64, runVersion int, manuscriptID uint64) error
 }

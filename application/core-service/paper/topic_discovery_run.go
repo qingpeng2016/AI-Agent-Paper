@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -166,6 +167,9 @@ func (s *TopicDiscoveryRunService) Run(ctx context.Context, userID uint, req req
 		if idx < 0 {
 			return s.reloadView(ctx, userID, runVersion)
 		}
+		if st, _ := s.runningStageCode(ctx, userID, runVersion); st != "" {
+			return s.reloadView(ctx, userID, runVersion)
+		}
 		if err := s.executeFromStage(ctx, userID, runVersion, input, idx); err != nil {
 			return s.reloadViewOrErr(ctx, userID, runVersion, err)
 		}
@@ -198,6 +202,9 @@ func (s *TopicDiscoveryRunService) Run(ctx context.Context, userID uint, req req
 			}
 			if err := s.executeStage(ctx, userID, runVersion, input, topicDiscoveryStages[idx]); err != nil {
 				return s.reloadViewOrErr(ctx, userID, runVersion, err)
+			}
+			if st, _ := s.runningStageCode(ctx, userID, runVersion); st != "" {
+				return s.reloadView(ctx, userID, runVersion)
 			}
 			if input.HumanCheckpoint {
 				view, err := s.reloadView(ctx, userID, runVersion)
@@ -359,11 +366,27 @@ func (s *TopicDiscoveryRunService) executeFromStage(ctx context.Context, userID 
 		if err := s.executeStage(ctx, userID, runVersion, input, topicDiscoveryStages[i]); err != nil {
 			return err
 		}
+		if st, _ := s.runningStageCode(ctx, userID, runVersion); st != "" {
+			return nil
+		}
 		if input.HumanCheckpoint {
 			return nil
 		}
 	}
 	return nil
+}
+
+func (s *TopicDiscoveryRunService) runningStageCode(ctx context.Context, userID uint, runVersion int) (string, error) {
+	for _, stage := range topicDiscoveryStages {
+		step, err := s.steps.GetStep(ctx, uint64(userID), runVersion, stage)
+		if err != nil || step == nil {
+			continue
+		}
+		if strings.TrimSpace(step.Status) == "running" {
+			return stage, nil
+		}
+	}
+	return "", nil
 }
 
 func (s *TopicDiscoveryRunService) executeStage(ctx context.Context, userID uint, runVersion int, input topicRunInput, stageCode string) error {
@@ -395,9 +418,9 @@ func (s *TopicDiscoveryRunService) executeStage(ctx context.Context, userID uint
 		execErr = errorx.ErrTopicStepInvalid
 	}
 
-	done := time.Now()
-	step.CompletedAt = &done
 	if execErr != nil {
+		done := time.Now()
+		step.CompletedAt = &done
 		step.Status = "failed"
 		stepMeta := map[string]any{}
 		if len(step.Extra) > 0 {
@@ -410,6 +433,12 @@ func (s *TopicDiscoveryRunService) executeStage(ctx context.Context, userID uint
 		}
 		return execErr
 	}
+	if stageCode == "retrieve" && strings.TrimSpace(step.Status) == "running" {
+		step.CompletedAt = nil
+		return s.steps.SaveStep(ctx, step)
+	}
+	done := time.Now()
+	step.CompletedAt = &done
 	step.Status = "completed"
 	return s.steps.SaveStep(ctx, step)
 }
@@ -485,6 +514,7 @@ func (s *TopicDiscoveryRunService) stageRetrieve(ctx context.Context, step *enti
 	}
 
 	links := make([]storedLiteratureLink, 0, len(hits))
+	downloads := make([]LiteratureDownloadItem, 0, len(hits))
 	for _, h := range hits {
 		if strings.TrimSpace(h.URL) == "" {
 			continue
@@ -495,6 +525,12 @@ func (s *TopicDiscoveryRunService) stageRetrieve(ctx context.Context, step *enti
 			ExternalKey: h.ExternalKey,
 			SourceCode:  h.SourceCode,
 		})
+		pdfURL := resolveLiteraturePDFURL(h.SourceCode, h.ExternalKey, h.URL, h.DOI)
+		downloads = append(downloads, LiteratureDownloadItem{
+			ExternalKey: h.ExternalKey,
+			PdfURL:      pdfURL,
+			LocalPath:   relIfExists(pdfURL, h.ExternalKey),
+		})
 	}
 
 	result := map[string]any{"literature_hits": hits}
@@ -502,17 +538,40 @@ func (s *TopicDiscoveryRunService) stageRetrieve(ctx context.Context, step *enti
 	mergeLiteratureBriefIntoResult(result, brief)
 	step.Result = mustJSON(result)
 	extra := map[string]any{
-		"hit_count":        len(hits),
-		"verified_count":   len(hits),
-		"search_query":     query,
-		"literature_links": links,
+		"hit_count":             len(hits),
+		"verified_count":        len(hits),
+		"search_query":          query,
+		"literature_links":      links,
+		"literature_downloads":  downloads,
 	}
 	if b, e := json.Marshal(brief); e == nil {
 		extra["literature_brief"] = json.RawMessage(b)
 	}
 	step.Extra = mustJSON(extra)
-	step.SummaryText = ptrString(fmt.Sprintf("检索完成，共 %d 篇文献", len(hits)))
+	step.SummaryText = ptrString(fmt.Sprintf("检索完成，共 %d 篇文献，PDF 下载中…", len(hits)))
+	if LiteratureDownloadsReady(downloads) {
+		step.SummaryText = ptrString(fmt.Sprintf("检索完成，共 %d 篇文献（PDF 已落盘）", len(hits)))
+		step.Status = "completed"
+	} else {
+		step.Status = "running"
+	}
 	return nil
+}
+
+func fileExistsNonEmpty(path string) bool {
+	st, err := os.Stat(path)
+	return err == nil && st.Size() > 0
+}
+
+func relIfExists(pdfURL, externalKey string) string {
+	if strings.TrimSpace(pdfURL) == "" {
+		return ""
+	}
+	rel := LiteratureLocalRelPath(externalKey)
+	if fileExistsNonEmpty(LiteratureLocalAbsPath(rel)) {
+		return rel
+	}
+	return ""
 }
 
 func (s *TopicDiscoveryRunService) stageGenerateIdeas(ctx context.Context, userID uint, runVersion int, step *entity.PaperOutputTopicStep, input topicRunInput) error {

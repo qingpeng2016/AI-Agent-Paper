@@ -8,6 +8,7 @@ import (
 	"time"
 
 	couponexpire "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/coupon_expire"
+	topicliteraturedownload "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/topic_literature_download"
 	viplevelsync "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/vip_level_sync"
 	botscheduleconfig "github.com/qingpeng2016/ai-agent-paper/application/core-service/bot_schedule_config"
 	"github.com/qingpeng2016/ai-agent-paper/common/dederi/logger"
@@ -22,8 +23,9 @@ import (
 // Scheduler Bot 调度器
 type Scheduler struct {
 	botScheduleConfigService *botscheduleconfig.BotScheduleConfigService
-	vipLevelSyncJob          *viplevelsync.VipLevelSyncJob
-	couponExpireJob          *couponexpire.CouponExpireJob
+	vipLevelSyncJob              *viplevelsync.VipLevelSyncJob
+	couponExpireJob              *couponexpire.CouponExpireJob
+	topicLiteratureDownloadJob   *topicliteraturedownload.TopicLiteratureDownloadJob
 	ns                       *gocron.Scheduler
 	jobMap                   map[string]*gocron.Job
 	configMap                map[string]float64
@@ -36,11 +38,13 @@ func NewScheduler(
 	botScheduleConfigService *botscheduleconfig.BotScheduleConfigService,
 	vipLevelSyncJob *viplevelsync.VipLevelSyncJob,
 	couponExpireJob *couponexpire.CouponExpireJob,
+	topicLiteratureDownloadJob *topicliteraturedownload.TopicLiteratureDownloadJob,
 ) *Scheduler {
 	return &Scheduler{
-		botScheduleConfigService: botScheduleConfigService,
-		vipLevelSyncJob:          vipLevelSyncJob,
-		couponExpireJob:          couponExpireJob,
+		botScheduleConfigService:   botScheduleConfigService,
+		vipLevelSyncJob:            vipLevelSyncJob,
+		couponExpireJob:            couponExpireJob,
+		topicLiteratureDownloadJob: topicLiteratureDownloadJob,
 		ns:                       gocron.NewScheduler(time.Local),
 		jobMap:                   make(map[string]*gocron.Job),
 		configMap:                make(map[string]float64),
@@ -228,6 +232,10 @@ func (s *Scheduler) getAIAgentPaperHandleFunc(taskName string) func() {
 	case couponexpire.TaskCouponExpire:
 		return func() {
 			s.couponExpireJob.Run(context.Background())
+		}
+	case topicliteraturedownload.TaskTopicLiteratureDownload:
+		return func() {
+			s.topicLiteratureDownloadJob.Run(context.Background())
 		}
 	default:
 		return nil
