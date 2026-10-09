@@ -416,6 +416,26 @@ const topicRunBusy = computed(
   () => currentTopicRun.value.status === 'running' || running.value,
 )
 
+const topicFailedSummary = computed((): { stageLabel: string; stageCode: string; error: string } | null => {
+  if (currentTopicRun.value.status !== 'failed') return null
+  const raw = topicLastRunByMs.value[activeManuscriptId.value]
+  const failedDto = raw?.steps.find((s) => s.status === 'failed')
+  const localStep = currentTopicRun.value.steps.find((s) => s.status === 'failed')
+  const stageCode = failedDto?.stage_code ?? localStep?.stageCode ?? 'unknown'
+  const def = TOPIC_DISCOVERY_FLOW_STEPS.find((s) => s.stageCode === stageCode)
+  const meta = (failedDto?.meta ?? {}) as Record<string, unknown>
+  const errRaw = meta.error
+  const error =
+    typeof errRaw === 'string' && errRaw.trim()
+      ? errRaw.trim()
+      : '本步执行失败，请查看日志或调整配置后重试。'
+  return {
+    stageLabel: def?.label ?? stageCode,
+    stageCode,
+    error,
+  }
+})
+
 /** 文献综述只读：当前论文最近一次选题 run 的 artifact 快照 */
 const topicDiscoveryArtifact = computed((): TopicDiscoveryArtifactSnapshot => {
   const run = currentTopicRun.value
@@ -513,6 +533,7 @@ const primaryActionLabel = computed(() => {
     if (currentTopicRun.value.status === 'running' || running.value) return '运行中…'
     if (topicReadyForLiteratureReview.value) return '生成文献综述'
     if (currentTopicRun.value.status === 'completed') return '再次运行'
+    if (currentTopicRun.value.status === 'failed') return '再次运行'
     return '运行'
   }
   if (isLiteratureReviewModule.value) {
@@ -684,6 +705,11 @@ function topicRunFromApi(data: TopicDiscoveryRunResponse, opts?: TopicRunFromApi
   }
 
   let checkpoint: TopicCheckpointView | null = null
+  if (steps.some((s) => s.status === 'failed')) {
+    status = 'failed'
+    checkpoint = null
+  }
+
   if (!awaitPost && status === 'checkpoint' && data.pause_after_stage) {
     const def = TOPIC_DISCOVERY_FLOW_STEPS.find((s) => s.stageCode === data.pause_after_stage)
     const step = data.steps.find((s) => s.stage_code === data.pause_after_stage)
@@ -948,32 +974,51 @@ async function abandonCurrentTopicRun(msId: string) {
   persistTopicRun(msId, createIdleTopicRun())
 }
 
-async function rejectTopicCheckpoint() {
+async function abandonTopicRunWithConfirm(
+  body: string,
+  dialogTitle: string,
+  confirmButtonText: string,
+  doneMessage: string,
+) {
   const msId = activeManuscriptId.value
   if (!msId || topicTerminateLoading.value) return
   try {
-    await paperConfirm(
-      '终止后本轮进度将作废，确定终止吗？',
-      '终止并返回',
-      {
-        confirmButtonText: '确定终止',
-        cancelButtonText: '取消',
-        variant: 'danger',
-      },
-    )
+    await paperConfirm(body, dialogTitle, {
+      confirmButtonText,
+      cancelButtonText: '取消',
+      variant: 'danger',
+    })
   } catch {
     return
   }
   topicTerminateLoading.value = true
   try {
     await abandonCurrentTopicRun(msId)
-    ElMessage.info('已终止本轮')
+    ElMessage.info(doneMessage)
   } catch (e) {
-    const msg = e instanceof Error ? e.message : '终止失败'
+    const msg = e instanceof Error ? e.message : '操作失败'
     ElMessage.error(msg)
   } finally {
     topicTerminateLoading.value = false
   }
+}
+
+async function rejectTopicCheckpoint() {
+  await abandonTopicRunWithConfirm(
+    '终止后本轮进度将作废，确定终止吗？',
+    '终止并返回',
+    '确定终止',
+    '已终止本轮',
+  )
+}
+
+async function rejectFailedTopicRun() {
+  await abandonTopicRunWithConfirm(
+    '驳回后本轮进度将作废，确定返回吗？',
+    '驳回并返回',
+    '确定驳回',
+    '已驳回本轮',
+  )
 }
 
 async function cancelTopicRun() {
@@ -1287,7 +1332,7 @@ async function onPrimaryAction() {
                   : currentTopicRun.status === 'completed'
                     ? '已完成'
                     : currentTopicRun.status === 'failed'
-                      ? '已中止'
+                      ? '执行失败'
                       : ''
             }}
           </span>
@@ -1367,6 +1412,36 @@ async function onPrimaryAction() {
               @click="continueTopicAfterCheckpoint"
             >
               确认并继续
+            </button>
+          </div>
+        </div>
+
+        <div v-else-if="currentTopicRun.status === 'failed'" class="paper-checkpoint paper-checkpoint--failed">
+          <div class="paper-checkpoint-head">
+            <span class="paper-checkpoint-pause paper-checkpoint-pause--failed" aria-hidden="true">✕</span>
+            <div>
+              <h3 class="paper-checkpoint-title">
+                步骤失败 · {{ topicFailedSummary?.stageLabel ?? '未知步骤' }}
+              </h3>
+              <p v-if="topicFailedSummary?.stageCode" class="paper-checkpoint-sub">
+                {{ topicFailedSummary.stageCode }}
+              </p>
+            </div>
+          </div>
+          <p class="paper-flow-failed-error" role="alert">
+            {{ topicFailedSummary?.error ?? '本步执行失败，请查看日志或调整配置后重试。' }}
+          </p>
+          <p class="paper-checkpoint-note">
+            可驳回并返回以取消本轮进度；修正配置后请点顶栏「再次运行」重新开始。
+          </p>
+          <div class="paper-checkpoint-actions">
+            <button
+              type="button"
+              class="paper-btn-secondary"
+              :disabled="topicTerminateLoading || running"
+              @click="rejectFailedTopicRun"
+            >
+              {{ topicTerminateLoading ? '处理中…' : '驳回并返回' }}
             </button>
           </div>
         </div>
@@ -2014,6 +2089,27 @@ async function onPrimaryAction() {
   margin: 12px 0 0;
   font-size: 12px;
   color: var(--atm-text-muted, #64748b);
+}
+
+.paper-checkpoint--failed {
+  border-color: rgba(220, 38, 38, 0.35);
+  background: rgba(254, 242, 242, 0.65);
+}
+
+.paper-checkpoint-pause--failed {
+  color: #dc2626;
+}
+
+.paper-flow-failed-error {
+  margin: 0 0 0.75rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(220, 38, 38, 0.2);
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: #991b1b;
+  word-break: break-word;
 }
 
 .paper-checkpoint-actions {
