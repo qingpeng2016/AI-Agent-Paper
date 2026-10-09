@@ -89,10 +89,14 @@ func (r *PaperOutputLiteratureReviewImpl) TryBeginExperimentPlanGeneration(
 	res := r.db.WithContext(ctx).
 		Model(&entity.PaperOutputLiteratureReview{}).
 		Where(
-			"id = ? AND manuscript_id = ? AND user_id = ? AND status = ?",
-			reviewID, manuscriptID, userID, "completed",
+			"id = ? AND manuscript_id = ? AND user_id = ? AND status IN ?",
+			reviewID, manuscriptID, userID, []string{"completed", "gen_exp_fail"},
 		).
-		Update("status", "generating_experiment_plan")
+		Updates(map[string]any{
+			"status":                        "gen_exp_plan",
+			"experiment_plan_llm_request":   nil,
+			"experiment_plan_llm_response":  nil,
+		})
 	if res.Error != nil {
 		return false, res.Error
 	}
@@ -134,25 +138,55 @@ func (r *PaperOutputLiteratureReviewImpl) ListByStatus(
 	return rows, err
 }
 
+func (r *PaperOutputLiteratureReviewImpl) SaveExperimentPlanLLMRequest(
+	ctx context.Context,
+	reviewID, manuscriptID uint64,
+	userID uint,
+	llmRequestJSON []byte,
+) (bool, error) {
+	updates := map[string]any{}
+	if len(llmRequestJSON) > 0 {
+		updates["experiment_plan_llm_request"] = llmRequestJSON
+	}
+	if len(updates) == 0 {
+		return false, nil
+	}
+	res := r.db.WithContext(ctx).
+		Model(&entity.PaperOutputLiteratureReview{}).
+		Where(
+			"id = ? AND manuscript_id = ? AND user_id = ? AND status = ?",
+			reviewID, manuscriptID, userID, "gen_exp_plan",
+		).
+		Updates(updates)
+	if res.Error != nil {
+		return false, res.Error
+	}
+	return res.RowsAffected > 0, nil
+}
+
 func (r *PaperOutputLiteratureReviewImpl) CompleteExperimentPlanLink(
 	ctx context.Context,
 	reviewID, manuscriptID uint64,
 	userID uint,
 	planID uint64,
 	metaJSON []byte,
+	llmResponseJSON []byte,
 ) (bool, error) {
 	updates := map[string]any{
 		"status":                           "completed",
-		"paper_output_experiment_plan_id": planID,
+		"experiment_plan_id": planID,
 	}
 	if len(metaJSON) > 0 {
 		updates["meta"] = metaJSON
+	}
+	if len(llmResponseJSON) > 0 {
+		updates["experiment_plan_llm_response"] = llmResponseJSON
 	}
 	res := r.db.WithContext(ctx).
 		Model(&entity.PaperOutputLiteratureReview{}).
 		Where(
 			"id = ? AND manuscript_id = ? AND user_id = ? AND status = ?",
-			reviewID, manuscriptID, userID, "generating_experiment_plan",
+			reviewID, manuscriptID, userID, "gen_exp_plan",
 		).
 		Updates(updates)
 	if res.Error != nil {
@@ -166,16 +200,20 @@ func (r *PaperOutputLiteratureReviewImpl) FailExperimentPlanGeneration(
 	reviewID, manuscriptID uint64,
 	userID uint,
 	metaJSON []byte,
+	llmResponseJSON []byte,
 ) (bool, error) {
-	updates := map[string]any{"status": "completed"}
+	updates := map[string]any{"status": "gen_exp_fail"}
 	if len(metaJSON) > 0 {
 		updates["meta"] = metaJSON
+	}
+	if len(llmResponseJSON) > 0 {
+		updates["experiment_plan_llm_response"] = llmResponseJSON
 	}
 	res := r.db.WithContext(ctx).
 		Model(&entity.PaperOutputLiteratureReview{}).
 		Where(
 			"id = ? AND manuscript_id = ? AND user_id = ? AND status = ?",
-			reviewID, manuscriptID, userID, "generating_experiment_plan",
+			reviewID, manuscriptID, userID, "gen_exp_plan",
 		).
 		Updates(updates)
 	if res.Error != nil {

@@ -21,7 +21,9 @@ type PaperOutputLiteratureReview struct {
 	Citations      datatypes.JSON `gorm:"column:citations"`
 	InputParams    datatypes.JSON `gorm:"column:input_params"`
 	Meta                         datatypes.JSON `gorm:"column:meta"`
-	PaperOutputExperimentPlanID  *uint64        `gorm:"column:paper_output_experiment_plan_id"`
+	ExperimentPlanID             *uint64        `gorm:"column:experiment_plan_id"`
+	ExperimentPlanLLMRequest   datatypes.JSON `gorm:"column:experiment_plan_llm_request"`
+	ExperimentPlanLLMResponse    datatypes.JSON `gorm:"column:experiment_plan_llm_response"`
 	CreatedAt                    time.Time      `gorm:"column:created_at"`
 	UpdatedAt      time.Time      `gorm:"column:updated_at"`
 }

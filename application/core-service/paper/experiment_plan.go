@@ -13,7 +13,9 @@ import (
 )
 
 const (
-	LitReviewStatusGeneratingExperimentPlan = "generating_experiment_plan"
+	// 须 ≤ paper_output_literature_review.status VARCHAR(16)
+	LitReviewStatusGeneratingExperimentPlan = "gen_exp_plan"
+	LitReviewStatusExperimentPlanFailed     = "gen_exp_fail"
 	ExperimentPlanStageCode                 = "experiment_plan"
 )
 
@@ -55,14 +57,14 @@ func (s *ExperimentPlanService) EnqueueGenerate(
 	}
 	ms, err := s.manuscripts.GetByIDForUser(ctx, uint(manuscriptID), userID)
 	if err != nil {
-		return err
+		return errorx.ErrParamsError.WithDetail(err.Error())
 	}
 	if ms == nil {
 		return errorx.ErrParamsError.WithDetail("manuscript 不存在或无权访问")
 	}
 	row, err := s.reviews.GetByIDForUser(ctx, reviewID, manuscriptID, userID)
 	if err != nil {
-		return err
+		return errorx.ErrParamsError.WithDetail(err.Error())
 	}
 	if row == nil {
 		return errorx.ErrParamsError.WithDetail("文献综述不存在或无权操作")
@@ -74,12 +76,12 @@ func (s *ExperimentPlanService) EnqueueGenerate(
 	if st == LitReviewStatusGeneratingExperimentPlan {
 		return errorx.ErrParamsError.WithDetail("实验方案生成中，请稍候")
 	}
-	if st != "completed" {
-		return errorx.ErrParamsError.WithDetail("仅已完成的文献综述可生成实验方案")
+	if st != "completed" && st != LitReviewStatusExperimentPlanFailed {
+		return errorx.ErrParamsError.WithDetail("当前状态不可生成实验方案")
 	}
 	ok, err := s.reviews.TryBeginExperimentPlanGeneration(ctx, reviewID, manuscriptID, userID)
 	if err != nil {
-		return err
+		return errorx.ErrParamsError.WithDetail(err.Error())
 	}
 	if !ok {
 		return errorx.ErrParamsError.WithDetail("无法开始生成实验方案")
@@ -94,21 +96,60 @@ func (s *ExperimentPlanService) RunExperimentPlanLLM(ctx context.Context, review
 	}
 	direction, venue := directionVenueFromReview(review)
 	userExtra := buildExperimentPlanUserMessage(review, direction, venue)
+	vars := map[string]string{"direction": direction, "venue": venue}
 	step := &entity.PaperOutputTopicStep{ManuscriptID: review.ManuscriptID}
-	text, _, err := s.llmRunner.callStageLLM(ctx, step, ExperimentPlanStageCode, map[string]string{
-		"direction": direction,
-		"venue":     venue,
-	}, userExtra)
+
+	resolved, resolveErr := s.llmRunner.resolveStageLLM(ctx, ExperimentPlanStageCode, vars)
+	if resolveErr != nil {
+		return s.markExperimentPlanFailed(ctx, review, resolveErr.Error(), nil, nil)
+	}
+	systemPrompt := ""
+	userPrefix := ""
+	modelName := ""
+	if resolved != nil {
+		systemPrompt = strings.TrimSpace(resolved.system)
+		userPrefix = strings.TrimSpace(resolved.userPrefix)
+		if resolved.model != nil {
+			modelName = resolved.model.ModelName
+		}
+	}
+	userPrompt := llmUserMessage(userPrefix, userExtra)
+	reqSnap, _ := json.Marshal(map[string]any{
+		"stage_code":    ExperimentPlanStageCode,
+		"vars":          vars,
+		"system_prompt": systemPrompt,
+		"user_prompt":   userPrompt,
+		"model_name":    modelName,
+	})
+	_, _ = s.reviews.SaveExperimentPlanLLMRequest(
+		ctx, review.ID, review.ManuscriptID, uint(review.UserID), reqSnap,
+	)
+
+	text, usage, err := s.llmRunner.callStageLLM(ctx, step, ExperimentPlanStageCode, vars, userExtra)
+	respBase := map[string]any{
+		"raw_text":          text,
+		"prompt_tokens":     usage.PromptTokens,
+		"completion_tokens": usage.CompletionTokens,
+	}
 	if err != nil {
-		return s.markExperimentPlanFailed(ctx, review, err.Error())
+		respBase["error"] = err.Error()
+		respJSON, _ := json.Marshal(respBase)
+		return s.markExperimentPlanFailed(ctx, review, err.Error(), respJSON, reqSnap)
 	}
 	planPayload := parseExperimentPlanLLMResponse(text)
 	if planPayload == nil {
-		return s.markExperimentPlanFailed(ctx, review, "模型未返回 experiment_plan JSON")
+		respBase["error"] = "模型未返回 experiment_plan JSON"
+		respJSON, _ := json.Marshal(respBase)
+		return s.markExperimentPlanFailed(ctx, review, "模型未返回 experiment_plan JSON", respJSON, reqSnap)
 	}
+	respBase["parsed"] = map[string]any{"experiment_plan": planPayload}
+	respJSON, _ := json.Marshal(respBase)
+
 	planRow, err := s.persistExperimentPlanFromLLM(ctx, review, planPayload, direction, venue)
 	if err != nil {
-		return s.markExperimentPlanFailed(ctx, review, err.Error())
+		respBase["error"] = err.Error()
+		respJSON, _ = json.Marshal(respBase)
+		return s.markExperimentPlanFailed(ctx, review, err.Error(), respJSON, reqSnap)
 	}
 	meta := mergeReviewMeta(review, map[string]any{
 		"experiment_plan_id":      planRow.ID,
@@ -117,7 +158,7 @@ func (s *ExperimentPlanService) RunExperimentPlanLLM(ctx context.Context, review
 	})
 	metaJSON, _ := json.Marshal(meta)
 	ok, err := s.reviews.CompleteExperimentPlanLink(
-		ctx, review.ID, review.ManuscriptID, uint(review.UserID), planRow.ID, metaJSON,
+		ctx, review.ID, review.ManuscriptID, uint(review.UserID), planRow.ID, metaJSON, respJSON,
 	)
 	if err != nil {
 		return err
@@ -132,13 +173,20 @@ func (s *ExperimentPlanService) markExperimentPlanFailed(
 	ctx context.Context,
 	review *entity.PaperOutputLiteratureReview,
 	reason string,
+	llmResponseJSON []byte,
+	llmRequestJSON []byte,
 ) error {
+	if len(llmRequestJSON) > 0 {
+		_, _ = s.reviews.SaveExperimentPlanLLMRequest(
+			ctx, review.ID, review.ManuscriptID, uint(review.UserID), llmRequestJSON,
+		)
+	}
 	meta := mergeReviewMeta(review, map[string]any{
 		"experiment_plan_error": strings.TrimSpace(reason),
 	})
 	metaJSON, _ := json.Marshal(meta)
 	_, err := s.reviews.FailExperimentPlanGeneration(
-		ctx, review.ID, review.ManuscriptID, uint(review.UserID), metaJSON,
+		ctx, review.ID, review.ManuscriptID, uint(review.UserID), metaJSON, llmResponseJSON,
 	)
 	if err != nil {
 		return err

@@ -85,8 +85,8 @@ func literatureReviewItemView(row entity.PaperOutputLiteratureReview) response.P
 		Format:    row.Format,
 		CreatedAt: row.CreatedAt.UTC().Format(time.RFC3339),
 	}
-	if row.PaperOutputExperimentPlanID != nil && *row.PaperOutputExperimentPlanID > 0 {
-		item.PaperOutputExperimentPlanID = strconv.FormatUint(*row.PaperOutputExperimentPlanID, 10)
+	if row.ExperimentPlanID != nil && *row.ExperimentPlanID > 0 {
+		item.ExperimentPlanID = strconv.FormatUint(*row.ExperimentPlanID, 10)
 	}
 	if row.Structure != nil {
 		item.Structure = *row.Structure

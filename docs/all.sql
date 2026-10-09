@@ -477,7 +477,7 @@ CREATE TABLE IF NOT EXISTS `paper_output_literature_review` (
   `manuscript_id`     BIGINT UNSIGNED NOT NULL COMMENT '论文 ID',
   `user_id`           BIGINT UNSIGNED NOT NULL COMMENT '用户 ID',
   `version`           INT          NOT NULL DEFAULT 1 COMMENT '版本号',
-  `status`            VARCHAR(16)  NOT NULL DEFAULT 'completed' COMMENT 'draft|completed|generating_experiment_plan|deleted（软删）',
+  `status`            VARCHAR(16)  NOT NULL DEFAULT 'completed' COMMENT 'draft|completed|gen_exp_plan|gen_exp_fail|deleted（软删）',
   `structure`         VARCHAR(32)  DEFAULT NULL COMMENT 'thematic|chronological|method',
   `title`             VARCHAR(256) DEFAULT NULL COMMENT '标题',
   `summary`           TEXT         DEFAULT NULL COMMENT '摘要',
@@ -487,12 +487,14 @@ CREATE TABLE IF NOT EXISTS `paper_output_literature_review` (
   `citations`         JSON         DEFAULT NULL COMMENT '引用表 / cite key 列表',
   `input_params`      JSON         DEFAULT NULL COMMENT '生成参数快照',
   `meta`              JSON         DEFAULT NULL COMMENT '扩展元数据',
-  `paper_output_experiment_plan_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '关联 paper_output_experiment_plan.id',
+  `experiment_plan_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '关联 paper_output_experiment_plan.id',
+  `experiment_plan_llm_request` JSON DEFAULT NULL COMMENT '生成实验方案 LLM 请求',
+  `experiment_plan_llm_response` JSON DEFAULT NULL COMMENT '生成实验方案 LLM 返回',
   `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
   KEY `idx_paper_output_lit_review_ms` (`manuscript_id`, `created_at`),
-  KEY `idx_paper_output_lit_review_exp_plan` (`paper_output_experiment_plan_id`)
+  KEY `idx_paper_lit_review_experiment_plan` (`experiment_plan_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文献综述';
 
 CREATE TABLE IF NOT EXISTS `paper_output_experiment_plan` (

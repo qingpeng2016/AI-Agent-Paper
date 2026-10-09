@@ -29,12 +29,20 @@ type PaperOutputLiteratureReviewRepo interface {
 		userID uint,
 		planID uint64,
 		metaJSON []byte,
+		llmResponseJSON []byte,
 	) (bool, error)
 	FailExperimentPlanGeneration(
 		ctx context.Context,
 		reviewID, manuscriptID uint64,
 		userID uint,
 		metaJSON []byte,
+		llmResponseJSON []byte,
+	) (bool, error)
+	SaveExperimentPlanLLMRequest(
+		ctx context.Context,
+		reviewID, manuscriptID uint64,
+		userID uint,
+		llmRequestJSON []byte,
 	) (bool, error)
 	TryBeginExperimentPlanGeneration(
 		ctx context.Context,

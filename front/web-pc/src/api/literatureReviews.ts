@@ -4,14 +4,14 @@ type ApiEnvelope<T> = {
   data?: T
 }
 
-export const LITERATURE_REVIEW_STATUS_GENERATING_EXPERIMENT_PLAN =
-  'generating_experiment_plan' as const
+export const LITERATURE_REVIEW_STATUS_GENERATING_EXPERIMENT_PLAN = 'gen_exp_plan' as const
+export const LITERATURE_REVIEW_STATUS_EXPERIMENT_PLAN_FAILED = 'gen_exp_fail' as const
 
 export type PaperLiteratureReviewItem = {
   id: string
   version: number
   status: string
-  paper_output_experiment_plan_id?: string
+  experiment_plan_id?: string
   structure?: string
   title?: string
   summary?: string
@@ -107,6 +107,7 @@ export function formatLiteratureReviewStatus(status: string): string {
     draft: '草稿',
     deleted: '已删除',
     [LITERATURE_REVIEW_STATUS_GENERATING_EXPERIMENT_PLAN]: '生成实验方案中',
+    [LITERATURE_REVIEW_STATUS_EXPERIMENT_PLAN_FAILED]: '生成实验方案失败',
   }
   return map[status] ?? status
 }

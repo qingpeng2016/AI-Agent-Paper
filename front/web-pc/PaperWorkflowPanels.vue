@@ -82,26 +82,29 @@ const LIT_STRUCTURE_LABEL: Record<string, string> = {
 
 let litReviewReloadSeq = 0
 
-async function reloadLiteratureReviews() {
+async function reloadLiteratureReviews(opts?: { silent?: boolean }) {
+  const silent = opts?.silent === true
   const ms = manuscriptId.value
   if (!ms || !/^\d+$/.test(ms)) {
-    litReviewItems.value = []
+    if (!silent) litReviewItems.value = []
     return
   }
   const seq = ++litReviewReloadSeq
-  litReviewsLoading.value = true
+  if (!silent) litReviewsLoading.value = true
   try {
     const data = await fetchLiteratureReviews(ms)
     if (seq !== litReviewReloadSeq) return
     litReviewItems.value = data.items ?? []
   } catch (e) {
     if (seq !== litReviewReloadSeq) return
-    litReviewItems.value = []
-    const msg = e instanceof Error ? e.message : '加载文献综述失败'
-    ElMessage.error(msg)
+    if (!silent) {
+      litReviewItems.value = []
+      const msg = e instanceof Error ? e.message : '加载文献综述失败'
+      ElMessage.error(msg)
+    }
   } finally {
     if (seq === litReviewReloadSeq) {
-      litReviewsLoading.value = false
+      if (!silent) litReviewsLoading.value = false
       syncLitReviewPollTimer()
     }
   }
@@ -136,7 +139,7 @@ function syncLitReviewPollTimer() {
   if (litReviewHasGeneratingExperimentPlan()) {
     if (!litReviewPollTimer) {
       litReviewPollTimer = setInterval(() => {
-        void reloadLiteratureReviews()
+        void reloadLiteratureReviews({ silent: true })
       }, 4000)
     }
   } else if (litReviewPollTimer) {
@@ -176,10 +179,9 @@ async function submitGenerateExperimentPlanConfirm() {
   litReviewGenerateSubmitting.value = true
   try {
     await generateExperimentPlanFromLiteratureReview(ms, item.id)
-    ElMessage.success('已开始生成实验方案，请稍候')
+    ElMessage.success('操作成功')
     litReviewGeneratePending.value = null
-    await reloadLiteratureReviews()
-    syncLitReviewPollTimer()
+    await reloadLiteratureReviews({ silent: true })
   } catch (e) {
     const msg = e instanceof Error ? e.message : '提交失败'
     ElMessage.error(msg)
