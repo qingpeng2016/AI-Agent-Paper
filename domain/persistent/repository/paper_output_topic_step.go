@@ -7,10 +7,11 @@ import (
 )
 
 type PaperOutputTopicStepRepo interface {
-	BeginRun(ctx context.Context, manuscriptID, userID uint64, inputParams []byte) (runVersion int, err error)
-	ListByRun(ctx context.Context, manuscriptID uint64, runVersion int) ([]entity.PaperOutputTopicStep, error)
-	GetCurrentRun(ctx context.Context, manuscriptID uint64) (runVersion int, steps []entity.PaperOutputTopicStep, err error)
-	GetStep(ctx context.Context, manuscriptID uint64, runVersion int, stageCode string) (*entity.PaperOutputTopicStep, error)
+	BeginRun(ctx context.Context, userID uint64, inputParams []byte) (runVersion int, err error)
+	ListByUserRun(ctx context.Context, userID uint64, runVersion int) ([]entity.PaperOutputTopicStep, error)
+	GetLatestRunByUser(ctx context.Context, userID uint64) (runVersion int, steps []entity.PaperOutputTopicStep, err error)
+	GetStep(ctx context.Context, userID uint64, runVersion int, stageCode string) (*entity.PaperOutputTopicStep, error)
 	SaveStep(ctx context.Context, step *entity.PaperOutputTopicStep) error
-	CancelCurrentRun(ctx context.Context, manuscriptID uint64) error
+	CancelRun(ctx context.Context, userID uint64, runVersion int) error
+	BindManuscript(ctx context.Context, userID uint64, runVersion int, manuscriptID uint64) error
 }

@@ -21,5 +21,9 @@ type TopicDiscoveryRunQuery struct {
 }
 
 type TopicDiscoveryCancelRequest struct {
-	ManuscriptID uint64 `json:"manuscript_id" binding:"required"`
+	ManuscriptID uint64 `json:"manuscript_id"`
+}
+
+type TopicDiscoveryCommitManuscriptRequest struct {
+	ManuscriptTitle string `json:"manuscript_title"`
 }

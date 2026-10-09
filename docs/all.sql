@@ -447,10 +447,9 @@ CREATE TABLE IF NOT EXISTS `paper_manuscript_citation_gate` (
 -- 选题发现：一轮 run 固定四步，每步一行（stage_code 见 paper_llm_workflow_binding）
 CREATE TABLE IF NOT EXISTS `paper_output_topic_step` (
   `id`                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '记录 ID',
-  `manuscript_id`     BIGINT UNSIGNED NOT NULL COMMENT '论文 ID',
+  `manuscript_id`     BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '论文 ID；选题未确认综述前为 0，确认后反填',
   `user_id`           BIGINT UNSIGNED NOT NULL COMMENT '用户 ID',
-  `run_version`       INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '本篇选题第几轮（同轮四步相同）',
-  `is_current_run`    TINYINT(1)   NOT NULL DEFAULT 1 COMMENT '是否本篇当前生效的一轮',
+  `run_version`       INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '该用户选题第几轮（同轮四步相同）',
   `stage_code`        VARCHAR(32)  NOT NULL COMMENT 'retrieve|generate_ideas|novelty|audit',
   `status`            VARCHAR(16)  NOT NULL DEFAULT 'pending' COMMENT 'pending|running|completed|failed|cancelled',
   `result`            JSON         DEFAULT NULL COMMENT '本步产出：retrieve→literature_hits[]；generate_ideas→ideas[]；novelty/audit→报告结构',
@@ -462,8 +461,8 @@ CREATE TABLE IF NOT EXISTS `paper_output_topic_step` (
   `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '入库时间',
   `updated_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_paper_output_topic_step_run` (`manuscript_id`, `run_version`, `stage_code`),
-  KEY `idx_paper_output_topic_step_ms` (`manuscript_id`, `is_current_run`, `stage_code`),
+  UNIQUE KEY `uk_paper_output_topic_step_run` (`user_id`, `run_version`, `stage_code`),
+  KEY `idx_paper_output_topic_step_ms` (`manuscript_id`, `stage_code`),
   KEY `idx_paper_output_topic_step_user` (`user_id`, `created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='选题发现 · 四步各一行（含检索文献 hits）';
 
@@ -835,5 +834,12 @@ ON DUPLICATE KEY UPDATE
 -- UPDATE `paper_ref_execution_intensity` SET `is_default` = 1 WHERE `code` = 'balanced';
 -- UPDATE `paper_ref_audit_level` SET `is_default` = 0;
 -- UPDATE `paper_ref_audit_level` SET `is_default` = 1 WHERE `code` = 'polished';
+-- ALTER TABLE `paper_output_topic_step`
+--   MODIFY COLUMN `manuscript_id` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '论文 ID；选题未确认综述前为 0，确认后反填';
+-- ALTER TABLE `paper_output_topic_step` DROP INDEX `uk_paper_output_topic_step_run`;
+-- ALTER TABLE `paper_output_topic_step` ADD UNIQUE KEY `uk_paper_output_topic_step_run` (`user_id`, `run_version`, `stage_code`);
+-- ALTER TABLE `paper_output_topic_step` DROP COLUMN `is_current_run`;
+-- ALTER TABLE `paper_output_topic_step` DROP INDEX `idx_paper_output_topic_step_ms`;
+-- ALTER TABLE `paper_output_topic_step` ADD KEY `idx_paper_output_topic_step_ms` (`manuscript_id`, `stage_code`);
 
 SET FOREIGN_KEY_CHECKS = 1;

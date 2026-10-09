@@ -20,17 +20,12 @@ func NewPaperOutputTopicStepImpl(db *gorm.DB) repository.PaperOutputTopicStepRep
 	return &PaperOutputTopicStepImpl{db: db}
 }
 
-func (r *PaperOutputTopicStepImpl) BeginRun(ctx context.Context, manuscriptID, userID uint64, inputParams []byte) (int, error) {
+func (r *PaperOutputTopicStepImpl) BeginRun(ctx context.Context, userID uint64, inputParams []byte) (int, error) {
 	var runVersion int
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(&entity.PaperOutputTopicStep{}).
-			Where("manuscript_id = ?", manuscriptID).
-			Update("is_current_run", false).Error; err != nil {
-			return err
-		}
 		var maxVer *int
 		if err := tx.Model(&entity.PaperOutputTopicStep{}).
-			Where("manuscript_id = ?", manuscriptID).
+			Where("user_id = ?", userID).
 			Select("COALESCE(MAX(run_version), 0)").
 			Scan(&maxVer).Error; err != nil {
 			return err
@@ -43,10 +38,9 @@ func (r *PaperOutputTopicStepImpl) BeginRun(ctx context.Context, manuscriptID, u
 		now := time.Now()
 		for i, stage := range topicDiscoveryStageOrder {
 			row := entity.PaperOutputTopicStep{
-				ManuscriptID: manuscriptID,
+				ManuscriptID: 0,
 				UserID:       userID,
 				RunVersion:   next,
-				IsCurrentRun: true,
 				StageCode:    stage,
 				Status:       "pending",
 				CreatedAt:    now,
@@ -64,35 +58,36 @@ func (r *PaperOutputTopicStepImpl) BeginRun(ctx context.Context, manuscriptID, u
 	return runVersion, err
 }
 
-func (r *PaperOutputTopicStepImpl) ListByRun(ctx context.Context, manuscriptID uint64, runVersion int) ([]entity.PaperOutputTopicStep, error) {
+func (r *PaperOutputTopicStepImpl) ListByUserRun(ctx context.Context, userID uint64, runVersion int) ([]entity.PaperOutputTopicStep, error) {
 	var rows []entity.PaperOutputTopicStep
 	err := r.db.WithContext(ctx).
-		Where("manuscript_id = ? AND run_version = ?", manuscriptID, runVersion).
+		Where("user_id = ? AND run_version = ?", userID, runVersion).
 		Order("FIELD(stage_code, 'retrieve', 'generate_ideas', 'novelty', 'audit')").
 		Find(&rows).Error
 	return rows, err
 }
 
-func (r *PaperOutputTopicStepImpl) GetCurrentRun(ctx context.Context, manuscriptID uint64) (int, []entity.PaperOutputTopicStep, error) {
-	var runVersion *int
-	err := r.db.WithContext(ctx).Model(&entity.PaperOutputTopicStep{}).
-		Where("manuscript_id = ? AND is_current_run = ?", manuscriptID, true).
-		Select("MAX(run_version)").
-		Scan(&runVersion).Error
+func (r *PaperOutputTopicStepImpl) GetLatestRunByUser(ctx context.Context, userID uint64) (int, []entity.PaperOutputTopicStep, error) {
+	var probe entity.PaperOutputTopicStep
+	err := r.db.WithContext(ctx).
+		Select("run_version").
+		Where("user_id = ?", userID).
+		Order("run_version DESC, id DESC").
+		Take(&probe).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return 0, nil, nil
+	}
 	if err != nil {
 		return 0, nil, err
 	}
-	if runVersion == nil || *runVersion == 0 {
-		return 0, nil, nil
-	}
-	steps, err := r.ListByRun(ctx, manuscriptID, *runVersion)
-	return *runVersion, steps, err
+	steps, err := r.ListByUserRun(ctx, userID, probe.RunVersion)
+	return probe.RunVersion, steps, err
 }
 
-func (r *PaperOutputTopicStepImpl) GetStep(ctx context.Context, manuscriptID uint64, runVersion int, stageCode string) (*entity.PaperOutputTopicStep, error) {
+func (r *PaperOutputTopicStepImpl) GetStep(ctx context.Context, userID uint64, runVersion int, stageCode string) (*entity.PaperOutputTopicStep, error) {
 	var row entity.PaperOutputTopicStep
 	err := r.db.WithContext(ctx).
-		Where("manuscript_id = ? AND run_version = ? AND stage_code = ?", manuscriptID, runVersion, stageCode).
+		Where("user_id = ? AND run_version = ? AND stage_code = ?", userID, runVersion, stageCode).
 		First(&row).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
@@ -107,13 +102,18 @@ func (r *PaperOutputTopicStepImpl) SaveStep(ctx context.Context, step *entity.Pa
 	return r.db.WithContext(ctx).Save(step).Error
 }
 
-func (r *PaperOutputTopicStepImpl) CancelCurrentRun(ctx context.Context, manuscriptID uint64) error {
+func (r *PaperOutputTopicStepImpl) CancelRun(ctx context.Context, userID uint64, runVersion int) error {
 	now := time.Now()
 	return r.db.WithContext(ctx).Model(&entity.PaperOutputTopicStep{}).
-		Where("manuscript_id = ? AND is_current_run = ?", manuscriptID, true).
+		Where("user_id = ? AND run_version = ?", userID, runVersion).
 		Updates(map[string]any{
-			"status":         "cancelled",
-			"is_current_run": false,
-			"completed_at":   now,
+			"status":       "cancelled",
+			"completed_at": now,
 		}).Error
+}
+
+func (r *PaperOutputTopicStepImpl) BindManuscript(ctx context.Context, userID uint64, runVersion int, manuscriptID uint64) error {
+	return r.db.WithContext(ctx).Model(&entity.PaperOutputTopicStep{}).
+		Where("user_id = ? AND run_version = ?", userID, runVersion).
+		Update("manuscript_id", manuscriptID).Error
 }

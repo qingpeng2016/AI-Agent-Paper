@@ -32,7 +32,6 @@ export type PaperSelectOption = { value: string; label: string }
 const FORM_OPTIONS_TIMEOUT_MS = 8_000
 
 export type TopicDiscoveryRunRequest = {
-  manuscript_id?: number
   manuscript_title?: string
   discipline_code: string
   keywords: string[]
@@ -127,11 +126,8 @@ export async function postTopicDiscoveryRun(
   return envelope.data
 }
 
-export async function fetchCurrentTopicDiscoveryRun(
-  manuscriptId: number,
-): Promise<TopicDiscoveryRunResponse | null> {
-  const q = new URLSearchParams({ manuscript_id: String(manuscriptId) })
-  const res = await fetch(`/api/v1/paper/topic-discovery/run/current?${q}`, {
+export async function fetchCurrentTopicDiscoveryRun(): Promise<TopicDiscoveryRunResponse | null> {
+  const res = await fetch('/api/v1/paper/topic-discovery/run/current', {
     credentials: 'include',
   })
   if (!res.ok) {
@@ -144,12 +140,27 @@ export async function fetchCurrentTopicDiscoveryRun(
   return envelope.data ?? null
 }
 
-export async function cancelTopicDiscoveryRun(manuscriptId: number): Promise<void> {
-  const res = await fetch('/api/v1/paper/topic-discovery/run/cancel', {
+export async function commitTopicDiscoveryManuscript(title?: string): Promise<TopicDiscoveryRunResponse> {
+  const res = await fetch('/api/v1/paper/topic-discovery/commit-manuscript', {
     method: 'POST',
     credentials: 'include',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ manuscript_id: manuscriptId }),
+    body: JSON.stringify({ manuscript_title: title ?? '' }),
+  })
+  if (!res.ok) {
+    throw new Error(`topic-discovery commit http ${res.status}`)
+  }
+  const envelope = (await res.json()) as ApiEnvelope<TopicDiscoveryRunResponse>
+  if (envelope.code !== 200 || !envelope.data) {
+    throw new Error(envelope.message ?? 'topic-discovery commit failed')
+  }
+  return envelope.data
+}
+
+export async function cancelTopicDiscoveryRun(): Promise<void> {
+  const res = await fetch('/api/v1/paper/topic-discovery/run/cancel', {
+    method: 'POST',
+    credentials: 'include',
   })
   if (!res.ok) {
     throw new Error(`topic-discovery cancel http ${res.status}`)

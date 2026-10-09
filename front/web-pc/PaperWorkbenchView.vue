@@ -6,6 +6,7 @@ import {
   postTopicDiscoveryRun,
   fetchCurrentTopicDiscoveryRun,
   cancelTopicDiscoveryRun,
+  commitTopicDiscoveryManuscript,
   parseRetrieveLiteratureLinks,
   type TopicDiscoveryRunResponse,
   type TopicDiscoveryStepDTO,
@@ -123,28 +124,8 @@ function buildDemoExperimentPlanLines(): string[] {
 
 const MANUSCRIPTS_STORAGE_KEY = 'atm:paper:manuscripts:v1'
 const LEGACY_PROJECTS_STORAGE_KEY = 'atm:paper:projects:v1'
-const MANUSCRIPT_BACKEND_ID_KEY = 'atm:paper:manuscript-backend-id:v1'
 
-const manuscriptBackendIds = ref<Record<string, number>>({})
 const topicLastRunByMs = ref<Record<string, TopicDiscoveryRunResponse>>({})
-
-function loadManuscriptBackendIdMap() {
-  try {
-    const raw = localStorage.getItem(MANUSCRIPT_BACKEND_ID_KEY)
-    if (!raw) return
-    const parsed = JSON.parse(raw) as Record<string, number>
-    if (parsed && typeof parsed === 'object') manuscriptBackendIds.value = parsed
-  } catch {
-    /* ignore */
-  }
-}
-
-function persistManuscriptBackendId(clientMsId: string, backendId: number) {
-  manuscriptBackendIds.value = { ...manuscriptBackendIds.value, [clientMsId]: backendId }
-  localStorage.setItem(MANUSCRIPT_BACKEND_ID_KEY, JSON.stringify(manuscriptBackendIds.value))
-}
-
-loadManuscriptBackendIdMap()
 
 const activeModule = ref<PaperModuleId>('topic-discovery')
 
@@ -345,6 +326,12 @@ const isUtilityModule = computed(
     isPersonalCenterModule.value,
 )
 const isTopicDiscoveryModule = computed(() => activeModule.value === 'topic-discovery')
+
+watch(isTopicDiscoveryModule, (on) => {
+  if (!on) return
+  const msId = activeManuscriptId.value
+  if (msId) void hydrateTopicRunFromServer(msId)
+})
 const isLiteratureReviewModule = computed(() => activeModule.value === 'literature-review')
 
 const personalCenterPanelRef = ref<InstanceType<typeof PaperPersonalCenterPanel> | null>(null)
@@ -583,10 +570,8 @@ const TOPIC_RUN_POLL_MS = 1500
 function startTopicRunProgressPoll(msId: string, token: number): () => void {
   const tick = async () => {
     if (token !== topicRunToken.value) return
-    const backendId = manuscriptBackendIds.value[msId]
-    if (!backendId) return
     try {
-      const data = await fetchCurrentTopicDiscoveryRun(backendId)
+      const data = await fetchCurrentTopicDiscoveryRun()
       if (!data || token !== topicRunToken.value) return
       topicLastRunByMs.value = { ...topicLastRunByMs.value, [msId]: data }
       persistTopicRun(msId, topicRunFromApi(data))
@@ -702,10 +687,7 @@ function topicRunFromApi(data: TopicDiscoveryRunResponse): TopicRunDemo {
 }
 
 function buildTopicRunRequest(action: 'start' | 'continue') {
-  const msId = activeManuscriptId.value
-  const backendId = msId ? manuscriptBackendIds.value[msId] : undefined
   return {
-    manuscript_id: backendId ?? 0,
     manuscript_title: currentManuscript.value?.title ?? '',
     discipline_code: topicForm.disciplineCode,
     keywords: parseTopicKeywords(topicForm.keywords),
@@ -720,10 +702,8 @@ function buildTopicRunRequest(action: 'start' | 'continue') {
 }
 
 async function hydrateTopicRunFromServer(msId: string) {
-  const backendId = manuscriptBackendIds.value[msId]
-  if (!backendId) return
   try {
-    const data = await fetchCurrentTopicDiscoveryRun(backendId)
+    const data = await fetchCurrentTopicDiscoveryRun()
     if (!data) {
       const next = { ...topicLastRunByMs.value }
       delete next[msId]
@@ -758,7 +738,6 @@ async function invokeTopicDiscoveryRun(action: 'start' | 'continue', token: numb
   }
   if (token !== topicRunToken.value) return
 
-  persistManuscriptBackendId(msId, data.manuscript_id)
   topicLastRunByMs.value = { ...topicLastRunByMs.value, [msId]: data }
   const run = topicRunFromApi(data)
   persistTopicRun(msId, run)
@@ -875,6 +854,9 @@ async function runLiteratureReviewFromTopic() {
   selectModule('literature-review')
   running.value = true
   try {
+    const committed = await commitTopicDiscoveryManuscript(currentManuscript.value?.title)
+    topicLastRunByMs.value = { ...topicLastRunByMs.value, [msId]: committed }
+    persistTopicRun(msId, topicRunFromApi(committed))
     await nextTick()
     const ok = await workflowPanelsRef.value?.runModule('literature-review')
     if (ok) {
@@ -942,10 +924,7 @@ function continueTopicAfterCheckpoint() {
 async function abandonCurrentTopicRun(msId: string) {
   topicRunToken.value += 1
   running.value = false
-  const backendId = manuscriptBackendIds.value[msId]
-  if (backendId) {
-    await cancelTopicDiscoveryRun(backendId)
-  }
+  await cancelTopicDiscoveryRun()
   const next = { ...topicLastRunByMs.value }
   delete next[msId]
   topicLastRunByMs.value = next
@@ -957,9 +936,9 @@ async function rejectTopicCheckpoint() {
   if (!msId) return
   try {
     await abandonCurrentTopicRun(msId)
-    ElMessage.info('已驳回，可修改后重新运行')
+    ElMessage.info('已终止本轮')
   } catch (e) {
-    const msg = e instanceof Error ? e.message : '驳回失败'
+    const msg = e instanceof Error ? e.message : '终止失败'
     ElMessage.error(msg)
   }
 }
@@ -1337,14 +1316,14 @@ async function onPrimaryAction() {
             <li v-for="(line, i) in currentTopicRun.checkpoint.lines" :key="i">{{ line }}</li>
           </ul>
           <p class="paper-checkpoint-note">
-            确认后继续下一步；驳回并重填会取消本轮进度，刷新后不会再加载。
+            确认后继续下一步；终止会取消本轮进度，刷新后不会再加载。
           </p>
           <div class="paper-checkpoint-actions">
+            <button type="button" class="paper-btn-secondary" @click="rejectTopicCheckpoint">
+              终止并返回
+            </button>
             <button type="button" class="paper-btn-primary" @click="continueTopicAfterCheckpoint">
               确认并继续
-            </button>
-            <button type="button" class="paper-btn-secondary" @click="rejectTopicCheckpoint">
-              驳回并重填
             </button>
           </div>
         </div>

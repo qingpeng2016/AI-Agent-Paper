@@ -83,28 +83,33 @@ func NewTopicDiscoveryRunService(
 	}
 }
 
-func (s *TopicDiscoveryRunService) GetCurrentRun(ctx context.Context, userID uint, manuscriptID uint64) (*response.TopicDiscoveryRunView, error) {
-	if err := s.assertManuscript(ctx, userID, manuscriptID); err != nil {
-		return nil, err
-	}
-	runVersion, stepRows, err := s.steps.GetCurrentRun(ctx, manuscriptID)
+func (s *TopicDiscoveryRunService) GetCurrentRun(ctx context.Context, userID uint) (*response.TopicDiscoveryRunView, error) {
+	runVersion, stepRows, err := s.steps.GetLatestRunByUser(ctx, uint64(userID))
 	if err != nil {
 		return nil, err
 	}
-	if runVersion == 0 || len(stepRows) == 0 {
+	if runVersion == 0 || len(stepRows) == 0 || currentRunCancelled(stepRows) {
 		return nil, nil
 	}
-	if currentRunCancelled(stepRows) {
-		return nil, nil
-	}
-	return s.buildRunView(manuscriptID, runVersion, stepRows), nil
+	return s.buildRunView(manuscriptIDOf(stepRows), runVersion, stepRows), nil
 }
 
-func (s *TopicDiscoveryRunService) CancelCurrentRun(ctx context.Context, userID uint, manuscriptID uint64) error {
-	if err := s.assertManuscript(ctx, userID, manuscriptID); err != nil {
+func (s *TopicDiscoveryRunService) CancelCurrentRun(ctx context.Context, userID uint) error {
+	runVersion, stepRows, err := s.steps.GetLatestRunByUser(ctx, uint64(userID))
+	if err != nil {
 		return err
 	}
-	return s.steps.CancelCurrentRun(ctx, manuscriptID)
+	if runVersion == 0 || len(stepRows) == 0 || currentRunCancelled(stepRows) {
+		return nil
+	}
+	return s.steps.CancelRun(ctx, uint64(userID), runVersion)
+}
+
+func manuscriptIDOf(rows []entity.PaperOutputTopicStep) uint64 {
+	if len(rows) == 0 {
+		return 0
+	}
+	return rows[0].ManuscriptID
 }
 
 func currentRunCancelled(rows []entity.PaperOutputTopicStep) bool {
@@ -120,7 +125,7 @@ func currentRunCancelled(rows []entity.PaperOutputTopicStep) bool {
 }
 
 func (s *TopicDiscoveryRunService) Run(ctx context.Context, userID uint, req request.TopicDiscoveryRunRequest) (*response.TopicDiscoveryRunView, error) {
-	msID, input, err := s.prepareRun(ctx, userID, req)
+	input, err := s.prepareRun(ctx, userID, req)
 	if err != nil {
 		return nil, err
 	}
@@ -133,57 +138,61 @@ func (s *TopicDiscoveryRunService) Run(ctx context.Context, userID uint, req req
 	switch action {
 	case "start":
 		paramsBytes, _ := json.Marshal(input)
-		runVersion, err = s.steps.BeginRun(ctx, msID, uint64(userID), paramsBytes)
+		runVersion, err = s.steps.BeginRun(ctx, uint64(userID), paramsBytes)
 		if err != nil {
 			return nil, err
 		}
-		if err := s.executeFromStage(ctx, msID, runVersion, input, 0); err != nil {
+		if err := s.executeFromStage(ctx, userID, runVersion, input, 0); err != nil {
 			return nil, err
 		}
 	case "continue":
-		runVersion, _, err = s.steps.GetCurrentRun(ctx, msID)
-		if err != nil || runVersion == 0 {
-			return nil, errorx.ErrTopicRunNotFound
-		}
-		input, err = s.loadRunInput(ctx, msID, runVersion)
+		ver, rows, err := s.steps.GetLatestRunByUser(ctx, uint64(userID))
 		if err != nil {
 			return nil, err
 		}
-		idx := s.nextPendingIndex(ctx, msID, runVersion)
-		if idx < 0 {
-			return s.reloadView(ctx, msID, runVersion)
+		if ver == 0 || currentRunCancelled(rows) {
+			return nil, errorx.ErrTopicRunNotFound
 		}
-		if err := s.executeFromStage(ctx, msID, runVersion, input, idx); err != nil {
+		runVersion = ver
+		input, err = s.loadRunInput(ctx, userID, runVersion)
+		if err != nil {
+			return nil, err
+		}
+		idx := s.nextPendingIndex(ctx, userID, runVersion)
+		if idx < 0 {
+			return s.reloadView(ctx, userID, runVersion)
+		}
+		if err := s.executeFromStage(ctx, userID, runVersion, input, idx); err != nil {
 			return nil, err
 		}
 	case "run_all":
-		runVersion, stepRows, err := s.steps.GetCurrentRun(ctx, msID)
+		ver, rows, err := s.steps.GetLatestRunByUser(ctx, uint64(userID))
 		if err != nil {
 			return nil, err
 		}
-		if runVersion == 0 {
+		if ver == 0 || currentRunCancelled(rows) {
 			paramsBytes, _ := json.Marshal(input)
-			runVersion, err = s.steps.BeginRun(ctx, msID, uint64(userID), paramsBytes)
+			runVersion, err = s.steps.BeginRun(ctx, uint64(userID), paramsBytes)
 			if err != nil {
 				return nil, err
 			}
 		} else {
-			input, err = s.loadRunInput(ctx, msID, runVersion)
+			runVersion = ver
+			input, err = s.loadRunInput(ctx, userID, runVersion)
 			if err != nil {
 				return nil, err
 			}
-			_ = stepRows
 		}
 		for {
-			idx := s.nextPendingIndex(ctx, msID, runVersion)
+			idx := s.nextPendingIndex(ctx, userID, runVersion)
 			if idx < 0 {
 				break
 			}
-			if err := s.executeStage(ctx, msID, runVersion, input, topicDiscoveryStages[idx]); err != nil {
+			if err := s.executeStage(ctx, userID, runVersion, input, topicDiscoveryStages[idx]); err != nil {
 				return nil, err
 			}
 			if input.HumanCheckpoint {
-				view, err := s.reloadView(ctx, msID, runVersion)
+				view, err := s.reloadView(ctx, userID, runVersion)
 				if err != nil {
 					return nil, err
 				}
@@ -196,7 +205,7 @@ func (s *TopicDiscoveryRunService) Run(ctx context.Context, userID uint, req req
 		return nil, errorx.ErrParamsError
 	}
 
-	return s.reloadView(ctx, msID, runVersion)
+	return s.reloadView(ctx, userID, runVersion)
 }
 
 func (s *TopicDiscoveryRunService) defaultExecutionIntensityCode(ctx context.Context) string {
@@ -229,13 +238,13 @@ func (s *TopicDiscoveryRunService) defaultAuditLevelCode(ctx context.Context) st
 	return "polished"
 }
 
-func (s *TopicDiscoveryRunService) prepareRun(ctx context.Context, userID uint, req request.TopicDiscoveryRunRequest) (uint64, topicRunInput, error) {
+func (s *TopicDiscoveryRunService) prepareRun(ctx context.Context, userID uint, req request.TopicDiscoveryRunRequest) (topicRunInput, error) {
 	keywords, description, direction, ok := normalizeTopicDiscoveryInput(req)
 	if !ok {
-		return 0, topicRunInput{}, errorx.ErrParamsError
+		return topicRunInput{}, errorx.ErrParamsError
 	}
 	if len(req.SourceCodes) == 0 {
-		return 0, topicRunInput{}, errorx.ErrParamsError
+		return topicRunInput{}, errorx.ErrParamsError
 	}
 	intensityCode := strings.TrimSpace(req.Intensity)
 	if intensityCode == "" {
@@ -247,16 +256,11 @@ func (s *TopicDiscoveryRunService) prepareRun(ctx context.Context, userID uint, 
 	}
 	intensity, err := s.catalog.FindExecutionIntensityByCode(ctx, intensityCode)
 	if err != nil || intensity == nil {
-		return 0, topicRunInput{}, errorx.ErrParamsError
+		return topicRunInput{}, errorx.ErrParamsError
 	}
 	audit, err := s.catalog.FindAuditLevelByCode(ctx, auditCode)
 	if err != nil || audit == nil {
-		return 0, topicRunInput{}, errorx.ErrParamsError
-	}
-
-	msID, err := s.ensureManuscript(ctx, userID, req.ManuscriptID, req.ManuscriptTitle, direction)
-	if err != nil {
-		return 0, topicRunInput{}, err
+		return topicRunInput{}, errorx.ErrParamsError
 	}
 
 	input := topicRunInput{
@@ -273,47 +277,52 @@ func (s *TopicDiscoveryRunService) prepareRun(ctx context.Context, userID uint, 
 		MaxIdeas:        int(intensity.MaxIdeas),
 		AuditRounds:     int(audit.AuditRounds),
 	}
-	return msID, input, nil
+	return input, nil
 }
 
-func (s *TopicDiscoveryRunService) ensureManuscript(ctx context.Context, userID uint, manuscriptID uint64, title, direction string) (uint64, error) {
-	if manuscriptID > 0 {
-		ms, err := s.manuscripts.GetByIDForUser(ctx, uint(manuscriptID), userID)
-		if err != nil {
-			return 0, err
+func (s *TopicDiscoveryRunService) CommitManuscript(ctx context.Context, userID uint, title string) (*response.TopicDiscoveryRunView, error) {
+	runVersion, rows, err := s.steps.GetLatestRunByUser(ctx, uint64(userID))
+	if err != nil {
+		return nil, err
+	}
+	if runVersion == 0 || len(rows) == 0 || currentRunCancelled(rows) {
+		return nil, errorx.ErrTopicRunNotFound
+	}
+	for _, r := range rows {
+		if r.Status != "completed" {
+			return nil, errorx.ErrTopicRunNotComplete
 		}
-		if ms == nil {
-			return 0, errorx.ErrManuscriptNotFound
-		}
-		return uint64(ms.ID), nil
+	}
+	if id := manuscriptIDOf(rows); id > 0 {
+		return s.buildRunView(id, runVersion, rows), nil
 	}
 	t := strings.TrimSpace(title)
 	if t == "" {
-		t = direction
-		if len([]rune(t)) > 120 {
-			t = string([]rune(t)[:120])
+		if in, e := s.loadRunInput(ctx, userID, runVersion); e == nil {
+			t = strings.TrimSpace(in.Description)
+			if t == "" {
+				t = strings.TrimSpace(in.Direction)
+			}
 		}
+	}
+	if t == "" {
+		t = "未命名论文"
+	}
+	if len([]rune(t)) > 120 {
+		t = string([]rune(t)[:120])
 	}
 	ms, err := s.manuscripts.Create(ctx, userID, t)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return uint64(ms.ID), nil
+	if err := s.steps.BindManuscript(ctx, uint64(userID), runVersion, uint64(ms.ID)); err != nil {
+		return nil, err
+	}
+	return s.reloadView(ctx, userID, runVersion)
 }
 
-func (s *TopicDiscoveryRunService) assertManuscript(ctx context.Context, userID uint, manuscriptID uint64) error {
-	ms, err := s.manuscripts.GetByIDForUser(ctx, uint(manuscriptID), userID)
-	if err != nil {
-		return err
-	}
-	if ms == nil {
-		return errorx.ErrManuscriptNotFound
-	}
-	return nil
-}
-
-func (s *TopicDiscoveryRunService) loadRunInput(ctx context.Context, manuscriptID uint64, runVersion int) (topicRunInput, error) {
-	step, err := s.steps.GetStep(ctx, manuscriptID, runVersion, "retrieve")
+func (s *TopicDiscoveryRunService) loadRunInput(ctx context.Context, userID uint, runVersion int) (topicRunInput, error) {
+	step, err := s.steps.GetStep(ctx, uint64(userID), runVersion, "retrieve")
 	if err != nil || step == nil || len(step.InputParams) == 0 {
 		return topicRunInput{}, errorx.ErrTopicRunNotFound
 	}
@@ -324,9 +333,9 @@ func (s *TopicDiscoveryRunService) loadRunInput(ctx context.Context, manuscriptI
 	return input, nil
 }
 
-func (s *TopicDiscoveryRunService) nextPendingIndex(ctx context.Context, manuscriptID uint64, runVersion int) int {
+func (s *TopicDiscoveryRunService) nextPendingIndex(ctx context.Context, userID uint, runVersion int) int {
 	for i, stage := range topicDiscoveryStages {
-		step, err := s.steps.GetStep(ctx, manuscriptID, runVersion, stage)
+		step, err := s.steps.GetStep(ctx, uint64(userID), runVersion, stage)
 		if err != nil || step == nil {
 			continue
 		}
@@ -337,9 +346,9 @@ func (s *TopicDiscoveryRunService) nextPendingIndex(ctx context.Context, manuscr
 	return -1
 }
 
-func (s *TopicDiscoveryRunService) executeFromStage(ctx context.Context, manuscriptID uint64, runVersion int, input topicRunInput, fromIndex int) error {
+func (s *TopicDiscoveryRunService) executeFromStage(ctx context.Context, userID uint, runVersion int, input topicRunInput, fromIndex int) error {
 	for i := fromIndex; i < len(topicDiscoveryStages); i++ {
-		if err := s.executeStage(ctx, manuscriptID, runVersion, input, topicDiscoveryStages[i]); err != nil {
+		if err := s.executeStage(ctx, userID, runVersion, input, topicDiscoveryStages[i]); err != nil {
 			return err
 		}
 		if input.HumanCheckpoint {
@@ -349,8 +358,8 @@ func (s *TopicDiscoveryRunService) executeFromStage(ctx context.Context, manuscr
 	return nil
 }
 
-func (s *TopicDiscoveryRunService) executeStage(ctx context.Context, manuscriptID uint64, runVersion int, input topicRunInput, stageCode string) error {
-	step, err := s.steps.GetStep(ctx, manuscriptID, runVersion, stageCode)
+func (s *TopicDiscoveryRunService) executeStage(ctx context.Context, userID uint, runVersion int, input topicRunInput, stageCode string) error {
+	step, err := s.steps.GetStep(ctx, uint64(userID), runVersion, stageCode)
 	if err != nil || step == nil {
 		return errorx.ErrTopicStepInvalid
 	}
@@ -369,11 +378,11 @@ func (s *TopicDiscoveryRunService) executeStage(ctx context.Context, manuscriptI
 	case "retrieve":
 		execErr = s.stageRetrieve(ctx, step, input)
 	case "generate_ideas":
-		execErr = s.stageGenerateIdeas(ctx, manuscriptID, runVersion, step, input)
+		execErr = s.stageGenerateIdeas(ctx, userID, runVersion, step, input)
 	case "novelty":
-		execErr = s.stageNovelty(ctx, manuscriptID, runVersion, step, input)
+		execErr = s.stageNovelty(ctx, userID, runVersion, step, input)
 	case "audit":
-		execErr = s.stageAudit(ctx, manuscriptID, runVersion, step, input)
+		execErr = s.stageAudit(ctx, userID, runVersion, step, input)
 	default:
 		execErr = errorx.ErrTopicStepInvalid
 	}
@@ -512,8 +521,8 @@ func (s *TopicDiscoveryRunService) stageRetrieve(ctx context.Context, step *enti
 	return nil
 }
 
-func (s *TopicDiscoveryRunService) stageGenerateIdeas(ctx context.Context, manuscriptID uint64, runVersion int, step *entity.PaperOutputTopicStep, input topicRunInput) error {
-	ctxBlock, _ := s.stageContext(ctx, manuscriptID, runVersion)
+func (s *TopicDiscoveryRunService) stageGenerateIdeas(ctx context.Context, userID uint, runVersion int, step *entity.PaperOutputTopicStep, input topicRunInput) error {
+	ctxBlock, _ := s.stageContext(ctx, userID, runVersion)
 	userMsg := fmt.Sprintf(`Research direction: %s
 Target venue: %s
 Max ideas: %d
@@ -538,8 +547,8 @@ Use Chinese for text fields.`, input.Direction, input.Venue, input.MaxIdeas, ctx
 	return nil
 }
 
-func (s *TopicDiscoveryRunService) stageNovelty(ctx context.Context, manuscriptID uint64, runVersion int, step *entity.PaperOutputTopicStep, input topicRunInput) error {
-	ctxBlock, _ := s.stageContext(ctx, manuscriptID, runVersion)
+func (s *TopicDiscoveryRunService) stageNovelty(ctx context.Context, userID uint, runVersion int, step *entity.PaperOutputTopicStep, input topicRunInput) error {
+	ctxBlock, _ := s.stageContext(ctx, userID, runVersion)
 	userMsg := fmt.Sprintf(`Perform novelty analysis for direction: %s
 
 Prior steps:
@@ -559,8 +568,8 @@ Use Chinese.`, input.Direction, ctxBlock)
 	return nil
 }
 
-func (s *TopicDiscoveryRunService) stageAudit(ctx context.Context, manuscriptID uint64, runVersion int, step *entity.PaperOutputTopicStep, input topicRunInput) error {
-	ctxBlock, _ := s.stageContext(ctx, manuscriptID, runVersion)
+func (s *TopicDiscoveryRunService) stageAudit(ctx context.Context, userID uint, runVersion int, step *entity.PaperOutputTopicStep, input topicRunInput) error {
+	ctxBlock, _ := s.stageContext(ctx, userID, runVersion)
 	rounds := input.AuditRounds
 	if rounds < 1 {
 		rounds = 1
@@ -597,13 +606,13 @@ Use Chinese.`, r, rounds, input.Venue, input.AuditLevel, ctxBlock)
 	return nil
 }
 
-func (s *TopicDiscoveryRunService) stageContext(ctx context.Context, manuscriptID uint64, runVersion int) (string, error) {
+func (s *TopicDiscoveryRunService) stageContext(ctx context.Context, userID uint, runVersion int) (string, error) {
 	var parts []string
 	for _, stage := range topicDiscoveryStages {
 		if stage == "audit" {
 			continue
 		}
-		st, err := s.steps.GetStep(ctx, manuscriptID, runVersion, stage)
+		st, err := s.steps.GetStep(ctx, uint64(userID), runVersion, stage)
 		if err != nil || st == nil || len(st.Result) == 0 {
 			continue
 		}
@@ -658,12 +667,12 @@ func (s *TopicDiscoveryRunService) resolveStageLLM(ctx context.Context, stageCod
 	return model, system, userTmpl, nil
 }
 
-func (s *TopicDiscoveryRunService) reloadView(ctx context.Context, manuscriptID uint64, runVersion int) (*response.TopicDiscoveryRunView, error) {
-	rows, err := s.steps.ListByRun(ctx, manuscriptID, runVersion)
+func (s *TopicDiscoveryRunService) reloadView(ctx context.Context, userID uint, runVersion int) (*response.TopicDiscoveryRunView, error) {
+	rows, err := s.steps.ListByUserRun(ctx, uint64(userID), runVersion)
 	if err != nil {
 		return nil, err
 	}
-	return s.buildRunView(manuscriptID, runVersion, rows), nil
+	return s.buildRunView(manuscriptIDOf(rows), runVersion, rows), nil
 }
 
 func (s *TopicDiscoveryRunService) buildRunView(manuscriptID uint64, runVersion int, rows []entity.PaperOutputTopicStep) *response.TopicDiscoveryRunView {

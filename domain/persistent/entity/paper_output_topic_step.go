@@ -11,7 +11,6 @@ type PaperOutputTopicStep struct {
 	ManuscriptID  uint64         `gorm:"column:manuscript_id;not null"`
 	UserID        uint64         `gorm:"column:user_id;not null"`
 	RunVersion    int            `gorm:"column:run_version;not null;default:1"`
-	IsCurrentRun  bool           `gorm:"column:is_current_run;not null;default:1"`
 	StageCode     string         `gorm:"column:stage_code;size:32;not null"`
 	Status        string         `gorm:"column:status;size:16;not null;default:pending"`
 	Result        datatypes.JSON `gorm:"column:result"`

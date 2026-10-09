@@ -51,19 +51,14 @@ func (h *PaperTopicDiscoveryHandler) PostRun(c *gin.Context) {
 	response.ResponseSuccess(c, data)
 }
 
-// GetCurrentRun GET /api/v1/paper/topic-discovery/run/current?manuscript_id=
+// GetCurrentRun GET /api/v1/paper/topic-discovery/run/current
 func (h *PaperTopicDiscoveryHandler) GetCurrentRun(c *gin.Context) {
 	userID, ok := middleware.UserIDFromContext(c)
 	if !ok {
 		response.ResponseErr(c, errorx.ErrParamsError)
 		return
 	}
-	var q request.TopicDiscoveryRunQuery
-	if err := c.ShouldBindQuery(&q); err != nil {
-		response.ResponseErr(c, errorx.ErrParamsError)
-		return
-	}
-	data, err := h.run.GetCurrentRun(c.Request.Context(), userID, q.ManuscriptID)
+	data, err := h.run.GetCurrentRun(c.Request.Context(), userID)
 	if err != nil {
 		response.ResponseErr(c, err)
 		return
@@ -78,14 +73,26 @@ func (h *PaperTopicDiscoveryHandler) PostCancelRun(c *gin.Context) {
 		response.ResponseErr(c, errorx.ErrParamsError)
 		return
 	}
-	var req request.TopicDiscoveryCancelRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		response.ResponseErr(c, errorx.ErrParamsError)
-		return
-	}
-	if err := h.run.CancelCurrentRun(c.Request.Context(), userID, req.ManuscriptID); err != nil {
+	if err := h.run.CancelCurrentRun(c.Request.Context(), userID); err != nil {
 		response.ResponseErr(c, err)
 		return
 	}
 	response.ResponseSuccess(c, nil)
+}
+
+// PostCommitManuscript POST /api/v1/paper/topic-discovery/commit-manuscript
+func (h *PaperTopicDiscoveryHandler) PostCommitManuscript(c *gin.Context) {
+	userID, ok := middleware.UserIDFromContext(c)
+	if !ok {
+		response.ResponseErr(c, errorx.ErrParamsError)
+		return
+	}
+	var req request.TopicDiscoveryCommitManuscriptRequest
+	_ = c.ShouldBindJSON(&req)
+	data, err := h.run.CommitManuscript(c.Request.Context(), userID, req.ManuscriptTitle)
+	if err != nil {
+		response.ResponseErr(c, err)
+		return
+	}
+	response.ResponseSuccess(c, data)
 }
