@@ -759,7 +759,7 @@ defineExpose({ runModule, reloadLiteratureReviews, reloadExperimentPlans })
                     aria-hidden="true"
                     class="paper-btn-primary paper-btn--compact wf-lit-width-ruler"
                   >
-                    查看文献综述
+                    上传实验数据
                   </button>
                   <span class="wf-lit-col-head-label">操作</span>
                 </span>
@@ -777,7 +777,7 @@ defineExpose({ runModule, reloadLiteratureReviews, reloadExperimentPlans })
                   aria-hidden="true"
                   class="paper-btn-primary paper-btn--compact wf-lit-width-ruler"
                 >
-                  上传实验数据
+                  查看文献综述
                 </button>
               </div>
             </th>
@@ -794,6 +794,13 @@ defineExpose({ runModule, reloadLiteratureReviews, reloadExperimentPlans })
                 <button
                   type="button"
                   class="paper-btn-primary paper-btn--compact"
+                  @click="openExpPlanUploadDialog(item)"
+                >
+                  上传实验数据
+                </button>
+                <button
+                  type="button"
+                  class="paper-btn-primary paper-btn--compact"
                   @click="openExpPlanView(item)"
                 >
                   查看实验方案
@@ -805,13 +812,6 @@ defineExpose({ runModule, reloadLiteratureReviews, reloadExperimentPlans })
                   @click="openLinkedLiteratureReviewFromExpPlan(item)"
                 >
                   查看文献综述
-                </button>
-                <button
-                  type="button"
-                  class="paper-btn-primary paper-btn--compact"
-                  @click="openExpPlanUploadDialog(item)"
-                >
-                  上传实验数据
                 </button>
               </div>
             </td>
