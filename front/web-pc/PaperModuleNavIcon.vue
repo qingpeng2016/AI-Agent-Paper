@@ -31,11 +31,6 @@ defineProps<{
       <path d="M10 3v6l-5 9a2 2 0 0 0 1.7 3h10.6a2 2 0 0 0 1.7-3l-5-9V3" />
       <path d="M8 3h8" />
     </template>
-    <!-- 实验数据：盾牌 -->
-    <template v-else-if="moduleId === 'auto-review'">
-      <path d="M12 3 19 6v6c0 4-3 7-7 9-4-2-7-5-7-9V6l7-3z" />
-      <path d="m9 12 2 2 4-4" />
-    </template>
     <!-- 论文写作：文档 -->
     <template v-else-if="moduleId === 'paper-writing'">
       <path d="M14 3H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8l-4-5z" />

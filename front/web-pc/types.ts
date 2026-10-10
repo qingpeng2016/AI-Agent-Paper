@@ -2,7 +2,6 @@ export type PaperModuleId =
   | 'topic-discovery'
   | 'literature-review'
   | 'experiment-planning'
-  | 'auto-review'
   | 'paper-writing'
   | 'figure-generation'
   | 'manuscript-analysis'
@@ -33,11 +32,6 @@ export const PAPER_MODULES: PaperModuleMeta[] = [
     id: 'experiment-planning',
     label: '实验方案',
     description: '设计假设、基线、指标与可执行实验步骤',
-  },
-  {
-    id: 'auto-review',
-    label: '实验数据',
-    description: '上传与管理实验数据，并与实验方案对齐（写作前证据链）',
   },
   {
     id: 'paper-writing',
@@ -93,7 +87,6 @@ export const PAPER_MODULE_GROUPS: PaperModuleGroup[] = [
       'topic-discovery',
       'literature-review',
       'experiment-planning',
-      'auto-review',
     ],
   },
   {
@@ -433,13 +426,6 @@ export type ExperimentPlanningForm = {
   intensity: ExecutionIntensity
 }
 
-export type AutoReviewForm = {
-  reviewFocus: 'plan' | 'data' | 'both'
-  dataFileLabel: string
-  strictKill: boolean
-  auditLevel: AuditLevel
-}
-
 export type PaperWritingForm = {
   venue: string
   sections: string[]
@@ -477,13 +463,6 @@ export const DEFAULT_EXPERIMENT_PLANNING: ExperimentPlanningForm = {
   baselinesText: 'Full Attention, StreamingLLM, H2O, SparseAttn',
   resources: '8×A100 80GB · 约 4 周',
   intensity: 'balanced',
-}
-
-export const DEFAULT_AUTO_REVIEW: AutoReviewForm = {
-  reviewFocus: 'both',
-  dataFileLabel: 'results_main.csv（已上传 · 演示）',
-  strictKill: true,
-  auditLevel: 'strict',
 }
 
 export const DEFAULT_PAPER_WRITING: PaperWritingForm = {

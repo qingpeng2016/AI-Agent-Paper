@@ -46,18 +46,6 @@ export const DEMO_EXPERIMENT_PLAN = {
   ],
 }
 
-export const DEMO_AUTO_REVIEW = {
-  target: '实验方案 + 上传数据 results_main.csv',
-  scores: { rigor: 6.5, completeness: 5.5, claimSupport: 6.0 },
-  findings: [
-    { level: 'major', text: '缺少 StreamingLLM 对照（plan 中列出但 CSV 无对应列）' },
-    { level: 'major', text: '主结果仅 1 seed，无 stderr；与 NeurIPS 实验门槛不一致' },
-    { level: 'minor', text: 'Passkey 提升 2.1% 但摘要写 5%（与表 2 不一致）' },
-  ],
-  kill:
-    '若审稿人认为 routing 开销抵消吞吐收益，需提供端到端 latency 分解；当前数据不足以反驳。',
-}
-
 export const DEMO_MANUSCRIPT = {
   title: 'Budget-Aware Training-Free Sparse Attention for Long Context',
   sections: [

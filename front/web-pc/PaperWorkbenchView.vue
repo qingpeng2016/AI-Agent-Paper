@@ -643,7 +643,6 @@ function onEnvironmentSaved() {
 const SECONDARY_WORKFLOW_MODULES = [
   'literature-review',
   'experiment-planning',
-  'auto-review',
   'paper-writing',
   'manuscript-analysis',
   'figure-generation',

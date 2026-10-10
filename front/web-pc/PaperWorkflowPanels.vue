@@ -15,12 +15,10 @@ import {
   fetchExperimentPlanDetail,
   fetchExperimentPlans,
   formatExperimentPlanStatus,
-  deleteExperimentPlanData,
   uploadExperimentPlanData,
   type PaperExperimentPlanItem,
 } from '@/api/experimentPlans'
 import {
-  DEMO_AUTO_REVIEW,
   DEMO_FIGURES,
   DEMO_MANUSCRIPT,
   DEMO_MANUSCRIPT_ANALYSIS,
@@ -28,13 +26,11 @@ import {
 import PaperFigureUploadPanel from './PaperFigureUploadPanel.vue'
 import PaperSelect from './PaperSelect.vue'
 import {
-  DEFAULT_AUTO_REVIEW,
   DEFAULT_FIGURE_GENERATION,
   DEFAULT_MANUSCRIPT_ANALYSIS,
   DEFAULT_PAPER_WRITING,
   FIGURE_CHART_OPTIONS,
   PAPER_WRITING_SECTION_OPTIONS,
-  type AutoReviewForm,
   type FigureGenerationForm,
   type ManuscriptAnalysisForm,
   type PaperModuleId,
@@ -65,7 +61,6 @@ const props = withDefaults(
 )
 const { moduleId, manuscriptId, manuscriptTitle } = toRefs(props)
 
-const reviewForm = reactive<AutoReviewForm>({ ...DEFAULT_AUTO_REVIEW })
 const writeForm = reactive<PaperWritingForm>({
   ...DEFAULT_PAPER_WRITING,
   sections: [...DEFAULT_PAPER_WRITING.sections],
@@ -93,9 +88,8 @@ const expPlanViewItem = ref<PaperExperimentPlanItem | null>(null)
 const expPlanLitReviewLoading = ref(false)
 const expPlanUploadPending = ref<PaperExperimentPlanItem | null>(null)
 const expPlanUploadFile = ref<File | null>(null)
+const expPlanUploadInputRef = ref<HTMLInputElement | null>(null)
 const expPlanUploadSubmitting = ref(false)
-const expPlanDeleteDataPending = ref<PaperExperimentPlanItem | null>(null)
-const expPlanDeleteDataSubmitting = ref(false)
 let expPlanReloadSeq = 0
 
 const LIT_STRUCTURE_LABEL: Record<string, string> = {
@@ -378,20 +372,36 @@ function closeExpPlanView() {
   expPlanViewItem.value = null
 }
 
+function resetExpPlanUploadInput() {
+  expPlanUploadFile.value = null
+  if (expPlanUploadInputRef.value) expPlanUploadInputRef.value.value = ''
+}
+
 function openExpPlanUploadDialog(item: PaperExperimentPlanItem) {
   expPlanUploadPending.value = item
-  expPlanUploadFile.value = null
+  resetExpPlanUploadInput()
 }
 
 function closeExpPlanUploadDialog() {
   if (expPlanUploadSubmitting.value) return
   expPlanUploadPending.value = null
-  expPlanUploadFile.value = null
+  resetExpPlanUploadInput()
+}
+
+function openExpPlanUploadPicker() {
+  if (expPlanUploadSubmitting.value) return
+  expPlanUploadInputRef.value?.click()
 }
 
 function onExpPlanUploadFileChange(ev: Event) {
   const input = ev.target as HTMLInputElement
   expPlanUploadFile.value = input.files?.[0] ?? null
+}
+
+function onExpPlanUploadDrop(ev: DragEvent) {
+  if (expPlanUploadSubmitting.value) return
+  const file = ev.dataTransfer?.files?.[0]
+  if (file) expPlanUploadFile.value = file
 }
 
 async function submitExpPlanUpload() {
@@ -428,45 +438,6 @@ function experimentDataFileLabel(item: PaperExperimentPlanItem): string {
   if (!uri) return ''
   const parts = uri.split('/')
   return parts[parts.length - 1] ?? uri
-}
-
-function hasExperimentPlanData(item: PaperExperimentPlanItem): boolean {
-  return Boolean(item.experiment_data_uri?.trim())
-}
-
-function openExpPlanDeleteDataConfirm(item: PaperExperimentPlanItem) {
-  if (!hasExperimentPlanData(item)) return
-  expPlanDeleteDataPending.value = item
-}
-
-function closeExpPlanDeleteDataConfirm() {
-  if (expPlanDeleteDataSubmitting.value) return
-  expPlanDeleteDataPending.value = null
-}
-
-async function submitExpPlanDeleteDataConfirm() {
-  const item = expPlanDeleteDataPending.value
-  const ms = manuscriptId.value
-  if (!item || !ms) return
-  expPlanDeleteDataSubmitting.value = true
-  try {
-    const updated = await deleteExperimentPlanData(ms, item.id)
-    ElMessage.success('实验数据已删除')
-    const idx = expPlanItems.value.findIndex((it) => it.id === item.id)
-    if (idx >= 0) {
-      expPlanItems.value = [
-        ...expPlanItems.value.slice(0, idx),
-        updated,
-        ...expPlanItems.value.slice(idx + 1),
-      ]
-    }
-    expPlanDeleteDataPending.value = null
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : '删除失败'
-    ElMessage.error(msg)
-  } finally {
-    expPlanDeleteDataSubmitting.value = false
-  }
 }
 
 async function openLinkedLiteratureReviewFromExpPlan(item: PaperExperimentPlanItem) {
@@ -808,14 +779,6 @@ defineExpose({ runModule, reloadLiteratureReviews, reloadExperimentPlans })
                 >
                   上传实验数据
                 </button>
-                <button
-                  type="button"
-                  tabindex="-1"
-                  aria-hidden="true"
-                  class="paper-btn-danger paper-btn--compact wf-lit-width-ruler"
-                >
-                  删除实验数据
-                </button>
               </div>
             </th>
           </tr>
@@ -850,75 +813,12 @@ defineExpose({ runModule, reloadLiteratureReviews, reloadExperimentPlans })
                 >
                   上传实验数据
                 </button>
-                <button
-                  type="button"
-                  class="paper-btn-danger paper-btn--compact"
-                  :disabled="!hasExperimentPlanData(item)"
-                  @click="openExpPlanDeleteDataConfirm(item)"
-                >
-                  删除实验数据
-                </button>
               </div>
             </td>
           </tr>
         </tbody>
       </table>
     </section>
-
-    <Teleport to="body">
-      <div
-        v-if="expPlanDeleteDataPending"
-        class="paper-modal-overlay wf-lit-delete-overlay"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="wf-exp-plan-delete-data-title"
-        @keydown.escape="closeExpPlanDeleteDataConfirm"
-      >
-        <div
-          class="paper-message-box paper-message-box--danger paper-modal-panel wf-lit-delete-panel"
-          @click.stop
-        >
-          <header class="paper-modal-header">
-            <h2 id="wf-exp-plan-delete-data-title" class="paper-modal-title">删除实验数据</h2>
-            <button
-              type="button"
-              class="paper-modal-close"
-              aria-label="关闭"
-              :disabled="expPlanDeleteDataSubmitting"
-              @click="closeExpPlanDeleteDataConfirm"
-            >
-              ×
-            </button>
-          </header>
-          <div class="paper-modal-body">
-            <p class="wf-lit-delete-lead">
-              确定删除「{{ experimentPlanRowTitle(expPlanDeleteDataPending) }}」的实验数据文件？
-            </p>
-            <p v-if="experimentDataFileLabel(expPlanDeleteDataPending)" class="wf-meta">
-              文件：{{ experimentDataFileLabel(expPlanDeleteDataPending) }}
-            </p>
-          </div>
-          <footer class="paper-message-box__btns">
-            <button
-              type="button"
-              class="paper-btn-danger wf-lit-delete-dialog-btn"
-              :disabled="expPlanDeleteDataSubmitting"
-              @click="submitExpPlanDeleteDataConfirm"
-            >
-              {{ expPlanDeleteDataSubmitting ? '删除中…' : '删除' }}
-            </button>
-            <button
-              type="button"
-              class="paper-btn-primary wf-lit-delete-dialog-btn"
-              :disabled="expPlanDeleteDataSubmitting"
-              @click="closeExpPlanDeleteDataConfirm"
-            >
-              取消
-            </button>
-          </footer>
-        </div>
-      </div>
-    </Teleport>
 
     <Teleport to="body">
       <div
@@ -952,15 +852,30 @@ defineExpose({ runModule, reloadLiteratureReviews, reloadExperimentPlans })
             <p v-if="experimentDataFileLabel(expPlanUploadPending)" class="wf-meta">
               已上传：{{ experimentDataFileLabel(expPlanUploadPending) }}（再次上传将覆盖）
             </p>
-            <label class="wf-field wf-field--block">
-              <span class="wf-label">选择文件</span>
+            <div
+              class="wf-exp-data-drop"
+              :class="{
+                'wf-exp-data-drop--has-file': !!expPlanUploadFile,
+                'wf-exp-data-drop--disabled': expPlanUploadSubmitting,
+              }"
+              role="button"
+              tabindex="0"
+              @click="openExpPlanUploadPicker"
+              @keydown.enter.prevent="openExpPlanUploadPicker"
+              @keydown.space.prevent="openExpPlanUploadPicker"
+              @dragover.prevent
+              @drop.prevent="onExpPlanUploadDrop"
+            >
               <input
+                ref="expPlanUploadInputRef"
                 type="file"
-                class="wf-input"
+                class="wf-exp-data-file-input"
                 :disabled="expPlanUploadSubmitting"
                 @change="onExpPlanUploadFileChange"
               />
-            </label>
+              <p v-if="!expPlanUploadFile" class="wf-exp-data-drop-hint">点击或拖拽文件到此处</p>
+              <p v-else class="wf-exp-data-drop-name">{{ expPlanUploadFile.name }}</p>
+            </div>
           </div>
           <footer class="paper-message-box__btns">
             <button
@@ -983,52 +898,6 @@ defineExpose({ runModule, reloadLiteratureReviews, reloadExperimentPlans })
         </div>
       </div>
     </Teleport>
-  </div>
-
-  <!-- 实验数据 -->
-  <div v-else-if="moduleId === 'auto-review'" class="wf-stack">
-    <section class="wf-panel">
-      <h2 class="wf-title">参数</h2>
-      <p class="wf-lead">写作前审查：实验方案与上传数据（非完整稿）。</p>
-      <div class="wf-field wf-field--block">
-        <span class="wf-label">审查对象</span>
-        <div class="wf-radios">
-          <label><input v-model="reviewForm.reviewFocus" type="radio" value="plan" /> 仅实验方案</label>
-          <label><input v-model="reviewForm.reviewFocus" type="radio" value="data" /> 仅上传数据</label>
-          <label><input v-model="reviewForm.reviewFocus" type="radio" value="both" /> 方案 + 数据</label>
-        </div>
-      </div>
-      <label class="wf-field wf-field--block">
-        <span class="wf-label">数据文件</span>
-        <input v-model="reviewForm.dataFileLabel" type="text" class="wf-input" readonly />
-      </label>
-      <div class="wf-grid">
-        <label class="wf-field">
-          <span class="wf-label">审计等级</span>
-          <PaperSelect v-model="reviewForm.auditLevel" :options="auditOptions" />
-          <span class="wf-hint">控制 citation audit、claim audit、kill argument 等门禁强度。</span>
-        </label>
-        <label class="wf-check wf-check--solo">
-          <input v-model="reviewForm.strictKill" type="checkbox" />
-          <span>启用 kill argument（严苛反驳）</span>
-        </label>
-      </div>
-    </section>
-    <section v-if="resultVisible['auto-review']" class="wf-panel wf-panel--result">
-      <h2 class="wf-title">审查意见（演示）</h2>
-      <p class="wf-meta">{{ DEMO_AUTO_REVIEW.target }}</p>
-      <div class="wf-scores">
-        <span>Rigor {{ DEMO_AUTO_REVIEW.scores.rigor }}</span>
-        <span>Complete {{ DEMO_AUTO_REVIEW.scores.completeness }}</span>
-        <span>Claims {{ DEMO_AUTO_REVIEW.scores.claimSupport }}</span>
-      </div>
-      <ul class="wf-findings">
-        <li v-for="(f, i) in DEMO_AUTO_REVIEW.findings" :key="i" :class="`wf-finding--${f.level}`">
-          <strong>{{ f.level === 'major' ? 'Major' : 'Minor' }}</strong> {{ f.text }}
-        </li>
-      </ul>
-      <p class="wf-callout wf-callout--warn"><strong>Kill：</strong>{{ DEMO_AUTO_REVIEW.kill }}</p>
-    </section>
   </div>
 
   <!-- 论文写作 -->
@@ -1536,6 +1405,60 @@ defineExpose({ runModule, reloadLiteratureReviews, reloadExperimentPlans })
   font-weight: 600;
   color: var(--atm-text, #1e1b4b);
   line-height: 1.5;
+}
+
+.wf-exp-data-file-input {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.wf-exp-data-drop {
+  position: relative;
+  margin-top: 14px;
+  padding: 22px 16px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  background: #f8fafc;
+  text-align: center;
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.wf-exp-data-drop:hover:not(.wf-exp-data-drop--disabled) {
+  border-color: #818cf8;
+  background: #f5f3ff;
+}
+
+.wf-exp-data-drop--has-file {
+  border-style: solid;
+  border-color: #a5b4fc;
+  background: #fff;
+}
+
+.wf-exp-data-drop--disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.wf-exp-data-drop-hint {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #64748b;
+}
+
+.wf-exp-data-drop-name {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--atm-text, #1e1b4b);
+  word-break: break-all;
 }
 
 .wf-lit-view-panel {
