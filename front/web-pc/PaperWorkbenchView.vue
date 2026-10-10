@@ -1764,7 +1764,7 @@ watch(
       aria-modal="true"
       aria-labelledby="paper-create-ms-title"
     >
-      <div class="paper-message-box paper-message-box--default paper-modal-panel">
+      <div class="paper-message-box paper-message-box--default paper-modal-panel paper-create-ms-panel">
         <header class="paper-modal-header">
           <h2 id="paper-create-ms-title" class="paper-modal-title">创建论文</h2>
           <button
@@ -1792,13 +1792,12 @@ watch(
                 class="paper-input"
                 type="text"
                 maxlength="256"
-                placeholder="例如：MDD 脑网络拓扑研究"
                 @keyup.enter="submitCreateManuscriptDialog"
               />
             </div>
             <div>
-              <span class="paper-label">工作语言</span>
-              <div class="paper-create-ms-lang" role="radiogroup" aria-label="工作语言">
+              <span class="paper-label">论文语言</span>
+              <div class="paper-create-ms-lang" role="radiogroup" aria-label="论文语言">
                 <label class="paper-create-ms-lang__option">
                   <input
                     v-model="createManuscriptForm.contentLanguage"
