@@ -15,6 +15,8 @@ import {
   fetchExperimentPlanDetail,
   fetchExperimentPlans,
   formatExperimentPlanStatus,
+  deleteExperimentPlanData,
+  uploadExperimentPlanData,
   type PaperExperimentPlanItem,
 } from '@/api/experimentPlans'
 import {
@@ -89,6 +91,11 @@ const expPlanItems = ref<PaperExperimentPlanItem[]>([])
 const expPlansLoading = ref(false)
 const expPlanViewItem = ref<PaperExperimentPlanItem | null>(null)
 const expPlanLitReviewLoading = ref(false)
+const expPlanUploadPending = ref<PaperExperimentPlanItem | null>(null)
+const expPlanUploadFile = ref<File | null>(null)
+const expPlanUploadSubmitting = ref(false)
+const expPlanDeleteDataPending = ref<PaperExperimentPlanItem | null>(null)
+const expPlanDeleteDataSubmitting = ref(false)
 let expPlanReloadSeq = 0
 
 const LIT_STRUCTURE_LABEL: Record<string, string> = {
@@ -369,6 +376,97 @@ function openExpPlanView(item: PaperExperimentPlanItem) {
 
 function closeExpPlanView() {
   expPlanViewItem.value = null
+}
+
+function openExpPlanUploadDialog(item: PaperExperimentPlanItem) {
+  expPlanUploadPending.value = item
+  expPlanUploadFile.value = null
+}
+
+function closeExpPlanUploadDialog() {
+  if (expPlanUploadSubmitting.value) return
+  expPlanUploadPending.value = null
+  expPlanUploadFile.value = null
+}
+
+function onExpPlanUploadFileChange(ev: Event) {
+  const input = ev.target as HTMLInputElement
+  expPlanUploadFile.value = input.files?.[0] ?? null
+}
+
+async function submitExpPlanUpload() {
+  const item = expPlanUploadPending.value
+  const file = expPlanUploadFile.value
+  const ms = manuscriptId.value
+  if (!item || !file || !ms) {
+    ElMessage.warning('请选择文件')
+    return
+  }
+  expPlanUploadSubmitting.value = true
+  try {
+    const updated = await uploadExperimentPlanData(ms, item.id, file)
+    ElMessage.success('实验数据已上传')
+    const idx = expPlanItems.value.findIndex((it) => it.id === item.id)
+    if (idx >= 0) {
+      expPlanItems.value = [
+        ...expPlanItems.value.slice(0, idx),
+        updated,
+        ...expPlanItems.value.slice(idx + 1),
+      ]
+    }
+    closeExpPlanUploadDialog()
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : '上传失败'
+    ElMessage.error(msg)
+  } finally {
+    expPlanUploadSubmitting.value = false
+  }
+}
+
+function experimentDataFileLabel(item: PaperExperimentPlanItem): string {
+  const uri = item.experiment_data_uri?.trim()
+  if (!uri) return ''
+  const parts = uri.split('/')
+  return parts[parts.length - 1] ?? uri
+}
+
+function hasExperimentPlanData(item: PaperExperimentPlanItem): boolean {
+  return Boolean(item.experiment_data_uri?.trim())
+}
+
+function openExpPlanDeleteDataConfirm(item: PaperExperimentPlanItem) {
+  if (!hasExperimentPlanData(item)) return
+  expPlanDeleteDataPending.value = item
+}
+
+function closeExpPlanDeleteDataConfirm() {
+  if (expPlanDeleteDataSubmitting.value) return
+  expPlanDeleteDataPending.value = null
+}
+
+async function submitExpPlanDeleteDataConfirm() {
+  const item = expPlanDeleteDataPending.value
+  const ms = manuscriptId.value
+  if (!item || !ms) return
+  expPlanDeleteDataSubmitting.value = true
+  try {
+    const updated = await deleteExperimentPlanData(ms, item.id)
+    ElMessage.success('实验数据已删除')
+    const idx = expPlanItems.value.findIndex((it) => it.id === item.id)
+    if (idx >= 0) {
+      expPlanItems.value = [
+        ...expPlanItems.value.slice(0, idx),
+        updated,
+        ...expPlanItems.value.slice(idx + 1),
+      ]
+    }
+    expPlanDeleteDataPending.value = null
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : '删除失败'
+    ElMessage.error(msg)
+  } finally {
+    expPlanDeleteDataSubmitting.value = false
+  }
 }
 
 async function openLinkedLiteratureReviewFromExpPlan(item: PaperExperimentPlanItem) {
@@ -706,9 +804,17 @@ defineExpose({ runModule, reloadLiteratureReviews, reloadExperimentPlans })
                   type="button"
                   tabindex="-1"
                   aria-hidden="true"
+                  class="paper-btn-primary paper-btn--compact wf-lit-width-ruler"
+                >
+                  上传实验数据
+                </button>
+                <button
+                  type="button"
+                  tabindex="-1"
+                  aria-hidden="true"
                   class="paper-btn-danger paper-btn--compact wf-lit-width-ruler"
                 >
-                  删除
+                  删除实验数据
                 </button>
               </div>
             </th>
@@ -737,14 +843,20 @@ defineExpose({ runModule, reloadLiteratureReviews, reloadExperimentPlans })
                 >
                   查看文献综述
                 </button>
-                <!-- 与文献综述三列操作区等宽（占位，不展示） -->
                 <button
                   type="button"
-                  tabindex="-1"
-                  aria-hidden="true"
-                  class="paper-btn-danger paper-btn--compact wf-lit-action-placeholder"
+                  class="paper-btn-primary paper-btn--compact"
+                  @click="openExpPlanUploadDialog(item)"
                 >
-                  删除
+                  上传实验数据
+                </button>
+                <button
+                  type="button"
+                  class="paper-btn-danger paper-btn--compact"
+                  :disabled="!hasExperimentPlanData(item)"
+                  @click="openExpPlanDeleteDataConfirm(item)"
+                >
+                  删除实验数据
                 </button>
               </div>
             </td>
@@ -752,6 +864,125 @@ defineExpose({ runModule, reloadLiteratureReviews, reloadExperimentPlans })
         </tbody>
       </table>
     </section>
+
+    <Teleport to="body">
+      <div
+        v-if="expPlanDeleteDataPending"
+        class="paper-modal-overlay wf-lit-delete-overlay"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="wf-exp-plan-delete-data-title"
+        @keydown.escape="closeExpPlanDeleteDataConfirm"
+      >
+        <div
+          class="paper-message-box paper-message-box--danger paper-modal-panel wf-lit-delete-panel"
+          @click.stop
+        >
+          <header class="paper-modal-header">
+            <h2 id="wf-exp-plan-delete-data-title" class="paper-modal-title">删除实验数据</h2>
+            <button
+              type="button"
+              class="paper-modal-close"
+              aria-label="关闭"
+              :disabled="expPlanDeleteDataSubmitting"
+              @click="closeExpPlanDeleteDataConfirm"
+            >
+              ×
+            </button>
+          </header>
+          <div class="paper-modal-body">
+            <p class="wf-lit-delete-lead">
+              确定删除「{{ experimentPlanRowTitle(expPlanDeleteDataPending) }}」的实验数据文件？
+            </p>
+            <p v-if="experimentDataFileLabel(expPlanDeleteDataPending)" class="wf-meta">
+              文件：{{ experimentDataFileLabel(expPlanDeleteDataPending) }}
+            </p>
+          </div>
+          <footer class="paper-message-box__btns">
+            <button
+              type="button"
+              class="paper-btn-danger wf-lit-delete-dialog-btn"
+              :disabled="expPlanDeleteDataSubmitting"
+              @click="submitExpPlanDeleteDataConfirm"
+            >
+              {{ expPlanDeleteDataSubmitting ? '删除中…' : '删除' }}
+            </button>
+            <button
+              type="button"
+              class="paper-btn-primary wf-lit-delete-dialog-btn"
+              :disabled="expPlanDeleteDataSubmitting"
+              @click="closeExpPlanDeleteDataConfirm"
+            >
+              取消
+            </button>
+          </footer>
+        </div>
+      </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div
+        v-if="expPlanUploadPending"
+        class="paper-modal-overlay wf-lit-generate-overlay"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="wf-exp-plan-upload-title"
+        @keydown.escape="closeExpPlanUploadDialog"
+      >
+        <div
+          class="paper-message-box paper-message-box--default paper-modal-panel wf-lit-generate-panel"
+          @click.stop
+        >
+          <header class="paper-modal-header">
+            <h2 id="wf-exp-plan-upload-title" class="paper-modal-title">上传实验数据</h2>
+            <button
+              type="button"
+              class="paper-modal-close"
+              aria-label="关闭"
+              :disabled="expPlanUploadSubmitting"
+              @click="closeExpPlanUploadDialog"
+            >
+              ×
+            </button>
+          </header>
+          <div class="paper-modal-body">
+            <p class="wf-lit-delete-lead">
+              「{{ experimentPlanRowTitle(expPlanUploadPending) }}」
+            </p>
+            <p v-if="experimentDataFileLabel(expPlanUploadPending)" class="wf-meta">
+              已上传：{{ experimentDataFileLabel(expPlanUploadPending) }}（再次上传将覆盖）
+            </p>
+            <label class="wf-field wf-field--block">
+              <span class="wf-label">选择文件</span>
+              <input
+                type="file"
+                class="wf-input"
+                :disabled="expPlanUploadSubmitting"
+                @change="onExpPlanUploadFileChange"
+              />
+            </label>
+          </div>
+          <footer class="paper-message-box__btns">
+            <button
+              type="button"
+              class="paper-btn-primary wf-lit-delete-dialog-btn"
+              :disabled="expPlanUploadSubmitting || !expPlanUploadFile"
+              @click="submitExpPlanUpload"
+            >
+              {{ expPlanUploadSubmitting ? '上传中…' : '上传' }}
+            </button>
+            <button
+              type="button"
+              class="paper-btn-primary wf-lit-delete-dialog-btn"
+              :disabled="expPlanUploadSubmitting"
+              @click="closeExpPlanUploadDialog"
+            >
+              取消
+            </button>
+          </footer>
+        </div>
+      </div>
+    </Teleport>
   </div>
 
   <!-- 实验数据 -->

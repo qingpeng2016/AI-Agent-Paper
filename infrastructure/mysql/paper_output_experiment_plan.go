@@ -92,3 +92,34 @@ func (r *PaperOutputExperimentPlanImpl) GetByIDForManuscript(
 	}
 	return &row, nil
 }
+
+func (r *PaperOutputExperimentPlanImpl) UpdateExperimentDataURI(
+	ctx context.Context,
+	id, manuscriptID uint64,
+	userID uint,
+	uri string,
+) (bool, error) {
+	res := r.db.WithContext(ctx).
+		Model(&entity.PaperOutputExperimentPlan{}).
+		Where("id = ? AND manuscript_id = ? AND user_id = ?", id, manuscriptID, userID).
+		Update("experiment_data_uri", uri)
+	if res.Error != nil {
+		return false, res.Error
+	}
+	return res.RowsAffected > 0, nil
+}
+
+func (r *PaperOutputExperimentPlanImpl) ClearExperimentDataURI(
+	ctx context.Context,
+	id, manuscriptID uint64,
+	userID uint,
+) (bool, error) {
+	res := r.db.WithContext(ctx).
+		Model(&entity.PaperOutputExperimentPlan{}).
+		Where("id = ? AND manuscript_id = ? AND user_id = ?", id, manuscriptID, userID).
+		Update("experiment_data_uri", nil)
+	if res.Error != nil {
+		return false, res.Error
+	}
+	return res.RowsAffected > 0, nil
+}

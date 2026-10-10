@@ -88,6 +88,8 @@ func (r *Router) setupRouters() *gin.Engine {
 		paperAuth.POST("/literature-reviews/generate-experiment-plan", r.paperLiteratureReviewHandler.PostGenerateExperimentPlan)
 		paperAuth.GET("/experiment-plans", r.paperExperimentPlanHandler.GetExperimentPlans)
 		paperAuth.GET("/experiment-plans/detail", r.paperExperimentPlanHandler.GetExperimentPlanDetail)
+		paperAuth.POST("/experiment-plans/upload-experiment-data", r.paperExperimentPlanHandler.PostUploadExperimentData)
+		paperAuth.POST("/experiment-plans/delete-experiment-data", r.paperExperimentPlanHandler.PostDeleteExperimentData)
 	}
 
 	userAuth := engine.Group("/api/v1", ginMiddleware.RequireAuth)

@@ -400,6 +400,9 @@ func experimentPlanItemView(row entity.PaperOutputExperimentPlan) response.Paper
 	if row.ContentMedium != nil {
 		item.ContentMedium = *row.ContentMedium
 	}
+	if row.ExperimentDataURI != nil && strings.TrimSpace(*row.ExperimentDataURI) != "" {
+		item.ExperimentDataURI = strings.TrimSpace(*row.ExperimentDataURI)
+	}
 	if len(row.InputParams) > 0 {
 		var snap map[string]any
 		_ = json.Unmarshal(row.InputParams, &snap)

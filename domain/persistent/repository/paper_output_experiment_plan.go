@@ -16,4 +16,15 @@ type PaperOutputExperimentPlanRepo interface {
 	) (*entity.PaperOutputExperimentPlan, error)
 	// GetByIDForManuscript 调用方须已校验 manuscript 归属。
 	GetByIDForManuscript(ctx context.Context, id, manuscriptID uint64) (*entity.PaperOutputExperimentPlan, error)
+	UpdateExperimentDataURI(
+		ctx context.Context,
+		id, manuscriptID uint64,
+		userID uint,
+		uri string,
+	) (bool, error)
+	ClearExperimentDataURI(
+		ctx context.Context,
+		id, manuscriptID uint64,
+		userID uint,
+	) (bool, error)
 }

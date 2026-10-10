@@ -508,6 +508,7 @@ CREATE TABLE IF NOT EXISTS `paper_output_experiment_plan` (
   `summary`           TEXT         DEFAULT NULL COMMENT '摘要',
   `content_medium`    MEDIUMTEXT   DEFAULT NULL COMMENT '正文（内联）',
   `storage_uri`       VARCHAR(1024) DEFAULT NULL COMMENT '正文文件路径',
+  `experiment_data_uri` VARCHAR(1024) DEFAULT NULL COMMENT '实验数据文件相对 storage/ 路径（experiment-data/…）',
   `format`            VARCHAR(16)  NOT NULL DEFAULT 'md' COMMENT 'md|tex 等',
   `input_params`      JSON         DEFAULT NULL COMMENT '生成参数快照',
   `meta`              JSON         DEFAULT NULL COMMENT 'baseline、ablation、资源估算等',
