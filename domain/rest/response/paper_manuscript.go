@@ -5,6 +5,7 @@ type PaperManuscriptItemView struct {
 	Title           string `json:"title"`
 	Status          string `json:"status"`
 	IsCurrent       bool   `json:"is_current"`
+	ContentLanguage string `json:"content_language"`
 	DisciplineCode  string `json:"discipline_code,omitempty"`
 	DisciplineLabel string `json:"discipline_label,omitempty"`
 }

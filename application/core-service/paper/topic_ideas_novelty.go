@@ -48,30 +48,8 @@ func (s *TopicDiscoveryRunService) RunIdeasAndNoveltyLLM(
 	}
 	ctxBlock, _ := s.stageContextCompact(ctx, userID, runVersion, "retrieve")
 	filesBlock := s.formatRetrieveCorpusFilesBlock(ctx, userID, runVersion)
-
-	userMsg := fmt.Sprintf(`Research direction: %s
-Target venue: %s
-Max ideas: %d
-
-Corpus:
-%s
-
-CorpusFiles（已与 external_key 绑定的本地 PDF；Corpus 内摘要/标题仅作补充）:
-%s
-
-Return ONLY valid JSON（一次输出脑暴 + 新颖性，不要分两次）:
-{
-  "ideas": [
-    {"title":"","problem":"","approach":"","contribution":"","reference_keys":[]}
-  ],
-  "novelty": {
-    "lines": ["…"],
-    "risks": [{"idea_title":"","risk":"low|medium|high","note":"","overlap_refs":[]}],
-    "synthesis": ""
-  }
-}
-规则：ideas 最多 %d 条；每条 reference_keys 必须来自 Corpus/CorpusFiles；novelty.risks 须逐条对应 ideas 标题；文本字段用中文。`,
-		input.Direction, input.Venue, input.MaxIdeas, ctxBlock, filesBlock, input.MaxIdeas)
+	locale := s.contentLocaleForStep(ctx, ideasStep)
+	userMsg := buildIdeasNoveltyUserMessage(input, ctxBlock, filesBlock, locale)
 
 	text, usage, err := s.callStageLLM(ctx, ideasStep, "generate_ideas", map[string]string{
 		"direction": input.Direction,

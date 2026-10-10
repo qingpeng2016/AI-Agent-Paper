@@ -40,12 +40,13 @@ func (r *PaperManuscriptImpl) ListByUser(ctx context.Context, userID uint) ([]en
 	return rows, err
 }
 
-func (r *PaperManuscriptImpl) Create(ctx context.Context, userID uint, title string, disciplineID *uint64) (*entity.PaperManuscript, error) {
+func (r *PaperManuscriptImpl) Create(ctx context.Context, userID uint, title string, disciplineID *uint64, contentLanguage string) (*entity.PaperManuscript, error) {
 	row := entity.PaperManuscript{
-		UserID:       userID,
-		Title:        title,
-		DisciplineID: disciplineID,
-		Status:       "active",
+		UserID:          userID,
+		Title:           title,
+		DisciplineID:    disciplineID,
+		ContentLanguage: contentLanguage,
+		Status:          "active",
 	}
 	if err := r.db.WithContext(ctx).Create(&row).Error; err != nil {
 		return nil, err

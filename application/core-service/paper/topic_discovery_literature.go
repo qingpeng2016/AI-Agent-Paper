@@ -248,7 +248,9 @@ func (s *TopicDiscoveryRunService) buildAuditUserExtra(
 	runVersion int,
 	input topicRunInput,
 	round, rounds int,
+	locale string,
 ) string {
+	locale = NormalizeContentLanguage(locale)
 	brief, refIDs, _ := s.literatureBriefForRun(ctx, userID, runVersion)
 	briefText := formatLiteratureBriefForPrompt(brief)
 	refsLine := strings.Join(refIDs, ", ")
@@ -258,6 +260,75 @@ func (s *TopicDiscoveryRunService) buildAuditUserExtra(
 	ideasJSON := s.stepResultText(ctx, userID, runVersion, "generate_ideas")
 	noveltyJSON, noveltySummary := s.noveltyBlockForAudit(ctx, userID, runVersion)
 
+	noveltyExtra := func() string {
+		if noveltySummary == "" {
+			return ""
+		}
+		if locale == "en" {
+			return "\n[Novelty summary_text]\n" + noveltySummary
+		}
+		return "\n【新颖性摘要 summary_text】\n" + noveltySummary
+	}()
+	if locale == "en" {
+		return fmt.Sprintf(`Audit round %d/%d
+Target venue: %s
+Audit level: %s
+
+[Keywords]
+%s
+
+[Research description]
+%s
+
+[Literature brief] (cite only these ref_id: %s)
+%s
+
+[Candidate ideas · full generate_ideas output]
+%s
+
+[Novelty · full output]
+%s
+%s
+
+[Requirements]
+1. Re-check the full generate_ideas output (ideas + novelty) against keywords, description, and venue; flag off-topic items and Corpus fit.
+2. Assess whether novelty supports the ideas; flag contradictions or over-claims.
+3. Reviewer-style audit: unsupported claims, missing baselines/comparisons, unclear contributions.
+4. Also produce a literature review (Markdown in content_medium): synthesize Corpus and vetted ideas/novelty; pick thematic/chronological/method for structure; citations must use Corpus ref_id.
+
+Return ONLY valid JSON (final round must include literature_review):
+{
+  "audit": {
+    "issues": [{"severity":"blocker|major|minor","claim":"","fix":""}],
+    "summary": "",
+    "off_topic": {
+      "ideas_aligned": true,
+      "novelty_aligned": true,
+      "generate_ideas_on_topic": true,
+      "notes": ""
+    }
+  },
+  "literature_review": {
+    "title": "",
+    "summary": "",
+    "structure": "thematic",
+    "content_medium": "",
+    "citations": [{"ref_id":"","note":""}]
+  }
+}
+%s`,
+			round, rounds,
+			input.Venue, input.AuditLevel,
+			keywordsLine(input),
+			compactDirectionForPrompt(input),
+			refsLine,
+			briefText,
+			ideasJSON,
+			noveltyJSON,
+			noveltyExtra,
+			jsonStringFieldsLocaleHint(locale),
+		)
+	}
 	return fmt.Sprintf(`审计轮次 %d/%d
 目标期刊：%s
 审计档位：%s
@@ -282,7 +353,7 @@ func (s *TopicDiscoveryRunService) buildAuditUserExtra(
 1. **再次审查第二步 generate_ideas 全文产出**：候选 idea 与 novelty 是否与关键词、研究描述、目标期刊一致；逐条判断是否偏题（off-topic），并说明与 Corpus 的贴合度。
 2. 新颖性结论是否支撑 idea，有无与文献/方向矛盾或过度声称。
 3. 以严格审稿人视角给出审查结论：论断是否有文献支持、是否缺少基线/对照、贡献是否清晰；列出 unsupported claims、缺失基线/对照、贡献含糊等问题。
-4. **同时生成文献综述**（中文 Markdown 正文）：综合 Corpus 与已通过审查的 idea/novelty，结构清晰（thematic/chronological/method 择一写入 structure），引用须使用 Corpus 中的 ref_id；正文写入 content_medium。
+4. **同时生成文献综述**（Markdown 正文）：综合 Corpus 与已通过审查的 idea/novelty，结构清晰（thematic/chronological/method 择一写入 structure），引用须使用 Corpus 中的 ref_id；正文写入 content_medium。
 
 输出 ONLY valid JSON（最后一轮须含 literature_review）：
 {
@@ -304,7 +375,7 @@ func (s *TopicDiscoveryRunService) buildAuditUserExtra(
     "citations": [{"ref_id":"","note":""}]
   }
 }
-audit、literature_review 内文本字段使用中文。`,
+%s`,
 		round, rounds,
 		input.Venue, input.AuditLevel,
 		keywordsLine(input),
@@ -313,11 +384,7 @@ audit、literature_review 内文本字段使用中文。`,
 		briefText,
 		ideasJSON,
 		noveltyJSON,
-		func() string {
-			if noveltySummary == "" {
-				return ""
-			}
-			return "\n【新颖性摘要 summary_text】\n" + noveltySummary
-		}(),
+		noveltyExtra,
+		jsonStringFieldsLocaleHint(locale),
 	)
 }

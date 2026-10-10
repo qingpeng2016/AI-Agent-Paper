@@ -59,7 +59,8 @@ func (s *TopicDiscoveryRunService) RunAuditAndLiteratureReviewLLM(
 	var litReviewPayload map[string]any
 
 	for r := 1; r <= rounds; r++ {
-		userMsg := s.buildAuditUserExtra(ctx, userID, runVersion, input, r, rounds)
+		locale := s.contentLocaleForStep(ctx, auditStep)
+		userMsg := s.buildAuditUserExtra(ctx, userID, runVersion, input, r, rounds, locale)
 		text, usage, err := s.callStageLLM(ctx, auditStep, "audit", map[string]string{
 			"direction": compactDirectionForPrompt(input),
 			"keywords":  keywordsLine(input),

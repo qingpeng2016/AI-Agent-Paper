@@ -46,10 +46,11 @@ func (s *ManuscriptService) ListMine(ctx context.Context, userID uint) (*respons
 
 func (s *ManuscriptService) manuscriptItemView(ctx context.Context, row entity.PaperManuscript) response.PaperManuscriptItemView {
 	item := response.PaperManuscriptItemView{
-		ID:        strconv.FormatUint(uint64(row.ID), 10),
-		Title:     row.Title,
-		Status:    row.Status,
-		IsCurrent: row.IsCurrent,
+		ID:              strconv.FormatUint(uint64(row.ID), 10),
+		Title:           row.Title,
+		Status:          row.Status,
+		IsCurrent:       row.IsCurrent,
+		ContentLanguage: NormalizeContentLanguage(row.ContentLanguage),
 	}
 	if row.DisciplineID != nil && *row.DisciplineID > 0 {
 		disc, err := s.catalog.FindDisciplineByID(ctx, *row.DisciplineID)
@@ -64,7 +65,7 @@ func (s *ManuscriptService) manuscriptItemView(ctx context.Context, row entity.P
 func (s *ManuscriptService) Create(
 	ctx context.Context,
 	userID uint,
-	title, disciplineCode string,
+	title, disciplineCode, contentLanguage string,
 ) (*response.PaperManuscriptListView, error) {
 	title = strings.TrimSpace(title)
 	disciplineCode = strings.TrimSpace(disciplineCode)
@@ -82,7 +83,8 @@ func (s *ManuscriptService) Create(
 		return nil, errorx.ErrParamsError.WithDetail("无效学科：" + disciplineCode)
 	}
 	discID := uint64(disc.ID)
-	ms, err := s.manuscripts.Create(ctx, userID, title, &discID)
+	lang := NormalizeContentLanguage(contentLanguage)
+	ms, err := s.manuscripts.Create(ctx, userID, title, &discID, lang)
 	if err != nil {
 		return nil, err
 	}

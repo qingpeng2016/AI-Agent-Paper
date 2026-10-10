@@ -5,6 +5,7 @@ type PaperManuscriptSetCurrentRequest struct {
 }
 
 type PaperManuscriptCreateRequest struct {
-	Title          string `json:"title" binding:"required"`
-	DisciplineCode string `json:"discipline_code" binding:"required"`
+	Title           string `json:"title" binding:"required"`
+	DisciplineCode  string `json:"discipline_code" binding:"required"`
+	ContentLanguage string `json:"content_language"`
 }

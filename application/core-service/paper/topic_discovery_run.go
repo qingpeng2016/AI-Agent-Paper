@@ -676,6 +676,17 @@ type stageLLMResolve struct {
 	userPrefix     string
 }
 
+func (s *TopicDiscoveryRunService) contentLocaleForStep(ctx context.Context, step *entity.PaperOutputTopicStep) string {
+	if s == nil || step == nil || step.ManuscriptID == 0 || s.manuscripts == nil {
+		return "en"
+	}
+	ms, err := s.manuscripts.GetByIDForUser(ctx, uint(step.ManuscriptID), uint(step.UserID))
+	if err != nil || ms == nil {
+		return "en"
+	}
+	return NormalizeContentLanguage(ms.ContentLanguage)
+}
+
 func (s *TopicDiscoveryRunService) callStageLLM(
 	ctx context.Context,
 	step *entity.PaperOutputTopicStep,
@@ -683,7 +694,8 @@ func (s *TopicDiscoveryRunService) callStageLLM(
 	vars map[string]string,
 	userExtra string,
 ) (string, LLMUsage, error) {
-	resolved, err := s.resolveStageLLM(ctx, stageCode, vars)
+	locale := s.contentLocaleForStep(ctx, step)
+	resolved, err := s.resolveStageLLM(ctx, stageCode, vars, locale)
 	if err != nil {
 		persistStepLLMInput(step, stageCode, "", llmUserMessage("", userExtra), "")
 		return "", LLMUsage{}, err
@@ -810,7 +822,8 @@ func (s *TopicDiscoveryRunService) persistLLMCallLog(
 	_ = s.llmRepo.InsertCallLog(ctx, row)
 }
 
-func (s *TopicDiscoveryRunService) resolveStageLLM(ctx context.Context, stageCode string, vars map[string]string) (*stageLLMResolve, error) {
+func (s *TopicDiscoveryRunService) resolveStageLLM(ctx context.Context, stageCode string, vars map[string]string, locale string) (*stageLLMResolve, error) {
+	locale = NormalizeContentLanguage(locale)
 	binding, err := s.llmRepo.GetActiveBindingByStage(ctx, stageCode)
 	if err != nil {
 		return nil, err
@@ -832,13 +845,14 @@ func (s *TopicDiscoveryRunService) resolveStageLLM(ctx context.Context, stageCod
 	}
 	defPrompt, _ := s.llmRepo.GetActivePromptByStage(ctx, "default")
 	stagePrompt, _ := s.llmRepo.GetActivePromptByStage(ctx, stageCode)
+	renderVars := mergePromptVars(vars, locale)
 	system := ""
 	if defPrompt != nil {
-		system = renderPromptTemplate(defPrompt.TemplateBody, vars)
+		system = renderPromptTemplate(defPrompt.TemplateBodyForLocale(locale), renderVars)
 	}
 	userTmpl := ""
 	if stagePrompt != nil {
-		userTmpl = renderPromptTemplate(stagePrompt.TemplateBody, vars)
+		userTmpl = renderPromptTemplate(stagePrompt.TemplateBodyForLocale(locale), renderVars)
 	}
 	if userTmpl == "" {
 		userTmpl = stageCode

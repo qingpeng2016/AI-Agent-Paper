@@ -262,7 +262,11 @@ const manuscriptSwitchPendingId = ref<string | null>(null)
 
 const createManuscriptDialogVisible = ref(false)
 const createManuscriptSubmitting = ref(false)
-const createManuscriptForm = reactive({ disciplineCode: '', title: '' })
+const createManuscriptForm = reactive<{ disciplineCode: string; title: string; contentLanguage: 'zh' | 'en' }>({
+  disciplineCode: '',
+  title: '',
+  contentLanguage: 'en',
+})
 let createManuscriptDialogResolve: ((ok: boolean) => void) | null = null
 
 function pickDefaultDisciplineCode(): string {
@@ -273,6 +277,7 @@ async function openCreateManuscriptDialog(): Promise<boolean> {
   await reloadTopicDiscoveryFormOptions()
   createManuscriptForm.disciplineCode = pickDefaultDisciplineCode()
   createManuscriptForm.title = ''
+  createManuscriptForm.contentLanguage = 'en'
   createManuscriptDialogVisible.value = true
   return new Promise((resolve) => {
     createManuscriptDialogResolve = resolve
@@ -301,7 +306,11 @@ async function submitCreateManuscriptDialog() {
   }
   createManuscriptSubmitting.value = true
   try {
-    const data = await createPaperManuscript(title, createManuscriptForm.disciplineCode)
+    const data = await createPaperManuscript(
+      title,
+      createManuscriptForm.disciplineCode,
+      createManuscriptForm.contentLanguage,
+    )
     applyManuscriptListFromApi(data)
     topicForm.disciplineCode = createManuscriptForm.disciplineCode
     closeCreateManuscriptDialog(true)
@@ -1786,6 +1795,29 @@ watch(
                 placeholder="例如：MDD 脑网络拓扑研究"
                 @keyup.enter="submitCreateManuscriptDialog"
               />
+            </div>
+            <div>
+              <span class="paper-label">工作语言</span>
+              <div class="paper-create-ms-lang" role="radiogroup" aria-label="工作语言">
+                <label class="paper-create-ms-lang__option">
+                  <input
+                    v-model="createManuscriptForm.contentLanguage"
+                    type="radio"
+                    name="paper-create-ms-lang"
+                    value="en"
+                  />
+                  英文
+                </label>
+                <label class="paper-create-ms-lang__option">
+                  <input
+                    v-model="createManuscriptForm.contentLanguage"
+                    type="radio"
+                    name="paper-create-ms-lang"
+                    value="zh"
+                  />
+                  中文
+                </label>
+              </div>
             </div>
           </div>
         </div>

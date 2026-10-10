@@ -255,6 +255,22 @@
   box-shadow: 0 0 0 1px var(--atm-primary);
 }
 
+.paper-create-ms-lang {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.paper-create-ms-lang__option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--atm-text);
+  cursor: pointer;
+  user-select: none;
+}
+
 .paper-modal-panel .paper-message-box__btns {
   position: relative;
   z-index: 1;

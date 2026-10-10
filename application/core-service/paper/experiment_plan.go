@@ -38,7 +38,7 @@ func NewExperimentPlanService(
 	llm *LLMChatService,
 	llmRepo repository.PaperLLMRepo,
 ) *ExperimentPlanService {
-	runner := &TopicDiscoveryRunService{llm: llm, llmRepo: llmRepo}
+	runner := &TopicDiscoveryRunService{llm: llm, llmRepo: llmRepo, manuscripts: manuscripts}
 	return &ExperimentPlanService{
 		reviews:     reviews,
 		plans:       plans,
@@ -98,11 +98,15 @@ func (s *ExperimentPlanService) RunExperimentPlanLLM(ctx context.Context, review
 		return fmt.Errorf("experiment plan 服务未配置")
 	}
 	direction, venue := directionVenueFromReview(review)
-	userExtra := buildExperimentPlanUserMessage(review, direction, venue)
+	step := &entity.PaperOutputTopicStep{
+		ManuscriptID: review.ManuscriptID,
+		UserID:       uint64(review.UserID),
+	}
+	locale := s.llmRunner.contentLocaleForStep(ctx, step)
+	userExtra := buildExperimentPlanUserMessage(review, direction, venue, locale)
 	vars := map[string]string{"direction": direction, "venue": venue}
-	step := &entity.PaperOutputTopicStep{ManuscriptID: review.ManuscriptID}
 
-	resolved, resolveErr := s.llmRunner.resolveStageLLM(ctx, ExperimentPlanStageCode, vars)
+	resolved, resolveErr := s.llmRunner.resolveStageLLM(ctx, ExperimentPlanStageCode, vars, locale)
 	if resolveErr != nil {
 		return s.markExperimentPlanFailed(ctx, review, resolveErr.Error(), nil, nil)
 	}
@@ -211,7 +215,8 @@ func directionVenueFromReview(review *entity.PaperOutputLiteratureReview) (direc
 	return direction, venue
 }
 
-func buildExperimentPlanUserMessage(review *entity.PaperOutputLiteratureReview, direction, venue string) string {
+func buildExperimentPlanUserMessage(review *entity.PaperOutputLiteratureReview, direction, venue, locale string) string {
+	locale = NormalizeContentLanguage(locale)
 	lit := map[string]any{
 		"id":             review.ID,
 		"version":        review.Version,
@@ -231,6 +236,24 @@ func buildExperimentPlanUserMessage(review *entity.PaperOutputLiteratureReview, 
 		"venue":            venue,
 		"literature_review": lit,
 	})
+	if locale == "en" {
+		return fmt.Sprintf(`Generate an experiment plan from the LiteratureReview below.
+
+Return ONLY valid JSON:
+{
+  "experiment_plan": {
+    "title": "string",
+    "summary": "string",
+    "content_medium": "string (Markdown body)",
+    "meta": { "hypothesis": "", "baselines": [], "metrics": [], "ablations": [], "timeline": [] }
+  }
+}
+
+%s
+
+INPUT:
+%s`, jsonStringFieldsLocaleHint(locale), string(b))
+	}
 	return fmt.Sprintf(`请基于下列 LiteratureReview 生成实验方案。
 
 输出 ONLY valid JSON：
@@ -243,10 +266,10 @@ func buildExperimentPlanUserMessage(review *entity.PaperOutputLiteratureReview, 
   }
 }
 
-experiment_plan 内文本使用中文。
+%s
 
 INPUT:
-%s`, string(b))
+%s`, jsonStringFieldsLocaleHint(locale), string(b))
 }
 
 func parseExperimentPlanLLMResponse(text string) map[string]any {
