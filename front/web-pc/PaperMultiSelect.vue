@@ -31,11 +31,10 @@ const currentLabel = computed(() => {
     if (!props.options.length) return '加载中…'
     return props.placeholder
   }
-  const labels = props.modelValue
+  return props.modelValue
     .map((v) => props.options.find((o) => o.value === v)?.label ?? v)
     .filter(Boolean)
-  if (labels.length <= 2) return labels.join('、')
-  return `${labels.slice(0, 2).join('、')} 等 ${labels.length} 项`
+    .join('、')
 })
 
 const showPlaceholderStyle = computed(() => props.modelValue.length === 0)
@@ -91,20 +90,22 @@ onUnmounted(() => document.removeEventListener('pointerdown', onDocumentPointerD
       <span class="paper-select-chevron" aria-hidden="true">▾</span>
     </button>
     <div v-if="open" class="paper-multi-panel" role="listbox" @click.stop @mousedown.stop>
-      <label
-        v-for="o in options"
-        :key="o.value"
-        class="paper-multi-row"
-        :class="{ 'paper-multi-row--checked': isChecked(o.value) }"
-      >
-        <input
-          type="checkbox"
-          :checked="isChecked(o.value)"
-          @change="toggleValue(o.value, ($event.target as HTMLInputElement).checked)"
-        />
-        <span class="paper-multi-label">{{ o.label }}</span>
-      </label>
-      <p v-if="!options.length" class="paper-multi-empty">暂无可选 venue</p>
+      <div v-if="options.length" class="paper-multi-grid">
+        <label
+          v-for="o in options"
+          :key="o.value"
+          class="paper-multi-row"
+          :class="{ 'paper-multi-row--checked': isChecked(o.value) }"
+        >
+          <input
+            type="checkbox"
+            :checked="isChecked(o.value)"
+            @change="toggleValue(o.value, ($event.target as HTMLInputElement).checked)"
+          />
+          <span class="paper-multi-label">{{ o.label }}</span>
+        </label>
+      </div>
+      <p v-else class="paper-multi-empty">暂无可选 venue</p>
     </div>
   </div>
 </template>
@@ -143,9 +144,9 @@ onUnmounted(() => document.removeEventListener('pointerdown', onDocumentPointerD
 .paper-select-value {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.4;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .paper-select-value--muted {
@@ -169,7 +170,7 @@ onUnmounted(() => document.removeEventListener('pointerdown', onDocumentPointerD
   top: calc(100% + 4px);
   right: 0;
   left: 0;
-  max-height: 280px;
+  max-height: 320px;
   padding: 8px;
   overflow-y: auto;
   background: #fff;
@@ -178,12 +179,19 @@ onUnmounted(() => document.removeEventListener('pointerdown', onDocumentPointerD
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
 }
 
+.paper-multi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px 8px;
+}
+
 .paper-multi-row {
   display: flex;
-  gap: 10px;
+  gap: 6px;
   align-items: flex-start;
-  padding: 8px 10px;
-  font-size: 14px;
+  min-width: 0;
+  padding: 6px 8px;
+  font-size: 13px;
   color: #1e1b4b;
   cursor: pointer;
   border-radius: 8px;
@@ -204,7 +212,9 @@ onUnmounted(() => document.removeEventListener('pointerdown', onDocumentPointerD
 
 .paper-multi-label {
   flex: 1;
-  line-height: 1.4;
+  min-width: 0;
+  line-height: 1.35;
+  word-break: break-word;
 }
 
 .paper-multi-empty {
