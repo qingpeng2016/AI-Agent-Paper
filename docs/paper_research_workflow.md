@@ -225,7 +225,7 @@
 | 执行强度 | `paper_llm_constraint_exec_intensity` | `exec_rounds`（审计 LLM 轮数）、`max_papers`、`max_ideas` |
 | 三门禁档位 | `paper_llm_constraint_gate` | `llm_description_*_check_code` → `description_code`（1xxxx；0=关该 gate） |
 | LLM 文案库 | `paper_llm_description` | `description_code`（按 prompt_code 分段）、`prompt_name`、`model_config_id` |
-| Venue 约束 | `paper_ref_venue` | 每 venue 一条 `llm_description_codes`（默认 20000–20002）；稿件 `venue_ids` |
+| Venue 约束 | `paper_ref_venue` | 每 venue 一条 `llm_description_codes`（默认 20000–20002）；选题 run `input_params.venue_codes` |
 | 选题环节话术 | `paper_llm_description` + `paper_llm_template_topic` | stage_code → `llm_description_code`（30000 段） |
 | 迭代上限 | 待增或 env | `max_revision_rounds`（选题/正文可分开） |
 | 查重阈值 | 待增 | 相似度上限 |

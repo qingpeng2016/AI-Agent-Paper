@@ -2,8 +2,6 @@ package entity
 
 import (
 	"time"
-
-	"gorm.io/datatypes"
 )
 
 type PaperManuscript struct {
@@ -11,7 +9,6 @@ type PaperManuscript struct {
 	UserID       uint      `gorm:"column:user_id;not null"`
 	Title        string    `gorm:"column:title;size:256;not null"`
 	DisciplineID     *uint64 `gorm:"column:discipline_id"`
-	VenueIDs         datatypes.JSON `gorm:"column:venue_ids;type:json"`
 	ContentLanguage  string  `gorm:"column:content_language;size:8;not null;default:en"`
 	Status           string  `gorm:"column:status;size:16;not null;default:active"`
 	IsCurrent    bool      `gorm:"column:is_current;not null;default:0"`
