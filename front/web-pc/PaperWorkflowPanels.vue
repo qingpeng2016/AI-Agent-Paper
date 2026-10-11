@@ -299,9 +299,9 @@ async function submitGenerateExperimentPlanConfirm() {
 }
 
 const auditOptions = [
-  { value: 'standard', label: 'Standard' },
-  { value: 'polished', label: 'Polished（精修）' },
-  { value: 'strict', label: 'Strict' },
+  { value: 'polished', label: '基础' },
+  { value: 'standard', label: '标准' },
+  { value: 'strict', label: '严格' },
 ]
 
 const writeToneOptions = [

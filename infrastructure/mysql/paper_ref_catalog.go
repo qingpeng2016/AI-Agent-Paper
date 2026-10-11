@@ -53,24 +53,24 @@ func (r *PaperRefCatalogImpl) ListActiveDisciplines(ctx context.Context) ([]enti
 	return rows, err
 }
 
-func (r *PaperRefCatalogImpl) ListExecutionIntensities(ctx context.Context) ([]entity.PaperRefExecutionIntensity, error) {
-	var rows []entity.PaperRefExecutionIntensity
+func (r *PaperRefCatalogImpl) ListExecutionIntensities(ctx context.Context) ([]entity.PaperLLMConstraintExecIntensity, error) {
+	var rows []entity.PaperLLMConstraintExecIntensity
 	err := r.db.WithContext(ctx).
 		Order("FIELD(code, 'fast', 'balanced', 'deep'), code ASC").
 		Find(&rows).Error
 	return rows, err
 }
 
-func (r *PaperRefCatalogImpl) ListAuditLevels(ctx context.Context) ([]entity.PaperRefAuditLevel, error) {
-	var rows []entity.PaperRefAuditLevel
+func (r *PaperRefCatalogImpl) ListAuditLevels(ctx context.Context) ([]entity.PaperLLMConstraintGate, error) {
+	var rows []entity.PaperLLMConstraintGate
 	err := r.db.WithContext(ctx).
 		Order("FIELD(code, 'standard', 'polished', 'strict'), code ASC").
 		Find(&rows).Error
 	return rows, err
 }
 
-func (r *PaperRefCatalogImpl) FindExecutionIntensityByCode(ctx context.Context, code string) (*entity.PaperRefExecutionIntensity, error) {
-	var row entity.PaperRefExecutionIntensity
+func (r *PaperRefCatalogImpl) FindExecutionIntensityByCode(ctx context.Context, code string) (*entity.PaperLLMConstraintExecIntensity, error) {
+	var row entity.PaperLLMConstraintExecIntensity
 	err := r.db.WithContext(ctx).Where("code = ?", code).First(&row).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
@@ -81,9 +81,24 @@ func (r *PaperRefCatalogImpl) FindExecutionIntensityByCode(ctx context.Context, 
 	return &row, nil
 }
 
-func (r *PaperRefCatalogImpl) FindAuditLevelByCode(ctx context.Context, code string) (*entity.PaperRefAuditLevel, error) {
-	var row entity.PaperRefAuditLevel
+func (r *PaperRefCatalogImpl) FindAuditLevelByCode(ctx context.Context, code string) (*entity.PaperLLMConstraintGate, error) {
+	var row entity.PaperLLMConstraintGate
 	err := r.db.WithContext(ctx).Where("code = ?", code).First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *PaperRefCatalogImpl) FindLLMDescriptionByCode(ctx context.Context, code uint64) (*entity.PaperLLMDescription, error) {
+	if code == 0 {
+		return nil, nil
+	}
+	var row entity.PaperLLMDescription
+	err := r.db.WithContext(ctx).Where("description_code = ? AND status = ?", code, "active").First(&row).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}

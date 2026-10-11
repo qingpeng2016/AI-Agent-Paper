@@ -18,25 +18,23 @@ type TopicDiscoveryDisciplineOption struct {
 	Code   string   `json:"code"`
 	Label  string   `json:"label"`
 	NameEn string   `json:"name_en,omitempty"`
-	Sort   int      `json:"sort"`
-	Sources []string `json:"literature_source_codes,omitempty"`
+	Sort int `json:"sort"`
 }
 
 type TopicDiscoveryExecutionIntensityOption struct {
 	Code       string  `json:"code"`
 	Label      string  `json:"label"`
-	Multiplier float64 `json:"multiplier"`
+	ExecRounds uint8  `json:"exec_rounds"`
 	MaxPapers  uint    `json:"max_papers"`
 	MaxIdeas   uint    `json:"max_ideas"`
 	IsDefault  bool    `json:"is_default"`
 }
 
 type TopicDiscoveryAuditLevelOption struct {
-	Code                 string `json:"code"`
-	Label                string `json:"label"`
-	CitationStrength     uint8  `json:"citation_strength"`
-	ClaimStrength        uint8  `json:"claim_strength"`
-	KillArgumentStrength uint8  `json:"kill_argument_strength"`
-	AuditRounds          uint8  `json:"audit_rounds"`
-	IsDefault            bool   `json:"is_default"`
+	Code            string `json:"code"`
+	Label           string `json:"label"`
+	LlmDescriptionCitationCheckCode uint64 `json:"llm_description_citation_check_code"`
+	LlmDescriptionClaimCheckCode    uint64 `json:"llm_description_claim_check_code"`
+	LlmDescriptionKillCheckCode     uint64 `json:"llm_description_kill_check_code"`
+	IsDefault       bool   `json:"is_default"`
 }

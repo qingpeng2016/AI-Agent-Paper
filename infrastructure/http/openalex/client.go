@@ -22,7 +22,7 @@ type Client struct {
 	mailto  string
 }
 
-func NewClient(http *httpx.Client, sources repository.PaperRefLiteratureSourceRepo) httprepo.OpenAlexRepo {
+func NewClient(http *httpx.Client, sources repository.PaperLiteraturePlatformRepo) httprepo.OpenAlexRepo {
 	ctx := context.Background()
 	baseURL := httpx.ResolveLiteratureBaseURL(
 		ctx,

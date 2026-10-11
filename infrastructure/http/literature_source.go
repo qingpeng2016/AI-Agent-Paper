@@ -11,10 +11,10 @@ import (
 	"gorm.io/datatypes"
 )
 
-// ResolveLiteratureBaseURL 优先 paper_ref_literature_source.base_url，否则内置默认。
+// ResolveLiteratureBaseURL 优先 paper_literature_platform.base_url，否则内置默认。
 func ResolveLiteratureBaseURL(
 	ctx context.Context,
-	repo repository.PaperRefLiteratureSourceRepo,
+	repo repository.PaperLiteraturePlatformRepo,
 	code string,
 	fallback string,
 ) string {
@@ -50,7 +50,7 @@ func ConfigStringFromJSON(raw datatypes.JSON, key string) string {
 	}
 }
 
-func ResolveOpenAlexMailto(ctx context.Context, repo repository.PaperRefLiteratureSourceRepo) string {
+func ResolveOpenAlexMailto(ctx context.Context, repo repository.PaperLiteraturePlatformRepo) string {
 	const code = "openalex"
 	if repo != nil {
 		row, err := repo.FindActiveByCode(ctx, code)
@@ -63,7 +63,7 @@ func ResolveOpenAlexMailto(ctx context.Context, repo repository.PaperRefLiteratu
 	return ""
 }
 
-func ResolveSemanticScholarAPIKey(ctx context.Context, repo repository.PaperRefLiteratureSourceRepo) string {
+func ResolveSemanticScholarAPIKey(ctx context.Context, repo repository.PaperLiteraturePlatformRepo) string {
 	const code = "semantic_scholar"
 	if repo != nil {
 		row, err := repo.FindActiveByCode(ctx, code)
@@ -76,7 +76,7 @@ func ResolveSemanticScholarAPIKey(ctx context.Context, repo repository.PaperRefL
 	return strings.TrimSpace(os.Getenv("SEMANTIC_SCHOLAR_API_KEY"))
 }
 
-// Literature source codes（与 paper_ref_literature_source.code 一致）
+// Literature platform codes（与 paper_literature_platform.code 一致）
 const (
 	LiteratureSourceCodeArxiv           = "arxiv"
 	LiteratureSourceCodeOpenAlex        = "openalex"

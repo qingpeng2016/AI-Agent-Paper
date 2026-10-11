@@ -10,8 +10,9 @@ type PaperRefCatalogRepo interface {
 	ListActiveDisciplines(ctx context.Context) ([]entity.PaperRefDiscipline, error)
 	FindDisciplineByCode(ctx context.Context, code string) (*entity.PaperRefDiscipline, error)
 	FindDisciplineByID(ctx context.Context, id uint64) (*entity.PaperRefDiscipline, error)
-	ListExecutionIntensities(ctx context.Context) ([]entity.PaperRefExecutionIntensity, error)
-	ListAuditLevels(ctx context.Context) ([]entity.PaperRefAuditLevel, error)
-	FindExecutionIntensityByCode(ctx context.Context, code string) (*entity.PaperRefExecutionIntensity, error)
-	FindAuditLevelByCode(ctx context.Context, code string) (*entity.PaperRefAuditLevel, error)
+	ListExecutionIntensities(ctx context.Context) ([]entity.PaperLLMConstraintExecIntensity, error)
+	ListAuditLevels(ctx context.Context) ([]entity.PaperLLMConstraintGate, error)
+	FindExecutionIntensityByCode(ctx context.Context, code string) (*entity.PaperLLMConstraintExecIntensity, error)
+	FindAuditLevelByCode(ctx context.Context, code string) (*entity.PaperLLMConstraintGate, error)
+	FindLLMDescriptionByCode(ctx context.Context, code uint64) (*entity.PaperLLMDescription, error)
 }

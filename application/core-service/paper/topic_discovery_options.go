@@ -2,7 +2,6 @@ package paper
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/repository"
 	"github.com/qingpeng2016/ai-agent-paper/domain/rest/response"
@@ -10,12 +9,12 @@ import (
 
 type TopicDiscoveryOptionsService struct {
 	catalog   repository.PaperRefCatalogRepo
-	litSource repository.PaperRefLiteratureSourceRepo
+	litSource repository.PaperLiteraturePlatformRepo
 }
 
 func NewTopicDiscoveryOptionsService(
 	catalog repository.PaperRefCatalogRepo,
-	litSource repository.PaperRefLiteratureSourceRepo,
+	litSource repository.PaperLiteraturePlatformRepo,
 ) *TopicDiscoveryOptionsService {
 	return &TopicDiscoveryOptionsService{catalog: catalog, litSource: litSource}
 }
@@ -49,21 +48,14 @@ func (s *TopicDiscoveryOptionsService) GetFormOptions(ctx context.Context) (*res
 		if d.NameEn != nil {
 			opt.NameEn = *d.NameEn
 		}
-		if len(d.LiteratureSourceCodes) > 0 {
-			var codes []string
-			if err := json.Unmarshal(d.LiteratureSourceCodes, &codes); err == nil {
-				opt.Sources = codes
-			}
-		}
 		out.Disciplines = append(out.Disciplines, opt)
 	}
 
 	for _, i := range intensities {
-		mul, _ := i.Multiplier.Float64()
 		out.ExecutionIntents = append(out.ExecutionIntents, response.TopicDiscoveryExecutionIntensityOption{
 			Code:       i.Code,
 			Label:      i.Name,
-			Multiplier: mul,
+			ExecRounds: i.ExecRounds,
 			MaxPapers:  i.MaxPapers,
 			MaxIdeas:   i.MaxIdeas,
 			IsDefault:  i.IsDefault,
@@ -72,13 +64,12 @@ func (s *TopicDiscoveryOptionsService) GetFormOptions(ctx context.Context) (*res
 
 	for _, a := range audits {
 		out.AuditLevels = append(out.AuditLevels, response.TopicDiscoveryAuditLevelOption{
-			Code:                 a.Code,
-			Label:                a.Name,
-			CitationStrength:     a.CitationStrength,
-			ClaimStrength:        a.ClaimStrength,
-			KillArgumentStrength: a.KillArgumentStrength,
-			AuditRounds:          a.AuditRounds,
-			IsDefault:            a.IsDefault,
+			Code:            a.Code,
+			Label:           a.Name,
+			LlmDescriptionCitationCheckCode: a.LlmDescriptionCitationCheckCode,
+			LlmDescriptionClaimCheckCode:    a.LlmDescriptionClaimCheckCode,
+			LlmDescriptionKillCheckCode:     a.LlmDescriptionKillCheckCode,
+			IsDefault:       a.IsDefault,
 		})
 	}
 

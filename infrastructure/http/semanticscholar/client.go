@@ -22,7 +22,7 @@ type Client struct {
 	apiKey  string
 }
 
-func NewClient(http *httpx.Client, sources repository.PaperRefLiteratureSourceRepo) httprepo.SemanticScholarRepo {
+func NewClient(http *httpx.Client, sources repository.PaperLiteraturePlatformRepo) httprepo.SemanticScholarRepo {
 	ctx := context.Background()
 	baseURL := httpx.ResolveLiteratureBaseURL(
 		ctx,

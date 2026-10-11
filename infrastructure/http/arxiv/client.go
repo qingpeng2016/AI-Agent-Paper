@@ -25,7 +25,7 @@ type Client struct {
 	baseURL string
 }
 
-func NewClient(http *httpx.Client, sources repository.PaperRefLiteratureSourceRepo) httprepo.ArxivRepo {
+func NewClient(http *httpx.Client, sources repository.PaperLiteraturePlatformRepo) httprepo.ArxivRepo {
 	baseURL := httpx.ResolveLiteratureBaseURL(
 		context.Background(),
 		sources,

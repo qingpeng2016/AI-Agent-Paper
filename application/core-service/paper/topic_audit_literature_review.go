@@ -49,7 +49,7 @@ func (s *TopicDiscoveryRunService) RunAuditAndLiteratureReviewLLM(
 		return fmt.Errorf("generate_ideas 未完成")
 	}
 
-	rounds := input.AuditRounds
+	rounds := input.ExecRounds
 	if rounds < 1 {
 		rounds = 1
 	}

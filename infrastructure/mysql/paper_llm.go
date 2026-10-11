@@ -31,11 +31,27 @@ func (r *PaperLLMImpl) GetActiveModelByID(ctx context.Context, id uint) (*entity
 	return &row, nil
 }
 
-func (r *PaperLLMImpl) GetActiveBindingByStage(ctx context.Context, stageCode string) (*entity.PaperLLMWorkflowBinding, error) {
-	var row entity.PaperLLMWorkflowBinding
+func (r *PaperLLMImpl) ResolveActiveModel(ctx context.Context, configID uint) (*entity.PaperLLMModelConfig, error) {
+	if configID > 0 {
+		row, err := r.GetActiveModelByID(ctx, configID)
+		if err != nil {
+			return nil, err
+		}
+		if row != nil {
+			return row, nil
+		}
+	}
+	var row entity.PaperLLMModelConfig
 	err := r.db.WithContext(ctx).
-		Where("stage_code = ? AND status = ?", stageCode, "active").
+		Where("status = ? AND provider_code = ?", "active", "anthropic").
+		Order("id DESC").
 		First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		err = r.db.WithContext(ctx).
+			Where("status = ?", "active").
+			Order("id DESC").
+			First(&row).Error
+	}
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}
@@ -48,6 +64,7 @@ func (r *PaperLLMImpl) GetActiveBindingByStage(ctx context.Context, stageCode st
 func (r *PaperLLMImpl) GetActivePromptByStage(ctx context.Context, stageCode string) (*entity.PaperLLMPromptTemplate, error) {
 	var row entity.PaperLLMPromptTemplate
 	err := r.db.WithContext(ctx).
+		Preload("Description", "status = ? AND description_code > ?", "active", 0).
 		Where("stage_code = ? AND status = ?", stageCode, "active").
 		First(&row).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {

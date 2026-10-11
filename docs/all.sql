@@ -11,15 +11,14 @@
 -- | 类型       | 表名 |
 -- |------------|------|
 -- | ref        | paper_ref_* |
--- | template   | paper_template_document（阶段文档 JSON 提纲） |
--- |            | paper_template_venue（venue 约束：贡献/实验/写作；user_id/venue_id=0 为系统默认） |
--- | manuscript | paper_manuscript（我的论文）, paper_manuscript_runtime, |
--- |            | paper_manuscript_citation_gate, paper_manuscript_review |
+-- | template   | paper_llm_template_topic（选题环节平台话术） |
+-- |            | paper_ref_venue（含 llm_description_codes）；约束文案见 paper_llm_description |
+-- | manuscript | paper_manuscript（我的论文） |
 -- | output     | paper_output_*（各模块业务产出，均含 manuscript_id） |
 -- | user       | paper_user_preference, paper_user_literature |
--- | model      | paper_llm_model_config, paper_llm_workflow_binding, paper_template_llm_prompt |
+-- | model      | paper_llm_model_config, paper_llm_template_topic, |
+-- |            | paper_llm_description, paper_llm_constraint_gate, paper_llm_constraint_exec_intensity |
 -- | llm        | paper_llm_call_logs |
--- | audit      | paper_operation_log |
 -- 业务表均含 manuscript_id → paper_manuscript.id（逻辑外键，不设 DB FK）
 
 SET NAMES utf8mb4;
@@ -250,7 +249,6 @@ CREATE TABLE IF NOT EXISTS `paper_ref_discipline` (
   `name`        VARCHAR(128) NOT NULL COMMENT '展示名',
   `name_en`     VARCHAR(128) DEFAULT NULL COMMENT '英文名',
   `sort`        INT          NOT NULL DEFAULT 0 COMMENT '排序权重',
-  `literature_source_codes` JSON         NOT NULL DEFAULT (JSON_ARRAY()) COMMENT '该学科推荐文献源 paper_ref_literature_source.code 列表，顺序即 UI 默认',
   `status`      VARCHAR(16)  NOT NULL DEFAULT 'active' COMMENT 'active|hidden',
   `created_at`  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at`  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
@@ -260,58 +258,21 @@ CREATE TABLE IF NOT EXISTS `paper_ref_discipline` (
 
 CREATE TABLE IF NOT EXISTS `paper_ref_venue` (
   `id`              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'venue ID',
-  `code`            VARCHAR(64)  NOT NULL COMMENT 'venue 键，如 neurips|iclr|nature|ssci_q1',
-  `name`            VARCHAR(256) NOT NULL COMMENT 'NeurIPS 2026 / Nature 等',
+  `code`            VARCHAR(64)  NOT NULL COMMENT 'venue 键，如 neurips|iclr|nature',
+  `name`            VARCHAR(256) NOT NULL COMMENT 'NeurIPS / Nature 等',
   `venue_type`      VARCHAR(16)  NOT NULL COMMENT 'conference|journal|workshop|other',
-  `discipline_id`   BIGINT UNSIGNED DEFAULT NULL COMMENT 'NULL=跨学科通用',
+  `llm_description_codes` JSON NOT NULL DEFAULT (JSON_ARRAY(20000, 20001, 20002)) COMMENT 'paper_llm_description.description_code 列表（如 constraint_venue 2xxxx）',
   `publisher`       VARCHAR(128) DEFAULT NULL COMMENT '出版方',
   `website_url`     VARCHAR(512) DEFAULT NULL COMMENT '官网',
-  `rubric`          JSON         NOT NULL COMMENT 'venue 规则：contribution_types|experiment_bar|writing_style 等 prompt/结构化约束',
   `status`          VARCHAR(16)  NOT NULL DEFAULT 'active' COMMENT 'active|hidden',
   `created_at`      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at`      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_paper_ref_venue_code` (`code`),
-  KEY `idx_paper_ref_venue_discipline` (`discipline_id`, `status`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='目标会议/期刊';
+  UNIQUE KEY `uk_paper_ref_venue_code` (`code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='目标会议/期刊（具体可选）';
 
-CREATE TABLE IF NOT EXISTS `paper_template_document` (
-  `id`                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '模板 ID',
-  `user_id`           BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0=系统；>0=用户自定义（上传/编辑）',
-  `venue_id`          BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0=默认通用；>0=paper_ref_venue.id',
-  `stage_code`        VARCHAR(64)  NOT NULL COMMENT '环节键：generate_ideas（含 novelty）|audit|experiment_plan|…',
-  `name`                VARCHAR(128) NOT NULL COMMENT '模板展示名',
-  `outline_template_zh` JSON         NOT NULL COMMENT '中文文档 JSON 提纲',
-  `outline_template_en` JSON         NOT NULL COMMENT '英文文档 JSON 提纲',
-  `storage_uri`         VARCHAR(1024) DEFAULT NULL COMMENT '用户上传源文件相对 storage/ 路径（可选）',
-  `source`            VARCHAR(16)  NOT NULL DEFAULT 'system' COMMENT 'system|upload|edit',
-  `status`            VARCHAR(16)  NOT NULL DEFAULT 'active' COMMENT 'active|disabled|deleted',
-  `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  `updated_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_paper_template_document_scope` (`user_id`, `venue_id`, `stage_code`),
-  KEY `idx_paper_template_document_lookup` (`stage_code`, `venue_id`, `user_id`, `status`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='各阶段文档 JSON 提纲模板（中英）';
-
-CREATE TABLE IF NOT EXISTS `paper_template_venue` (
-  `id`                    BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '模板 ID',
-  `user_id`               BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0=系统；>0=用户自定义（上传/编辑）',
-  `venue_id`              BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0=默认通用；>0=paper_ref_venue.id',
-  `name`                  VARCHAR(128) NOT NULL COMMENT '模板展示名',
-  `constraint_template_zh` JSON       NOT NULL COMMENT '中文 venue 约束 JSON',
-  `constraint_template_en` JSON       NOT NULL COMMENT '英文 venue 约束 JSON',
-  `storage_uri`           VARCHAR(1024) DEFAULT NULL COMMENT '用户上传源文件相对 storage/ 路径（可选）',
-  `source`              VARCHAR(16)  NOT NULL DEFAULT 'system' COMMENT 'system|upload|edit',
-  `status`              VARCHAR(16)  NOT NULL DEFAULT 'active' COMMENT 'active|disabled|deleted',
-  `created_at`          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  `updated_at`          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_paper_template_venue_scope` (`user_id`, `venue_id`),
-  KEY `idx_paper_template_venue_lookup` (`venue_id`, `user_id`, `status`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='venue 约束模板（中英）';
-
-CREATE TABLE IF NOT EXISTS `paper_ref_literature_source` (
-  `id`              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '数据源 ID',
+CREATE TABLE IF NOT EXISTS `paper_literature_platform` (
+  `id`              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '平台 ID',
   `code`            VARCHAR(64)  NOT NULL COMMENT 'arxiv|openalex|semantic_scholar|pubmed|crossref|cnki|…',
   `name`            VARCHAR(128) NOT NULL COMMENT '展示名',
   `api_kind`        VARCHAR(32)  NOT NULL COMMENT 'rest|oai|custom',
@@ -326,30 +287,29 @@ CREATE TABLE IF NOT EXISTS `paper_ref_literature_source` (
   `created_at`      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at`      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_paper_ref_literature_source_code` (`code`),
-  KEY `idx_paper_ref_literature_source_active_priority` (`status`, `priority`, `id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文献/API 数据源';
+  UNIQUE KEY `uk_paper_literature_platform_code` (`code`),
+  KEY `idx_paper_literature_platform_active_priority` (`status`, `priority`, `id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文献检索平台（API 配置）';
 
-CREATE TABLE IF NOT EXISTS `paper_ref_execution_intensity` (
+CREATE TABLE IF NOT EXISTS `paper_llm_constraint_exec_intensity` (
   `code`         VARCHAR(16)  NOT NULL COMMENT '档位键 fast|balanced|deep',
   `name`         VARCHAR(64)  NOT NULL COMMENT '展示名',
-  `multiplier`   DECIMAL(4,2) NOT NULL DEFAULT 1.00 COMMENT '相对检索量/迭代轮数系数',
+  `exec_rounds`  TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '审计迭代轮数',
   `max_papers`   INT UNSIGNED NOT NULL DEFAULT 80 COMMENT '检索文献上限（选题/综述等）',
   `max_ideas`    INT UNSIGNED NOT NULL DEFAULT 12 COMMENT '选题候选 idea 上限',
   `is_default`   TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '前端默认选中项，仅一条应为 1',
   PRIMARY KEY (`code`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='执行强度档位';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='LLM 约束·执行强度档位';
 
-CREATE TABLE IF NOT EXISTS `paper_ref_audit_level` (
-  `code`                   VARCHAR(16)  NOT NULL COMMENT '档位键 standard|polished|strict',
-  `name`                   VARCHAR(64)  NOT NULL COMMENT '展示名',
-  `citation_strength`      TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '0=关,1-3=引用审计强度',
-  `claim_strength`         TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '0=关,1-3=论断审计强度',
-  `kill_argument_strength` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0=关,1-3=驳论审计强度',
-  `audit_rounds`           TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '审计迭代轮数',
-  `is_default`             TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '前端默认选中项，仅一条应为 1',
+CREATE TABLE IF NOT EXISTS `paper_llm_constraint_gate` (
+  `code`               VARCHAR(16)  NOT NULL COMMENT '档位键 standard|polished|strict',
+  `name`               VARCHAR(64)  NOT NULL COMMENT '展示名',
+  `llm_description_citation_check_code` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'paper_llm_description.description_code；0=关引用门禁',
+  `llm_description_claim_check_code`    BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'paper_llm_description.description_code；0=关论断门禁',
+  `llm_description_kill_check_code`     BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'paper_llm_description.description_code；0=关驳论门禁',
+  `is_default`         TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '前端默认选中项，仅一条应为 1',
   PRIMARY KEY (`code`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='审计等级';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='LLM 约束·三门禁档位（直链 paper_llm_description）';
 
 -- ---------------------------------------------------------------------------
 -- 2. 稿件线与用户默认（工作台「当前论文」= paper_manuscript）
@@ -364,9 +324,9 @@ CREATE TABLE IF NOT EXISTS `paper_manuscript` (
   `deadline_at`       DATETIME     DEFAULT NULL COMMENT '截止日期',
   `target_words`      INT UNSIGNED DEFAULT NULL COMMENT '目标字数',
   `citation_style`    VARCHAR(64)  DEFAULT NULL COMMENT 'apa|ieee|acm|…',
-  `discipline_id`     BIGINT UNSIGNED DEFAULT NULL COMMENT '默认学科 ID',
+  `discipline_id`     BIGINT UNSIGNED DEFAULT NULL COMMENT '学科 ID',
+  `venue_ids`         JSON         DEFAULT NULL COMMENT 'paper_ref_venue.id 数组，多选期刊/会议',
   `content_language`  VARCHAR(8)   NOT NULL DEFAULT 'en' COMMENT 'zh|en：与 AI 沟通及产出文本语言',
-  `default_venue_id`  BIGINT UNSIGNED DEFAULT NULL COMMENT '默认 venue ID',
   `reference_gate_enabled` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '参考文献门禁',
   `workspace_uri`     VARCHAR(512) DEFAULT NULL COMMENT '平台 provision 的工作区根路径',
   `forked_from_manuscript_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '从另一篇论文 fork 时链接',
@@ -389,7 +349,7 @@ CREATE TABLE IF NOT EXISTS `paper_user_preference` (
   `default_discipline_id`     BIGINT UNSIGNED DEFAULT NULL COMMENT '默认学科 ID',
   `default_venue_id`          BIGINT UNSIGNED DEFAULT NULL COMMENT '默认 venue ID',
   `default_intensity_code`    VARCHAR(16)  NOT NULL DEFAULT 'balanced' COMMENT '默认执行强度',
-  `default_audit_level_code`  VARCHAR(16)  NOT NULL DEFAULT 'polished' COMMENT '默认审计等级',
+  `default_audit_level_code`  VARCHAR(16)  NOT NULL DEFAULT 'standard' COMMENT '默认审计等级',
   `default_human_checkpoint`  TINYINT(1)   NOT NULL DEFAULT 1 COMMENT '默认开启人工检查点',
   `default_literature_source_ids` JSON     DEFAULT NULL COMMENT '默认文献源 id 数组',
   `updated_at`                DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
@@ -421,74 +381,44 @@ CREATE TABLE IF NOT EXISTS `paper_llm_model_config` (
   KEY `idx_paper_llm_model_cfg_provider` (`provider_code`, `model_name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='平台 LLM 端点配置（Key/Host/模型名）';
 
-CREATE TABLE IF NOT EXISTS `paper_llm_workflow_binding` (
-  `id`                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '绑定 ID',
-  `stage_code`        VARCHAR(64)  NOT NULL DEFAULT 'default' COMMENT '环节键：default|retrieve|…（与 prompt 表同键；由代码约定）',
-  `stage_name`        VARCHAR(128) NOT NULL COMMENT '环节中文名（运营/排查）',
-  `model_config_id`   BIGINT UNSIGNED NOT NULL COMMENT 'paper_llm_model_config.id',
-  `status`            VARCHAR(16)  NOT NULL DEFAULT 'active' COMMENT 'active|disabled',
-  `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  `updated_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_paper_llm_bind_stage` (`stage_code`),
-  KEY `idx_paper_llm_bind_model` (`model_config_id`),
-  KEY `idx_paper_llm_bind_status` (`status`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='平台：stage_code → model_config';
-
-CREATE TABLE IF NOT EXISTS `paper_template_llm_prompt` (
+CREATE TABLE IF NOT EXISTS `paper_llm_template_topic` (
   `id`                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '模板 ID',
   `stage_code`        VARCHAR(64)  NOT NULL DEFAULT 'default' COMMENT '环节键：default|retrieve|generate_ideas|…（由代码约定）',
   `stage_name`        VARCHAR(128) NOT NULL COMMENT '环节中文名（运营/排查）',
-  `template_body_zh`  MEDIUMTEXT   NOT NULL COMMENT '中文话术；占位符 {{var_name}}',
-  `template_body_en`  MEDIUMTEXT   NOT NULL COMMENT '英文话术；占位符 {{var_name}}',
+  `llm_description_code` BIGINT UNSIGNED NOT NULL COMMENT 'paper_llm_description.description_code（template_topic 段 30000+）',
   `status`            VARCHAR(16)  NOT NULL DEFAULT 'active' COMMENT 'active|disabled',
   `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_paper_template_llm_prompt_stage` (`stage_code`),
-  KEY `idx_paper_template_llm_prompt_status` (`status`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='平台话术（按 stage_code）';
+  UNIQUE KEY `uk_paper_llm_template_topic_stage` (`stage_code`),
+  KEY `idx_paper_llm_template_topic_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='选题环节 stage→description；模型见 description.model_config_id';
 
-CREATE TABLE IF NOT EXISTS `paper_manuscript_runtime` (
-  `id`                    BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '运行时配置 ID',
-  `manuscript_id`         BIGINT UNSIGNED NOT NULL COMMENT '论文 ID',
-  `label`                 VARCHAR(128) NOT NULL DEFAULT 'default' COMMENT '配置标签',
-  `literature_credentials` JSON        DEFAULT NULL COMMENT 'source_id -> 密钥密文/引用 id',
-  `literature_source_ids` JSON        NOT NULL COMMENT '本稿件启用的 source id 列表',
-  `gpu_profile`           JSON         DEFAULT NULL COMMENT 'SSH/集群/本地',
-  `wiki_uri`              VARCHAR(512) DEFAULT NULL COMMENT 'Research Wiki 路径',
-  `is_active`             TINYINT(1)   NOT NULL DEFAULT 1 COMMENT '是否当前生效',
-  `created_at`            DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  `updated_at`            DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+CREATE TABLE IF NOT EXISTS `paper_llm_description` (
+  `id`                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '内部主键',
+  `description_code`  BIGINT UNSIGNED NOT NULL COMMENT '业务键：1xxxx=constraint_gate 2xxxx=constraint_venue 3xxxx=template_topic（每类 10000 段）',
+  `model_config_id`   BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0=全模型默认；非 0=paper_llm_model_config.id',
+  `prompt_code`       VARCHAR(64)  NOT NULL COMMENT 'constraint_gate|constraint_venue|template_topic',
+  `prompt_type`       VARCHAR(128) NOT NULL COMMENT '展示用分类名',
+  `prompt_name`       VARCHAR(256) NOT NULL DEFAULT '' COMMENT '运营展示名',
+  `llm_desc_zh`       MEDIUMTEXT   NOT NULL COMMENT '注入 LLM 的中文正文；支持 {{var}}',
+  `llm_desc_en`       MEDIUMTEXT   NOT NULL COMMENT '注入 LLM 的英文正文；支持 {{var}}',
+  `status`            VARCHAR(16)  NOT NULL DEFAULT 'active' COMMENT 'active|disabled',
+  `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
-  KEY `idx_paper_manuscript_runtime_ms` (`manuscript_id`, `is_active`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='稿件平台运行时绑定（内部）';
+  UNIQUE KEY `uk_paper_llm_description_code` (`description_code`),
+  UNIQUE KEY `uk_paper_llm_description_scope` (`model_config_id`, `prompt_code`, `prompt_name`),
+  KEY `idx_paper_llm_description_status` (`status`),
+  KEY `idx_paper_llm_description_model` (`model_config_id`),
+  KEY `idx_paper_llm_description_prompt_code` (`prompt_code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='LLM 输入文案';
 
 -- ---------------------------------------------------------------------------
--- 4. 引用门禁（选题检索命中文献见 paper_output_topic_step retrieve 步 result）
+-- 4. 各模块业务产出 paper_output_*（均关联 paper_manuscript.id；retrieve 步 result 承载文献命中）
 -- ---------------------------------------------------------------------------
 
-CREATE TABLE IF NOT EXISTS `paper_manuscript_citation_gate` (
-  `id`                  BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '门禁记录 ID',
-  `manuscript_id`       BIGINT UNSIGNED NOT NULL COMMENT 'paper_manuscript.id',
-  `stage_code`          VARCHAR(64)  DEFAULT NULL COMMENT '校验发生时的环节键',
-  `target_id`           BIGINT UNSIGNED DEFAULT NULL COMMENT '如 paper_manuscript.id 或其它 paper_output_*',
-  `source_id`           BIGINT UNSIGNED DEFAULT NULL COMMENT '门禁关联文献源',
-  `external_key`        VARCHAR(256) DEFAULT NULL COMMENT '文献外部键 arxiv:… / doi:…（与 retrieve 步 result 内 hits 一致）',
-  `cited_key`           VARCHAR(256) DEFAULT NULL COMMENT '正文中的 cite key',
-  `gate_type`           VARCHAR(32)  NOT NULL COMMENT '门禁类型：引用/引用审计/论断审计/驳论',
-  `status`              VARCHAR(16)  NOT NULL COMMENT 'verified|rejected|pending|waived',
-  `detail`              JSON         DEFAULT NULL COMMENT '校验详情 JSON',
-  `created_at`          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '记录时间',
-  PRIMARY KEY (`id`),
-  KEY `idx_paper_ms_citation_gate_ms` (`manuscript_id`, `gate_type`, `status`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='本篇引用文献与审计校验记录（参考文献门禁台账）';
-
--- ---------------------------------------------------------------------------
--- 5. 各模块业务产出 paper_output_*（均关联 paper_manuscript.id）
--- ---------------------------------------------------------------------------
-
--- 选题发现：一轮 run 固定四步，每步一行（stage_code 见 paper_llm_workflow_binding）
+-- 选题发现：一轮 run 固定四步，每步一行（stage_code 与 paper_llm_template_topic 同键）
 CREATE TABLE IF NOT EXISTS `paper_output_topic_step` (
   `id`                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '记录 ID',
   `manuscript_id`     BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '论文 ID；选题未确认综述前为 0，确认后反填',
@@ -557,27 +487,6 @@ CREATE TABLE IF NOT EXISTS `paper_output_experiment_plan` (
   KEY `idx_paper_output_exp_plan_ms` (`manuscript_id`, `is_current`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='实验规划';
 
-CREATE TABLE IF NOT EXISTS `paper_manuscript_review` (
-  `id`                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '论文审查 ID',
-  `manuscript_id`     BIGINT UNSIGNED NOT NULL COMMENT 'paper_manuscript.id',
-  `user_id`           BIGINT UNSIGNED NOT NULL COMMENT '用户 ID',
-  `version`           INT          NOT NULL DEFAULT 1 COMMENT '版本号',
-  `is_current`        TINYINT(1)   NOT NULL DEFAULT 1 COMMENT '是否当前版本',
-  `status`            VARCHAR(16)  NOT NULL DEFAULT 'completed' COMMENT 'draft|completed',
-  `title`             VARCHAR(256) DEFAULT NULL COMMENT '标题',
-  `summary`           TEXT         DEFAULT NULL COMMENT '摘要',
-  `content_medium`    MEDIUMTEXT   DEFAULT NULL COMMENT '论文审查报告',
-  `storage_uri`       VARCHAR(1024) DEFAULT NULL COMMENT '报告文件路径',
-  `format`            VARCHAR(16)  NOT NULL DEFAULT 'md' COMMENT 'md|tex 等',
-  `findings`          JSON         DEFAULT NULL COMMENT '分维度审稿意见',
-  `input_params`      JSON         DEFAULT NULL COMMENT '生成参数快照',
-  `meta`              JSON         DEFAULT NULL COMMENT '扩展元数据',
-  `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  `updated_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  PRIMARY KEY (`id`),
-  KEY `idx_paper_ms_review_ms` (`manuscript_id`, `is_current`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='论文审查（manuscript_analysis 模块产出）';
-
 CREATE TABLE IF NOT EXISTS `paper_output_figure` (
   `id`                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '图表 ID',
   `manuscript_id`     BIGINT UNSIGNED NOT NULL COMMENT '论文 ID',
@@ -605,10 +514,9 @@ CREATE TABLE IF NOT EXISTS `paper_output_figure` (
 CREATE TABLE IF NOT EXISTS `paper_llm_call_logs` (
   `id`              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '日志 ID',
   `manuscript_id`   BIGINT UNSIGNED NOT NULL COMMENT 'paper_manuscript.id',
-  `stage_code`      VARCHAR(64)  DEFAULT NULL COMMENT '环节键（与 binding/prompt 同 stage_code）',
+  `stage_code`      VARCHAR(64)  DEFAULT NULL COMMENT '环节键（与 paper_llm_template_topic.stage_code 一致）',
   `model_config_id` BIGINT UNSIGNED DEFAULT NULL COMMENT 'paper_llm_model_config.id',
-  `workflow_binding_id` BIGINT UNSIGNED DEFAULT NULL COMMENT 'paper_llm_workflow_binding.id',
-  `prompt_template_id` BIGINT UNSIGNED DEFAULT NULL COMMENT 'paper_template_llm_prompt.id',
+  `prompt_template_id` BIGINT UNSIGNED DEFAULT NULL COMMENT 'paper_llm_template_topic.id',
   `model_name`      VARCHAR(128) NOT NULL COMMENT '模型名快照',
   `prompt_tokens`   INT          DEFAULT NULL COMMENT '输入 token',
   `completion_tokens` INT        DEFAULT NULL COMMENT '输出 token',
@@ -641,25 +549,6 @@ CREATE TABLE IF NOT EXISTS `paper_user_literature` (
   KEY `idx_paper_user_lit_ms` (`manuscript_id`, `status`),
   KEY `idx_paper_user_lit_user` (`user_id`, `created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户上传文献（上传文献模块 / 参考文献门禁语料）';
-
-CREATE TABLE IF NOT EXISTS `paper_operation_log` (
-  `id`                 BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '日志 ID',
-  `user_id`            BIGINT UNSIGNED NOT NULL COMMENT '用户 ID',
-  `manuscript_id`      BIGINT UNSIGNED DEFAULT NULL COMMENT '论文 ID',
-  `manuscript_title`   VARCHAR(256) DEFAULT NULL COMMENT '论文标题快照',
-  `stage_code`         VARCHAR(64)  NOT NULL DEFAULT 'default' COMMENT '环节键（展示名见 action / note）',
-  `action`             VARCHAR(512) NOT NULL COMMENT '操作描述',
-  `tokens_prompt`      INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '输入 token',
-  `tokens_completion`  INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '输出 token',
-  `tokens_total`       INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '总 token',
-  `status`             VARCHAR(16)  NOT NULL COMMENT 'success|failed|cancelled',
-  `note`               TEXT         DEFAULT NULL COMMENT '备注',
-  `occurred_at`        DATETIME     NOT NULL COMMENT '业务发生时间',
-  `created_at`         DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '入库时间',
-  PRIMARY KEY (`id`),
-  KEY `idx_paper_oplog_user` (`user_id`, `occurred_at`),
-  KEY `idx_paper_oplog_ms` (`manuscript_id`, `occurred_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Paper Agent 操作与 Token 消耗日志';
 
 -- ---------------------------------------------------------------------------
 -- 9. 种子数据 — 平台（VIP、优惠券、Bot）
@@ -763,282 +652,323 @@ ON DUPLICATE KEY UPDATE
 -- 10. 种子数据 — Paper（强度、审计、学科、venue、文献源）
 -- ---------------------------------------------------------------------------
 
-INSERT INTO `paper_ref_execution_intensity` (`code`, `name`, `multiplier`, `max_papers`, `max_ideas`, `is_default`) VALUES
-  ('fast',     '更快', 0.60, 30,  6, 0),
-  ('balanced', 'Balanced（平衡）', 1.00, 80,  12, 1),
-  ('deep',     '更深', 1.80, 200, 20, 0)
+INSERT INTO `paper_llm_constraint_exec_intensity` (`code`, `name`, `exec_rounds`, `max_papers`, `max_ideas`, `is_default`) VALUES
+  ('fast',     '更快', 1, 30,  6, 0),
+  ('balanced', 'Balanced（平衡）', 2, 80,  12, 1),
+  ('deep',     '更深', 3, 200, 20, 0)
 ON DUPLICATE KEY UPDATE
   `name` = VALUES(`name`),
-  `multiplier` = VALUES(`multiplier`),
+  `exec_rounds` = VALUES(`exec_rounds`),
   `max_papers` = VALUES(`max_papers`),
   `max_ideas` = VALUES(`max_ideas`),
   `is_default` = VALUES(`is_default`);
 
-INSERT INTO `paper_ref_audit_level` (
-  `code`, `name`, `citation_strength`, `claim_strength`, `kill_argument_strength`, `audit_rounds`, `is_default`
+INSERT INTO `paper_llm_description` (`description_code`, `model_config_id`, `prompt_code`, `prompt_type`, `prompt_name`, `llm_desc_zh`, `llm_desc_en`) VALUES
+(10000, 1, 'constraint_gate', '门禁约束', '引用门禁·基础',
+ '引用门禁（基础）：ref_id/reference_keys/citations 须对应 verified Corpus；禁止编造文献；无法溯源则 blocker。',
+ 'Citation (basic): refs must map to verified Corpus; no fabrication; missing traceability is blocker.'),
+(10001, 1, 'constraint_gate', '门禁约束', '引用门禁·标准',
+ '引用门禁（标准）：含基础项；literature_review 关键句须有 citations；idea reference_keys 须完整合理；orphan ref 为 major。',
+ 'Citation (standard): includes basic; review claims need citations; idea keys complete; orphan refs major.'),
+(10002, 1, 'constraint_gate', '门禁约束', '引用门禁·严格',
+ '引用门禁（严格）：含标准项；逐段抽查综述与 idea 引用是否充分、是否 over-cite 无关文献。',
+ 'Citation (strict): includes standard; section-level citation adequacy review.'),
+(10003, 1, 'constraint_gate', '门禁约束', '论断门禁·基础',
+ '论断门禁（基础）：贡献须可被 Corpus 支撑；禁止无证据的 SOTA/首创表述。',
+ 'Claim (basic): contributions supportable; no unsupported SOTA/first claims.'),
+(10004, 1, 'constraint_gate', '门禁约束', '论断门禁·标准',
+ '论断门禁（标准）：含基础；SOTA 须点明基线/指标；contribution 符合 venue allowed 类型；实验计划与核心 claim 对齐（无计划且需实验为 major）。',
+ 'Claim (standard): baselines for SOTA; venue contribution types; plan aligns with claims.'),
+(10005, 1, 'constraint_gate', '门禁约束', '论断门禁·严格',
+ '论断门禁（严格）：含标准；禁止因果夸大；empirical 须含可复现性要点；缺则为 major。',
+ 'Claim (strict): no causal overreach; reproducibility hints required for empirical claims.'),
+(10006, 1, 'constraint_gate', '门禁约束', '驳论门禁·基础',
+ '驳论门禁（基础）：venue 明显不匹配则 blocker；列出拒稿式理由。',
+ 'Kill (basic): clear venue misfit is blocker.'),
+(10007, 1, 'constraint_gate', '门禁约束', '驳论门禁·标准',
+ '驳论门禁（标准）：含基础；致命 flaw、与 Corpus 矛盾且未讨论、假新颖为 blocker/major。',
+ 'Kill (standard): fatal flaws, contradictions, false novelty.'),
+(10008, 1, 'constraint_gate', '门禁约束', '驳论门禁·严格',
+ '驳论门禁（严格）：含标准；实验/数据不可行、不可复现为 major/blocker。',
+ 'Kill (strict): infeasible or non-reproducible experiments.')
+ON DUPLICATE KEY UPDATE
+  `model_config_id` = VALUES(`model_config_id`),
+  `prompt_code` = VALUES(`prompt_code`),
+  `prompt_type` = VALUES(`prompt_type`),
+  `prompt_name` = VALUES(`prompt_name`),
+  `llm_desc_zh` = VALUES(`llm_desc_zh`), `llm_desc_en` = VALUES(`llm_desc_en`);
+
+INSERT INTO `paper_llm_constraint_gate` (
+  `code`, `name`, `llm_description_citation_check_code`, `llm_description_claim_check_code`, `llm_description_kill_check_code`, `is_default`
 ) VALUES
-  ('standard', '标准', 1, 1, 0, 1, 0),
-  ('polished', '精修', 2, 2, 1, 2, 1),
-  ('strict',   '严格', 3, 3, 2, 3, 0)
+  ('polished', '基础', 10000, 10003, 10006, 0),
+  ('standard', '标准', 10001, 10004, 10007, 1),
+  ('strict',   '严格', 10002, 10005, 10008, 0)
 ON DUPLICATE KEY UPDATE
   `name` = VALUES(`name`),
-  `citation_strength` = VALUES(`citation_strength`),
-  `claim_strength` = VALUES(`claim_strength`),
-  `kill_argument_strength` = VALUES(`kill_argument_strength`),
-  `audit_rounds` = VALUES(`audit_rounds`),
+  `llm_description_citation_check_code` = VALUES(`llm_description_citation_check_code`),
+  `llm_description_claim_check_code` = VALUES(`llm_description_claim_check_code`),
+  `llm_description_kill_check_code` = VALUES(`llm_description_kill_check_code`),
   `is_default` = VALUES(`is_default`);
 
-INSERT INTO `paper_ref_discipline` (`code`, `name`, `name_en`, `sort`, `literature_source_codes`) VALUES
-  ('cs_ai', '计算机/人工智能', 'Computer Science & AI', 10,
-   JSON_ARRAY('arxiv', 'openalex', 'semantic_scholar')),
-  ('general', '跨学科通用', 'General', 0, JSON_ARRAY('openalex', 'crossref'))
+INSERT INTO `paper_llm_description` (`description_code`, `model_config_id`, `prompt_code`, `prompt_type`, `prompt_name`, `llm_desc_zh`, `llm_desc_en`) VALUES
+(20000, 1, 'constraint_venue', '期刊会议约束', '通用·贡献类型',
+ '每条 idea 的 contribution 须明确属于 allowed 之一，并与方向一致；勿混合未声明的类型。',
+ 'Each idea contribution must map to one allowed type and match the direction.'),
+(20001, 1, 'constraint_venue', '期刊会议约束', '通用·实验标准',
+ '实验方案须写清基线、指标与主结论所依赖的证据；勿夸大未设计的实验。',
+ 'Plan must tie claims to evidence; do not invent unplanned experiments.'),
+(20002, 1, 'constraint_venue', '期刊会议约束', '通用·写作风格',
+ '中文表述准确、克制；避免营销式用语；引用须对应 Corpus ref_id。',
+ 'Precise, restrained English; citations must use Corpus ref_id.'),
+(20003, 1, 'constraint_venue', '期刊会议约束', 'ML顶会·贡献类型',
+ '贡献须能在 8 页主会体量内讲清；method/theory/empirical 择主、可辅，勿堆叠无关贡献。',
+ 'Fit a ~8-page main-track claim; one primary contribution type, avoid unrelated stacking.'),
+(20004, 1, 'constraint_venue', '期刊会议约束', 'ML顶会·实验标准',
+ '缺基线须在 audit issues 标 major。',
+ 'Missing baselines should be audit major issues.'),
+(20005, 1, 'constraint_venue', '期刊会议约束', 'ML顶会·写作风格',
+ 'Related Work 聚焦差异；Experiments 先主结果后消融；claim 与表格/图一致。',
+ 'Related work: contrast; experiments: main results then ablations; claims match tables/figures.')
+ON DUPLICATE KEY UPDATE
+  `model_config_id` = VALUES(`model_config_id`),
+  `prompt_code` = VALUES(`prompt_code`),
+  `prompt_type` = VALUES(`prompt_type`),
+  `prompt_name` = VALUES(`prompt_name`),
+  `llm_desc_zh` = VALUES(`llm_desc_zh`), `llm_desc_en` = VALUES(`llm_desc_en`);
+
+INSERT INTO `paper_llm_description` (`description_code`, `model_config_id`, `prompt_code`, `prompt_type`, `prompt_name`, `llm_desc_zh`, `llm_desc_en`) VALUES
+(30000, 0, 'template_topic', '选题环节话术', 'default',
+ '你是 Paper Agent 平台的学术科研助手。只根据用户消息中给出的文献与前置步骤结果作答，不得编造未出现的来源或实验。{{output_language_rule}} 若要求 JSON，严格遵守用户消息中的 schema。',
+ 'You are an academic research assistant for the Paper Agent platform. Answer only from literature and prior-step results in the user message; do not fabricate sources or experiments. {{output_language_rule}} When JSON is required, follow the schema in the user message.'),
+(30001, 0, 'template_topic', '选题环节话术', 'generate_ideas',
+ '环节：脑暴 + 新颖性（与 novelty 同一次模型调用完成）。最多 {{max_ideas}} 条 idea；仅依据用户消息 Corpus 与 CorpusFiles；输出 JSON 含 ideas 与 novelty（lines/risks/synthesis），以用户消息 schema 为准。{{output_language_rule}}',
+ 'Stage: brainstorming + novelty in one call. At most {{max_ideas}} ideas; use only Corpus and CorpusFiles from the user message. Output JSON with ideas and novelty (lines/risks/synthesis) per the user message schema. {{output_language_rule}}'),
+(30002, 0, 'template_topic', '选题环节话术', 'audit',
+ '环节：审查结论 + 生成文献综述。方向：{{direction}}。目标期刊：{{venue}}。须再次审查第二步 generate_ideas（含 novelty）是否贴题；以严格审稿人视角给出 issues/summary/off_topic；并基于 Corpus 生成文献综述（structure/content_medium/citations）。输出 JSON 以用户消息 schema 为准（含 audit 与 literature_review）。{{output_language_rule}}',
+ 'Stage: audit conclusion + literature review. Direction: {{direction}}. Target venue: {{venue}}. Re-check generate_ideas (with novelty) for fit; reviewer-style issues/summary/off_topic; literature review from Corpus (structure/content_medium/citations). Output JSON per user schema (audit + literature_review). {{output_language_rule}}'),
+(30003, 0, 'template_topic', '选题环节话术', 'experiment_plan',
+ '环节：生成实验方案（experiment planning）。方向：{{direction}}。目标期刊/会议：{{venue}}。须以用户消息中的 LiteratureReview（文献综述全文/摘要）与选题 Corpus 为依据，不得编造未给出的基线或数据。输出可审稿的实验计划：核心假设、主实验与对照基线、评价指标、消融设计、算力/数据资源与时间线（写入 paper_output_experiment_plan：title、summary、content_medium、meta）。严格 JSON，字段以用户消息 schema 为准（含 experiment_plan）。{{output_language_rule}}',
+ 'Stage: experiment planning. Direction: {{direction}}. Target venue: {{venue}}. Use LiteratureReview and topic Corpus from the user message only; do not invent baselines or data. Output a review-ready plan (hypothesis, main experiment, baselines, metrics, ablations, resources/timeline) as experiment_plan JSON per user schema. {{output_language_rule}}')
+ON DUPLICATE KEY UPDATE
+  `model_config_id` = VALUES(`model_config_id`),
+  `prompt_code` = VALUES(`prompt_code`),
+  `prompt_type` = VALUES(`prompt_type`),
+  `prompt_name` = VALUES(`prompt_name`),
+  `llm_desc_zh` = VALUES(`llm_desc_zh`), `llm_desc_en` = VALUES(`llm_desc_en`);
+
+INSERT INTO `paper_ref_discipline` (`code`, `name`, `name_en`, `sort`) VALUES
+  ('general', '跨学科通用', 'General & Interdisciplinary', 0),
+  ('cs_ai', '计算机与人工智能', 'Computer Science & Artificial Intelligence', 10),
+  ('cs_systems', '计算机系统、网络与安全', 'Computer Systems, Networks & Security', 11),
+  ('cs_hci_robotics', '人机交互与机器人', 'HCI & Robotics', 12),
+  ('engineering', '工程学', 'Engineering', 20),
+  ('mathematics', '数学', 'Mathematics', 30),
+  ('statistics', '统计学', 'Statistics', 35),
+  ('physics', '物理学', 'Physics', 40),
+  ('astronomy', '天文学', 'Astronomy & Astrophysics', 45),
+  ('chemistry', '化学', 'Chemistry', 50),
+  ('materials', '材料科学', 'Materials Science', 55),
+  ('earth_environment', '地球与环境科学', 'Earth & Environmental Sciences', 60),
+  ('agriculture', '农学', 'Agricultural Sciences', 65),
+  ('biology', '生物学', 'Biological Sciences', 70),
+  ('medicine', '医学与临床', 'Medicine & Clinical Research', 80),
+  ('public_health', '公共卫生与护理', 'Public Health & Nursing', 85),
+  ('pharmacy', '药学', 'Pharmacy & Pharmacology', 88),
+  ('neuroscience', '神经科学', 'Neuroscience', 90),
+  ('psychology', '心理学', 'Psychology', 100),
+  ('economics', '经济学', 'Economics', 110),
+  ('finance', '金融学', 'Finance', 115),
+  ('business', '工商管理', 'Business Administration', 120),
+  ('management', '管理学', 'Management', 125),
+  ('sociology', '社会学', 'Sociology', 130),
+  ('political_science', '政治学', 'Political Science', 135),
+  ('law', '法学', 'Law', 140),
+  ('education', '教育学', 'Education', 150),
+  ('geography', '地理学', 'Geography', 155),
+  ('anthropology', '人类学', 'Anthropology', 160),
+  ('communication', '传播学', 'Communication & Media Studies', 165),
+  ('urban_architecture', '城乡规划与建筑学', 'Urban Planning & Architecture', 170),
+  ('philosophy', '哲学', 'Philosophy', 180),
+  ('history', '历史学', 'History', 185),
+  ('linguistics', '语言学', 'Linguistics', 190),
+  ('literature', '文学', 'Literature', 195),
+  ('arts_design', '艺术与设计', 'Arts & Design', 200),
+  ('religious_studies', '宗教研究', 'Religious Studies', 205),
+  ('cn_stem', '中国理工', 'Chinese STEM', 300),
+  ('cn_social_sci', '中国人文社科', 'Chinese Humanities & Social Sciences', 310),
+  ('cn_medicine', '中国医学与生命科学', 'Chinese Medicine & Life Sciences', 320)
 ON DUPLICATE KEY UPDATE
   `name` = VALUES(`name`),
-  `literature_source_codes` = VALUES(`literature_source_codes`);
+  `name_en` = VALUES(`name_en`),
+  `sort` = VALUES(`sort`);
 
-INSERT INTO `paper_ref_venue` (`code`, `name`, `venue_type`, `discipline_id`, `rubric`) 
-SELECT 'ml_top3', 'NeurIPS/ICLR/ICML', 'conference', d.id,
-  JSON_OBJECT(
-    'contribution_types', JSON_ARRAY('method', 'theory', 'empirical'),
-    'experiment_bar', 'strong_baselines_ablations',
-    'writing_style', 'ml_conference'
-  )
-FROM `paper_ref_discipline` d WHERE d.code = 'cs_ai' LIMIT 1
-ON DUPLICATE KEY UPDATE `name` = VALUES(`name`);
-
--- 系统默认模板 seed（中英）；详见 migrations/20251014_paper_template_bilingual.sql
--- ----- seed: paper_template_document (user_id=0, venue_id=0) -----
-INSERT INTO `paper_template_document` (
-  `user_id`, `venue_id`, `stage_code`, `name`,
-  `outline_template_zh`, `outline_template_en`, `source`, `status`
-) VALUES
-(0, 0, 'generate_ideas', '系统默认 · 脑暴选题与新颖性',
- JSON_OBJECT(
-   'schema_version', 1, 'locale', 'zh', 'artifact', 'ideas_and_novelty',
-   'description', '一次 LLM 输出 ideas 与 novelty；字段键名与顺序须与本模板一致。',
-   'output', JSON_OBJECT(
-     'root_keys', JSON_ARRAY('ideas', 'novelty'),
-     'ideas', JSON_OBJECT('max_items_param', 'max_ideas', 'item_fields', JSON_ARRAY(
-       JSON_OBJECT('key', 'title', 'label_zh', '选题标题', 'required', true),
-       JSON_OBJECT('key', 'problem', 'label_zh', '问题与动机', 'required', true),
-       JSON_OBJECT('key', 'approach', 'label_zh', '技术路线', 'required', true),
-       JSON_OBJECT('key', 'contribution', 'label_zh', '预期贡献', 'required', true, 'hint', '对齐目标 venue 的贡献类型'),
-       JSON_OBJECT('key', 'reference_keys', 'label_zh', '关键文献', 'required', true, 'type', 'external_key[]')
-     )),
-     'novelty', JSON_OBJECT('fields', JSON_ARRAY(
-       JSON_OBJECT('key', 'lines', 'label_zh', '新颖性要点', 'type', 'string[]'),
-       JSON_OBJECT('key', 'risks', 'label_zh', '逐题风险', 'type', 'array', 'item_keys', JSON_ARRAY('idea_title', 'risk', 'note', 'overlap_refs')),
-       JSON_OBJECT('key', 'risk', 'enum', JSON_ARRAY('low', 'medium', 'high')),
-       JSON_OBJECT('key', 'synthesis', 'label_zh', '综合结论', 'type', 'string')
-     ))
-   )
- ),
- JSON_OBJECT(
-   'schema_version', 1, 'locale', 'en', 'artifact', 'ideas_and_novelty',
-   'description', 'Single LLM output for ideas and novelty; keep field keys and order exactly as this template.',
-   'output', JSON_OBJECT(
-     'root_keys', JSON_ARRAY('ideas', 'novelty'),
-     'ideas', JSON_OBJECT('max_items_param', 'max_ideas', 'item_fields', JSON_ARRAY(
-       JSON_OBJECT('key', 'title', 'label_en', 'Idea title', 'required', true),
-       JSON_OBJECT('key', 'problem', 'label_en', 'Problem & motivation', 'required', true),
-       JSON_OBJECT('key', 'approach', 'label_en', 'Approach', 'required', true),
-       JSON_OBJECT('key', 'contribution', 'label_en', 'Expected contribution', 'required', true, 'hint', 'Align with target venue contribution types'),
-       JSON_OBJECT('key', 'reference_keys', 'label_en', 'Key references', 'required', true, 'type', 'external_key[]')
-     )),
-     'novelty', JSON_OBJECT('fields', JSON_ARRAY(
-       JSON_OBJECT('key', 'lines', 'label_en', 'Novelty bullets', 'type', 'string[]'),
-       JSON_OBJECT('key', 'risks', 'label_en', 'Per-idea risks', 'type', 'array', 'item_keys', JSON_ARRAY('idea_title', 'risk', 'note', 'overlap_refs')),
-       JSON_OBJECT('key', 'risk', 'enum', JSON_ARRAY('low', 'medium', 'high')),
-       JSON_OBJECT('key', 'synthesis', 'label_en', 'Synthesis', 'type', 'string')
-     ))
-   )
- ), 'system', 'active'),
-(0, 0, 'audit', '系统默认 · 审查结论与文献综述',
- JSON_OBJECT(
-   'schema_version', 1, 'locale', 'zh', 'artifact', 'audit_and_literature_review',
-   'description', 'audit JSON + literature_review；正文 content_medium 须遵循 markdown_outline 一级标题。',
-   'output', JSON_OBJECT(
-     'root_keys', JSON_ARRAY('audit', 'literature_review'),
-     'audit', JSON_OBJECT('fields', JSON_ARRAY('issues', 'summary', 'off_topic'),
-       'issue_item_keys', JSON_ARRAY('severity', 'claim', 'fix'),
-       'severity_enum', JSON_ARRAY('blocker', 'major', 'minor')),
-     'literature_review', JSON_OBJECT(
-       'fields', JSON_ARRAY('title', 'summary', 'structure', 'content_medium', 'citations'),
-       'structure_enum', JSON_ARRAY('thematic', 'chronological', 'method'),
-       'citation_item_keys', JSON_ARRAY('ref_id', 'note'))
-   ),
-   'markdown_outline', JSON_OBJECT(
-     'rules', 'content_medium 使用 Markdown；须按下列 ## 标题顺序输出，不得增删或改写标题',
-     'headings', JSON_ARRAY(
-       JSON_OBJECT('level', 2, 'id', 'background', 'title', '研究背景与问题定义'),
-       JSON_OBJECT('level', 2, 'id', 'methods_landscape', 'title', '核心概念与方法谱系'),
-       JSON_OBJECT('level', 2, 'id', 'related_work', 'title', '与本文方向相关的代表工作'),
-       JSON_OBJECT('level', 2, 'id', 'gaps', 'title', '研究缺口与开放问题'),
-       JSON_OBJECT('level', 2, 'id', 'synthesis', 'title', '与候选选题的关联及综述小结')
-     ))
- ),
- JSON_OBJECT(
-   'schema_version', 1, 'locale', 'en', 'artifact', 'audit_and_literature_review',
-   'description', 'audit JSON + literature_review; content_medium must follow markdown_outline H2 titles.',
-   'output', JSON_OBJECT(
-     'root_keys', JSON_ARRAY('audit', 'literature_review'),
-     'audit', JSON_OBJECT('fields', JSON_ARRAY('issues', 'summary', 'off_topic'),
-       'issue_item_keys', JSON_ARRAY('severity', 'claim', 'fix'),
-       'severity_enum', JSON_ARRAY('blocker', 'major', 'minor')),
-     'literature_review', JSON_OBJECT(
-       'fields', JSON_ARRAY('title', 'summary', 'structure', 'content_medium', 'citations'),
-       'structure_enum', JSON_ARRAY('thematic', 'chronological', 'method'),
-       'citation_item_keys', JSON_ARRAY('ref_id', 'note'))
-   ),
-   'markdown_outline', JSON_OBJECT(
-     'rules', 'content_medium in Markdown; use exactly these ## headings in order; do not rename or omit',
-     'headings', JSON_ARRAY(
-       JSON_OBJECT('level', 2, 'id', 'background', 'title', 'Background and problem definition'),
-       JSON_OBJECT('level', 2, 'id', 'methods_landscape', 'title', 'Concepts and method landscape'),
-       JSON_OBJECT('level', 2, 'id', 'related_work', 'title', 'Representative related work'),
-       JSON_OBJECT('level', 2, 'id', 'gaps', 'title', 'Research gaps and open problems'),
-       JSON_OBJECT('level', 2, 'id', 'synthesis', 'title', 'Link to candidate ideas and summary')
-     ))
- ), 'system', 'active'),
-(0, 0, 'experiment_plan', '系统默认 · 实验方案',
- JSON_OBJECT(
-   'schema_version', 1, 'locale', 'zh', 'artifact', 'experiment_plan',
-   'description', 'experiment_plan JSON；content_medium 与 meta 字段须与 markdown_outline 章节一致。',
-   'output', JSON_OBJECT('root_key', 'experiment_plan',
-     'fields', JSON_ARRAY('title', 'summary', 'content_medium', 'meta'),
-     'meta', JSON_OBJECT(
-       'hypothesis', JSON_OBJECT('type', 'string', 'label_zh', '核心假设'),
-       'baselines', JSON_OBJECT('type', 'string[]', 'label_zh', '对照基线'),
-       'metrics', JSON_OBJECT('type', 'string[]', 'label_zh', '评价指标'),
-       'ablations', JSON_OBJECT('type', 'string[]', 'label_zh', '消融项'),
-       'timeline', JSON_OBJECT('type', 'string[]', 'label_zh', '时间线')
-     )),
-   'markdown_outline', JSON_OBJECT(
-     'rules', 'content_medium 使用 Markdown；须按下列 ## 标题顺序输出，不得增删或改写标题',
-     'headings', JSON_ARRAY(
-       JSON_OBJECT('level', 2, 'id', 'hypothesis', 'title', '核心假设与研究问题'),
-       JSON_OBJECT('level', 2, 'id', 'main_experiment', 'title', '主实验设计'),
-       JSON_OBJECT('level', 2, 'id', 'baselines', 'title', '对照基线'),
-       JSON_OBJECT('level', 2, 'id', 'metrics', 'title', '评价指标与统计检验'),
-       JSON_OBJECT('level', 2, 'id', 'ablations', 'title', '消融与敏感性分析'),
-       JSON_OBJECT('level', 2, 'id', 'timeline', 'title', '数据、算力与实施时间线')
-     ))
- ),
- JSON_OBJECT(
-   'schema_version', 1, 'locale', 'en', 'artifact', 'experiment_plan',
-   'description', 'experiment_plan JSON; content_medium and meta must match markdown_outline sections.',
-   'output', JSON_OBJECT('root_key', 'experiment_plan',
-     'fields', JSON_ARRAY('title', 'summary', 'content_medium', 'meta'),
-     'meta', JSON_OBJECT(
-       'hypothesis', JSON_OBJECT('type', 'string', 'label_en', 'Core hypothesis'),
-       'baselines', JSON_OBJECT('type', 'string[]', 'label_en', 'Baselines'),
-       'metrics', JSON_OBJECT('type', 'string[]', 'label_en', 'Metrics'),
-       'ablations', JSON_OBJECT('type', 'string[]', 'label_en', 'Ablations'),
-       'timeline', JSON_OBJECT('type', 'string[]', 'label_en', 'Timeline')
-     )),
-   'markdown_outline', JSON_OBJECT(
-     'rules', 'content_medium in Markdown; use exactly these ## headings in order',
-     'headings', JSON_ARRAY(
-       JSON_OBJECT('level', 2, 'id', 'hypothesis', 'title', 'Hypothesis and research questions'),
-       JSON_OBJECT('level', 2, 'id', 'main_experiment', 'title', 'Main experiment design'),
-       JSON_OBJECT('level', 2, 'id', 'baselines', 'title', 'Baselines'),
-       JSON_OBJECT('level', 2, 'id', 'metrics', 'title', 'Metrics and statistical testing'),
-       JSON_OBJECT('level', 2, 'id', 'ablations', 'title', 'Ablations and sensitivity'),
-       JSON_OBJECT('level', 2, 'id', 'timeline', 'title', 'Data, compute, and schedule')
-     ))
- ), 'system', 'active');
-
-INSERT INTO `paper_template_venue` (
-  `user_id`, `venue_id`, `name`, `constraint_template_zh`, `constraint_template_en`, `source`, `status`
-) VALUES
-(0, 0, '系统默认 · 通用 venue',
- JSON_OBJECT(
-   'schema_version', 1, 'locale', 'zh',
-   'description', '未指定或未匹配 paper_ref_venue 时使用；约束选题、综述与实验方案的贡献形态与实验深度。',
-   'contribution_types', JSON_OBJECT(
-     'allowed', JSON_ARRAY('method', 'theory', 'empirical', 'survey', 'system'),
-     'labels_zh', JSON_OBJECT('method', '方法/模型', 'theory', '理论/分析', 'empirical', '实证/实验', 'survey', '综述/梳理', 'system', '系统/工具'),
-     'prompt_hint', '每条 idea 的 contribution 须明确属于 allowed 之一，并与方向一致；勿混合未声明的类型。'),
-   'experiment_bar', JSON_OBJECT(
-     'code', 'standard', 'label_zh', '常规范实验',
-     'requirements', JSON_ARRAY('至少一个可复现主实验', '列出可对照基线（名称具体）', '指标与数据集可追踪', '建议说明算力/数据规模'),
-     'prompt_hint', '实验方案须写清基线、指标与主结论所依赖的证据；勿夸大未设计的实验。'),
-   'writing_style', JSON_OBJECT('code', 'scholarly_generic', 'label_zh', '通用学术表述',
-     'prompt_hint', '中文表述准确、克制；避免营销式用语；引用须对应 Corpus ref_id。')
- ),
- JSON_OBJECT(
-   'schema_version', 1, 'locale', 'en',
-   'description', 'Fallback when venue is unspecified; constrains contribution shape and experiment depth.',
-   'contribution_types', JSON_OBJECT(
-     'allowed', JSON_ARRAY('method', 'theory', 'empirical', 'survey', 'system'),
-     'labels_en', JSON_OBJECT('method', 'Method/model', 'theory', 'Theory', 'empirical', 'Empirical', 'survey', 'Survey', 'system', 'System/tool'),
-     'prompt_hint', 'Each idea contribution must map to one allowed type and match the direction.'),
-   'experiment_bar', JSON_OBJECT(
-     'code', 'standard', 'label_en', 'Standard experiments',
-     'requirements', JSON_ARRAY('At least one reproducible main experiment', 'Name concrete baselines', 'Traceable metrics and datasets', 'State compute/data scale when possible'),
-     'prompt_hint', 'Plan must tie claims to evidence; do not invent unplanned experiments.'),
-   'writing_style', JSON_OBJECT('code', 'scholarly_generic', 'label_en', 'Generic scholarly prose',
-     'prompt_hint', 'Precise, restrained English; citations must use Corpus ref_id.')
- ), 'system', 'active');
-
-INSERT INTO `paper_template_venue` (
-  `user_id`, `venue_id`, `name`, `constraint_template_zh`, `constraint_template_en`, `source`, `status`
-)
-SELECT 0, v.`id`, '系统默认 · NeurIPS/ICLR/ICML',
- JSON_OBJECT(
-   'schema_version', 1, 'locale', 'zh', 'ref_venue_code', 'ml_top3',
-   'description', 'ML 顶会：方法/理论/实证贡献；强基线与消融；会议短文风格。',
-   'contribution_types', JSON_OBJECT(
-     'allowed', JSON_ARRAY('method', 'theory', 'empirical'),
-     'labels_zh', JSON_OBJECT('method', '方法', 'theory', '理论', 'empirical', '实证'),
-     'prompt_hint', '贡献须能在 8 页主会体量内讲清；method/theory/empirical 择主、可辅，勿堆叠无关贡献。'),
-   'experiment_bar', JSON_OBJECT(
-     'code', 'strong_baselines_ablations', 'label_zh', '强基线 + 消融',
-     'requirements', JSON_ARRAY('SOTA 或公认强基线至少 2 个', '主结果建议 ≥3 random seed 或等价稳定性说明', '消融须对应核心设计选择', '报告算力/训练成本或吞吐等可审稿指标'),
-     'prompt_hint', '缺基线须在 audit issues 标 major。'),
-   'writing_style', JSON_OBJECT('code', 'ml_conference', 'label_zh', 'ML 会议短文',
-     'prompt_hint', 'Related Work 聚焦差异；Experiments 先主结果后消融；claim 与表格/图一致。')
- ),
- JSON_OBJECT(
-   'schema_version', 1, 'locale', 'en', 'ref_venue_code', 'ml_top3',
-   'description', 'Top ML conferences: method/theory/empirical; strong baselines and ablations; short paper style.',
-   'contribution_types', JSON_OBJECT(
-     'allowed', JSON_ARRAY('method', 'theory', 'empirical'),
-     'labels_en', JSON_OBJECT('method', 'Method', 'theory', 'Theory', 'empirical', 'Empirical'),
-     'prompt_hint', 'Fit a ~8-page main-track claim; one primary contribution type, avoid unrelated stacking.'),
-   'experiment_bar', JSON_OBJECT(
-     'code', 'strong_baselines_ablations', 'label_en', 'Strong baselines + ablations',
-     'requirements', JSON_ARRAY('≥2 strong/SOTA baselines', '≥3 seeds or equivalent stability', 'Ablations tied to core design', 'Report compute/throughput where relevant'),
-     'prompt_hint', 'Missing baselines should be audit major issues.'),
-   'writing_style', JSON_OBJECT('code', 'ml_conference', 'label_en', 'ML conference short paper',
-     'prompt_hint', 'Related work: contrast; experiments: main results then ablations; claims match tables/figures.')
- ), 'system', 'active'
-FROM `paper_ref_venue` v WHERE v.`code` = 'ml_top3' LIMIT 1;
-
-INSERT INTO `paper_template_llm_prompt` (`stage_code`, `stage_name`, `template_body_zh`, `template_body_en`, `status`) VALUES
-('default', '默认（全局兜底）',
- '你是 Paper Agent 平台的学术科研助手。只根据用户消息中给出的文献与前置步骤结果作答，不得编造未出现的来源或实验。{{output_language_rule}} 若要求 JSON，严格遵守用户消息中的 schema。',
- 'You are an academic research assistant for the Paper Agent platform. Answer only from literature and prior-step results in the user message; do not fabricate sources or experiments. {{output_language_rule}} When JSON is required, follow the schema in the user message.',
- 'active'),
-('generate_ideas', '脑暴候选选题',
- '环节：脑暴 + 新颖性（与 novelty 同一次模型调用完成）。最多 {{max_ideas}} 条 idea；仅依据用户消息 Corpus 与 CorpusFiles；输出 JSON 含 ideas 与 novelty（lines/risks/synthesis），以用户消息 schema 为准。{{output_language_rule}}',
- 'Stage: brainstorming + novelty in one call. At most {{max_ideas}} ideas; use only Corpus and CorpusFiles from the user message. Output JSON with ideas and novelty (lines/risks/synthesis) per the user message schema. {{output_language_rule}}',
- 'active'),
-('audit', '审查结论+生成文献综述',
- '环节：审查结论 + 生成文献综述。方向：{{direction}}。目标期刊：{{venue}}。须再次审查第二步 generate_ideas（含 novelty）是否贴题；以严格审稿人视角给出 issues/summary/off_topic；并基于 Corpus 生成文献综述（structure/content_medium/citations）。输出 JSON 以用户消息 schema 为准（含 audit 与 literature_review）。{{output_language_rule}}',
- 'Stage: audit conclusion + literature review. Direction: {{direction}}. Target venue: {{venue}}. Re-check generate_ideas (with novelty) for fit; reviewer-style issues/summary/off_topic; literature review from Corpus (structure/content_medium/citations). Output JSON per user schema (audit + literature_review). {{output_language_rule}}',
- 'active'),
-('experiment_plan', '生成实验方案',
- '环节：生成实验方案（experiment planning）。方向：{{direction}}。目标期刊/会议：{{venue}}。须以用户消息中的 LiteratureReview（文献综述全文/摘要）与选题 Corpus 为依据，不得编造未给出的基线或数据。输出可审稿的实验计划：核心假设、主实验与对照基线、评价指标、消融设计、算力/数据资源与时间线（写入 paper_output_experiment_plan：title、summary、content_medium、meta）。严格 JSON，字段以用户消息 schema 为准（含 experiment_plan）。{{output_language_rule}}',
- 'Stage: experiment planning. Direction: {{direction}}. Target venue: {{venue}}. Use LiteratureReview and topic Corpus from the user message only; do not invent baselines or data. Output a review-ready plan (hypothesis, main experiment, baselines, metrics, ablations, resources/timeline) as experiment_plan JSON per user schema. {{output_language_rule}}',
- 'active')
+INSERT INTO `paper_ref_venue` (`code`, `name`, `venue_type`, `llm_description_codes`, `publisher`, `website_url`, `status`)
+SELECT v.`code`, v.`name`, v.`venue_type`,
+       CASE WHEN v.`profile_code` = 'ml_top3' THEN JSON_ARRAY(20003, 20004, 20005) ELSE JSON_ARRAY(20000, 20001, 20002) END,
+       v.`publisher`, v.`website_url`, 'active'
+FROM (
+  /* --- ML 顶会 --- */
+  SELECT 'neurips' AS `code`, 'NeurIPS' AS `name`, 'conference' AS `venue_type`, 'ml_top3' AS `profile_code`, 'NeurIPS Foundation' AS `publisher`, 'https://neurips.cc' AS `website_url`
+  UNION ALL SELECT 'iclr', 'ICLR', 'conference', 'ml_top3', 'OpenReview', 'https://iclr.cc'
+  UNION ALL SELECT 'icml', 'ICML', 'conference', 'ml_top3', 'PMLR / ICML', 'https://icml.cc'
+  UNION ALL SELECT 'colt', 'COLT', 'conference', 'ml_top3', 'PMLR', 'https://www.learningtheory.org'
+  UNION ALL SELECT 'aistats', 'AISTATS', 'conference', 'ml_top3', 'PMLR', 'https://aistats.org'
+  /* --- 视觉 --- */
+  UNION ALL SELECT 'cvpr', 'CVPR', 'conference', 'vision_top', 'IEEE / CVF', 'https://cvpr.thecvf.com'
+  UNION ALL SELECT 'iccv', 'ICCV', 'conference', 'vision_top', 'IEEE / CVF', 'https://iccv.thecvf.com'
+  UNION ALL SELECT 'eccv', 'ECCV', 'conference', 'vision_top', 'Springer / ECCV', 'https://eccv.ecva.net'
+  UNION ALL SELECT 'acm_mm', 'ACM Multimedia', 'conference', 'vision_top', 'ACM', 'https://www.acmmm.org'
+  UNION ALL SELECT 'bmvc', 'BMVC', 'conference', 'vision_top', 'BMVA', 'https://bmvc-conference.com'
+  UNION ALL SELECT 'wacv', 'WACV', 'conference', 'vision_top', 'IEEE / CVF', 'https://wacv.thecvf.com'
+  UNION ALL SELECT 'miccai', 'MICCAI', 'conference', 'vision_top', 'MICCAI Society', 'https://miccai.org'
+  /* --- NLP --- */
+  UNION ALL SELECT 'acl', 'ACL', 'conference', 'nlp_top', 'ACL', 'https://aclanthology.org'
+  UNION ALL SELECT 'emnlp', 'EMNLP', 'conference', 'nlp_top', 'ACL', 'https://aclanthology.org'
+  UNION ALL SELECT 'naacl', 'NAACL', 'conference', 'nlp_top', 'ACL', 'https://aclanthology.org'
+  UNION ALL SELECT 'coling', 'COLING', 'conference', 'nlp_top', 'ICCL', 'https://coling2024.org'
+  UNION ALL SELECT 'eacl', 'EACL', 'conference', 'nlp_top', 'ACL', 'https://aclanthology.org'
+  /* --- AI / 数据 --- */
+  UNION ALL SELECT 'aaai', 'AAAI', 'conference', 'ai_data_top', 'AAAI', 'https://aaai.org'
+  UNION ALL SELECT 'ijcai', 'IJCAI', 'conference', 'ai_data_top', 'IJCAI', 'https://www.ijcai.org'
+  UNION ALL SELECT 'kdd', 'KDD', 'conference', 'ai_data_top', 'ACM', 'https://kdd.org'
+  UNION ALL SELECT 'www', 'The Web Conference (WWW)', 'conference', 'ai_data_top', 'ACM / IW3C2', 'https://www2024.thewebconf.org'
+  UNION ALL SELECT 'wsdm', 'WSDM', 'conference', 'ai_data_top', 'ACM', 'https://www.wsdm-conference.org'
+  UNION ALL SELECT 'cikm', 'CIKM', 'conference', 'ai_data_top', 'ACM', 'https://cikm2024.org'
+  UNION ALL SELECT 'sigir', 'SIGIR', 'conference', 'ai_data_top', 'ACM', 'https://sigir.org'
+  UNION ALL SELECT 'recsys', 'RecSys', 'conference', 'ai_data_top', 'ACM', 'https://recsys.acm.org'
+  UNION ALL SELECT 'icde', 'ICDE', 'conference', 'ai_data_top', 'IEEE', 'https://icde2024.github.io'
+  UNION ALL SELECT 'vldb', 'VLDB', 'conference', 'ai_data_top', 'VLDB Endowment', 'https://vldb.org'
+  /* --- 系统 --- */
+  UNION ALL SELECT 'osdi', 'OSDI', 'conference', 'systems_top', 'USENIX', 'https://www.usenix.org/osdi'
+  UNION ALL SELECT 'sosp', 'SOSP', 'conference', 'systems_top', 'ACM', 'https://sosp.org'
+  UNION ALL SELECT 'nsdi', 'NSDI', 'conference', 'systems_top', 'USENIX', 'https://www.usenix.org/nsdi'
+  UNION ALL SELECT 'eurosys', 'EuroSys', 'conference', 'systems_top', 'ACM', 'https://www.eurosys.org'
+  UNION ALL SELECT 'asplos', 'ASPLOS', 'conference', 'systems_top', 'ACM', 'https://asplos-conference.org'
+  UNION ALL SELECT 'sigcomm', 'SIGCOMM', 'conference', 'systems_top', 'ACM', 'https://sigcomm.org'
+  UNION ALL SELECT 'mobicom', 'MobiCom', 'conference', 'systems_top', 'ACM', 'https://www.sigmobile.org/mobicom'
+  UNION ALL SELECT 'usenix_atc', 'USENIX ATC', 'conference', 'systems_top', 'USENIX', 'https://www.usenix.org/atc'
+  UNION ALL SELECT 'isca', 'ISCA', 'conference', 'systems_top', 'ACM / IEEE', 'https://iscaconf.org'
+  UNION ALL SELECT 'micro', 'MICRO', 'conference', 'systems_top', 'ACM / IEEE', 'https://microarch.org'
+  UNION ALL SELECT 'hpca', 'HPCA', 'conference', 'systems_top', 'IEEE', 'https://hpca-conf.org'
+  /* --- 安全 --- */
+  UNION ALL SELECT 'ieee_sp', 'IEEE S&P (Oakland)', 'conference', 'security_top', 'IEEE', 'https://www.ieee-security.org'
+  UNION ALL SELECT 'usenix_security', 'USENIX Security', 'conference', 'security_top', 'USENIX', 'https://www.usenix.org/conference/usenixsecurity'
+  UNION ALL SELECT 'ccs', 'ACM CCS', 'conference', 'security_top', 'ACM', 'https://www.sigsac.org/ccs.html'
+  UNION ALL SELECT 'ndss', 'NDSS', 'conference', 'security_top', 'ISOC', 'https://www.ndss-symposium.org'
+  /* --- HCI / 机器人 --- */
+  UNION ALL SELECT 'chi', 'CHI', 'conference', 'hci_robotics_top', 'ACM', 'https://chi.acm.org'
+  UNION ALL SELECT 'uist', 'UIST', 'conference', 'hci_robotics_top', 'ACM', 'https://uist.acm.org'
+  UNION ALL SELECT 'icra', 'ICRA', 'conference', 'hci_robotics_top', 'IEEE', 'https://www.ieee-ras.org/conferences-workshops/fully-sponsored/icra'
+  UNION ALL SELECT 'iros', 'IROS', 'conference', 'hci_robotics_top', 'IEEE / RSJ', 'https://ieee-ras.org/conferences-workshops/fully-sponsored/iros'
+  UNION ALL SELECT 'corl', 'CoRL', 'conference', 'hci_robotics_top', 'CoRL', 'https://www.corl.org'
+  UNION ALL SELECT 'rss', 'RSS', 'conference', 'hci_robotics_top', 'RSS Foundation', 'https://roboticsconference.org'
+  /* --- 理论 --- */
+  UNION ALL SELECT 'stoc', 'STOC', 'conference', 'theory_top', 'ACM', 'https://acm-stoc.org'
+  UNION ALL SELECT 'focs', 'FOCS', 'conference', 'theory_top', 'IEEE', 'https://ieee-focs.org'
+  UNION ALL SELECT 'soda', 'SODA', 'conference', 'theory_top', 'SIAM / ACM', 'https://www.siam.org/conferences/cm/conference/soda'
+  /* --- CS 顶刊 --- */
+  UNION ALL SELECT 'jmlr', 'JMLR', 'journal', 'cs_journal_top', 'JMLR', 'https://www.jmlr.org'
+  UNION ALL SELECT 'tpami', 'IEEE TPAMI', 'journal', 'cs_journal_top', 'IEEE', 'https://ieeexplore.ieee.org/xpl/RecentIssue.jsp?punumber=34'
+  UNION ALL SELECT 'ijcv', 'IJCV', 'journal', 'cs_journal_top', 'Springer', 'https://link.springer.com/journal/11263'
+  UNION ALL SELECT 'tacl', 'TACL', 'journal', 'cs_journal_top', 'ACL', 'https://transacl.org'
+  UNION ALL SELECT 'tmlr', 'TMLR', 'journal', 'cs_journal_top', 'OpenReview', 'https://jmlr.org/tmlr'
+  UNION ALL SELECT 'cacm', 'Communications of the ACM', 'journal', 'cs_journal_top', 'ACM', 'https://cacm.acm.org'
+  UNION ALL SELECT 'jacm', 'Journal of the ACM', 'journal', 'cs_journal_top', 'ACM', 'https://dl.acm.org/journal/jacm'
+  UNION ALL SELECT 'tois', 'ACM TOIS', 'journal', 'cs_journal_top', 'ACM', 'https://dl.acm.org/journal/tois'
+  /* --- 综合顶刊 --- */
+  UNION ALL SELECT 'nature', 'Nature', 'journal', 'interdisciplinary_top', 'Nature Portfolio', 'https://www.nature.com/nature'
+  UNION ALL SELECT 'science', 'Science', 'journal', 'interdisciplinary_top', 'AAAS', 'https://www.science.org/journal/science'
+  UNION ALL SELECT 'pnas', 'PNAS', 'journal', 'interdisciplinary_top', 'NAS', 'https://www.pnas.org'
+  UNION ALL SELECT 'cell', 'Cell', 'journal', 'interdisciplinary_top', 'Cell Press', 'https://www.cell.com/cell'
+  UNION ALL SELECT 'nat_comm', 'Nature Communications', 'journal', 'interdisciplinary_top', 'Nature Portfolio', 'https://www.nature.com/ncomms'
+  UNION ALL SELECT 'sci_adv', 'Science Advances', 'journal', 'interdisciplinary_top', 'AAAS', 'https://www.science.org/journal/sciadvances'
+  /* --- 生命 / 医学 --- */
+  UNION ALL SELECT 'nat_medicine', 'Nature Medicine', 'journal', 'life_med_top', 'Nature Portfolio', 'https://www.nature.com/nm'
+  UNION ALL SELECT 'nat_biotech', 'Nature Biotechnology', 'journal', 'life_med_top', 'Nature Portfolio', 'https://www.nature.com/nbt'
+  UNION ALL SELECT 'nat_methods', 'Nature Methods', 'journal', 'life_med_top', 'Nature Portfolio', 'https://www.nature.com/nmeth'
+  UNION ALL SELECT 'nejm', 'New England Journal of Medicine', 'journal', 'life_med_top', 'NEJM Group', 'https://www.nejm.org'
+  UNION ALL SELECT 'lancet', 'The Lancet', 'journal', 'life_med_top', 'Elsevier', 'https://www.thelancet.com'
+  UNION ALL SELECT 'jama', 'JAMA', 'journal', 'life_med_top', 'AMA', 'https://jamanetwork.com/journals/jama'
+  UNION ALL SELECT 'bmj', 'The BMJ', 'journal', 'life_med_top', 'BMJ', 'https://www.bmj.com'
+  /* --- 经管 --- */
+  UNION ALL SELECT 'aer', 'American Economic Review', 'journal', 'econ_mgmt_top', 'AEA', 'https://www.aeaweb.org/journals/aer'
+  UNION ALL SELECT 'qje', 'Quarterly Journal of Economics', 'journal', 'econ_mgmt_top', 'Oxford UP', 'https://academic.oup.com/qje'
+  UNION ALL SELECT 'jpe', 'Journal of Political Economy', 'journal', 'econ_mgmt_top', 'U Chicago Press', 'https://www.journals.uchicago.edu/journals/jpe'
+  UNION ALL SELECT 'econometrica', 'Econometrica', 'journal', 'econ_mgmt_top', 'Econometric Society', 'https://www.econometricsociety.org/publications/econometrica'
+  UNION ALL SELECT 'jfinance', 'Journal of Finance', 'journal', 'econ_mgmt_top', 'Wiley', 'https://afajof.org'
+  UNION ALL SELECT 'jfe', 'Journal of Financial Economics', 'journal', 'econ_mgmt_top', 'Elsevier', 'https://www.jfinec.com'
+  UNION ALL SELECT 'management_science', 'Management Science', 'journal', 'econ_mgmt_top', 'INFORMS', 'https://pubsonline.informs.org/journal/mnsc'
+  UNION ALL SELECT 'amj', 'Academy of Management Journal', 'journal', 'econ_mgmt_top', 'AOM', 'https://journals.aom.org/journal/amj'
+  /* --- 社会科学 SSCI --- */
+  UNION ALL SELECT 'asr', 'American Sociological Review', 'journal', 'social_sci_top', 'SAGE', 'https://journals.sagepub.com/home/asr'
+  UNION ALL SELECT 'apsr', 'American Political Science Review', 'journal', 'social_sci_top', 'Cambridge UP', 'https://www.cambridge.org/core/journals/american-political-science-review'
+  UNION ALL SELECT 'psychological_science', 'Psychological Science', 'journal', 'social_sci_top', 'SAGE', 'https://journals.sagepub.com/home/pss'
+  UNION ALL SELECT 'jpe_soc', 'Journal of Personality and Social Psychology', 'journal', 'social_sci_top', 'APA', 'https://www.apa.org/pubs/journals/psp'
+  /* --- 物理 / 化学 --- */
+  UNION ALL SELECT 'prl', 'Physical Review Letters', 'journal', 'physical_sci_top', 'APS', 'https://journals.aps.org/prl'
+  UNION ALL SELECT 'prx', 'Physical Review X', 'journal', 'physical_sci_top', 'APS', 'https://journals.aps.org/prx'
+  UNION ALL SELECT 'jacs', 'Journal of the American Chemical Society', 'journal', 'physical_sci_top', 'ACS', 'https://pubs.acs.org/journal/jacsat'
+  UNION ALL SELECT 'angew_chem', 'Angewandte Chemie', 'journal', 'physical_sci_top', 'Wiley', 'https://onlinelibrary.wiley.com/journal/15213773'
+  UNION ALL SELECT 'adv_materials', 'Advanced Materials', 'journal', 'physical_sci_top', 'Wiley', 'https://onlinelibrary.wiley.com/journal/15214095'
+  /* --- 中文核心 --- */
+  UNION ALL SELECT 'cn_sci_china', '中国科学', 'journal', 'cn_journal_top', '科学出版社', 'https://www.scichina.com'
+  UNION ALL SELECT 'cn_sci_bulletin', '科学通报', 'journal', 'cn_journal_top', '科学出版社', 'https://www.scbulletin.com'
+  UNION ALL SELECT 'cn_j_computers', '计算机学报', 'journal', 'cn_journal_top', '中国计算机学会', 'https://cjc.ict.ac.cn'
+  UNION ALL SELECT 'cn_j_software', '软件学报', 'journal', 'cn_journal_top', '中国科学院软件所', 'https://www.jos.org.cn'
+  UNION ALL SELECT 'cn_j_electronics', '电子学报', 'journal', 'cn_journal_top', '中国电子学会', 'https://www.ejournal.org.cn'
+  UNION ALL SELECT 'cn_j_automation', '自动化学报', 'journal', 'cn_journal_top', '中国自动化学会', 'https://www.aas.net.cn'
+  /* --- 通用 / 开放 --- */
+  UNION ALL SELECT 'plos_one', 'PLOS ONE', 'journal', '', 'PLOS', 'https://journals.plos.org/plosone'
+  UNION ALL SELECT 'ieee_access', 'IEEE Access', 'journal', '', 'IEEE', 'https://ieeeaccess.ieee.org'
+  UNION ALL SELECT 'arxiv_only', 'arXiv 预印本（无正式 venue）', 'other', '', NULL, 'https://arxiv.org'
+) v
 ON DUPLICATE KEY UPDATE
-  `stage_name` = VALUES(`stage_name`),
-  `template_body_zh` = VALUES(`template_body_zh`),
-  `template_body_en` = VALUES(`template_body_en`),
+  `name` = VALUES(`name`),
+  `venue_type` = VALUES(`venue_type`),
+  `llm_description_codes` = VALUES(`llm_description_codes`),
+  `publisher` = VALUES(`publisher`),
+  `website_url` = VALUES(`website_url`),
   `status` = VALUES(`status`);
 
-INSERT INTO `paper_ref_literature_source` (`code`, `name`, `api_kind`, `base_url`, `auth_type`, `default_config`, `config_schema`, `priority`, `default_selected`) VALUES
+-- 阶段 JSON schema 见 Go 内 user message；环节话术正文在 paper_llm_description（template_topic）
+INSERT INTO `paper_llm_template_topic` (`stage_code`, `stage_name`, `llm_description_code`, `status`)
+SELECT 'default', '默认（全局兜底）', d.`description_code`, 'active'
+FROM `paper_llm_description` d
+WHERE d.`prompt_code` = 'template_topic' AND d.`prompt_name` = 'default' LIMIT 1
+ON DUPLICATE KEY UPDATE
+  `stage_name` = VALUES(`stage_name`),
+  `llm_description_code` = VALUES(`llm_description_code`),
+  `status` = VALUES(`status`);
+
+INSERT INTO `paper_llm_template_topic` (`stage_code`, `stage_name`, `llm_description_code`, `status`)
+SELECT 'generate_ideas', '脑暴候选选题', d.`description_code`, 'active'
+FROM `paper_llm_description` d
+WHERE d.`prompt_code` = 'template_topic' AND d.`prompt_name` = 'generate_ideas' LIMIT 1
+ON DUPLICATE KEY UPDATE
+  `stage_name` = VALUES(`stage_name`),
+  `llm_description_code` = VALUES(`llm_description_code`),
+  `status` = VALUES(`status`);
+
+INSERT INTO `paper_llm_template_topic` (`stage_code`, `stage_name`, `llm_description_code`, `status`)
+SELECT 'audit', '审查结论+生成文献综述', d.`description_code`, 'active'
+FROM `paper_llm_description` d
+WHERE d.`prompt_code` = 'template_topic' AND d.`prompt_name` = 'audit' LIMIT 1
+ON DUPLICATE KEY UPDATE
+  `stage_name` = VALUES(`stage_name`),
+  `llm_description_code` = VALUES(`llm_description_code`),
+  `status` = VALUES(`status`);
+
+INSERT INTO `paper_llm_template_topic` (`stage_code`, `stage_name`, `llm_description_code`, `status`)
+SELECT 'experiment_plan', '生成实验方案', d.`description_code`, 'active'
+FROM `paper_llm_description` d
+WHERE d.`prompt_code` = 'template_topic' AND d.`prompt_name` = 'experiment_plan' LIMIT 1
+ON DUPLICATE KEY UPDATE
+  `stage_name` = VALUES(`stage_name`),
+  `llm_description_code` = VALUES(`llm_description_code`),
+  `status` = VALUES(`status`);
+
+INSERT INTO `paper_literature_platform` (`code`, `name`, `api_kind`, `base_url`, `auth_type`, `default_config`, `config_schema`, `priority`, `default_selected`) VALUES
   ('arxiv', 'arXiv', 'rest', 'https://export.arxiv.org/api/query', 'none', NULL, NULL, 1, 1),
   ('openalex', 'OpenAlex', 'rest', 'https://api.openalex.org/works', 'none',
    JSON_OBJECT('mailto', ''),
@@ -1078,39 +1008,29 @@ INSERT INTO `paper_llm_model_config` (
   'active'
 );
 
--- 11.2 各环节 → 同一 Claude（@model_id 取自最新 active anthropic 配置）
+-- 11.2 选题 template_topic 话术 → 同一 Claude（model_config_id 写在 paper_llm_description）
 SET @paper_llm_model_id = (
   SELECT c.`id` FROM `paper_llm_model_config` c
   WHERE c.`provider_code` = 'anthropic' AND c.`status` = 'active'
   ORDER BY c.`id` DESC LIMIT 1
 );
 
--- 当前产品范围：选题发现（topic-discovery）四步 + default 兜底
-INSERT INTO `paper_llm_workflow_binding` (`stage_code`, `stage_name`, `model_config_id`, `status`) VALUES
-  ('default', '默认（全局兜底）', @paper_llm_model_id, 'active'),
-  ('retrieve', '多源文献检索与校验入库', @paper_llm_model_id, 'active'),
-  ('generate_ideas', '脑暴选题', @paper_llm_model_id, 'active'),
-  ('novelty', '新颖性检查', @paper_llm_model_id, 'active'),
-  ('audit', '审查结论+生成文献综述', @paper_llm_model_id, 'active'),
-  ('experiment_plan', '生成实验方案', @paper_llm_model_id, 'active')
-ON DUPLICATE KEY UPDATE
-  `stage_name` = VALUES(`stage_name`),
-  `model_config_id` = VALUES(`model_config_id`),
-  `status` = VALUES(`status`);
+UPDATE `paper_llm_description` SET `model_config_id` = @paper_llm_model_id
+WHERE `prompt_code` = 'template_topic' AND @paper_llm_model_id IS NOT NULL;
 
--- 11.3 LLM 话术见上方 paper_template_llm_prompt seed（20251014）
+-- 11.3 环节映射见上方 paper_llm_template_topic seed
 
 -- ---------------------------------------------------------------------------
 -- 升级脚本（已有库执行一次即可）
 -- ---------------------------------------------------------------------------
--- ALTER TABLE `paper_ref_execution_intensity`
+-- ALTER TABLE `paper_llm_constraint_exec_intensity`
 --   ADD COLUMN `is_default` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '前端默认选中项，仅一条应为 1' AFTER `max_ideas`;
--- ALTER TABLE `paper_ref_audit_level`
+-- ALTER TABLE `paper_llm_constraint_audit`
 --   ADD COLUMN `is_default` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '前端默认选中项，仅一条应为 1' AFTER `audit_rounds`;
--- UPDATE `paper_ref_execution_intensity` SET `is_default` = 0;
--- UPDATE `paper_ref_execution_intensity` SET `is_default` = 1 WHERE `code` = 'balanced';
--- UPDATE `paper_ref_audit_level` SET `is_default` = 0;
--- UPDATE `paper_ref_audit_level` SET `is_default` = 1 WHERE `code` = 'polished';
+-- UPDATE `paper_llm_constraint_exec_intensity` SET `is_default` = 0;
+-- UPDATE `paper_llm_constraint_exec_intensity` SET `is_default` = 1 WHERE `code` = 'balanced';
+-- UPDATE `paper_llm_constraint_audit` SET `is_default` = 0;
+-- UPDATE `paper_llm_constraint_audit` SET `is_default` = 1 WHERE `code` = 'polished';
 -- ALTER TABLE `paper_output_topic_step`
 --   MODIFY COLUMN `manuscript_id` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '论文 ID；选题未确认综述前为 0，确认后反填';
 -- ALTER TABLE `paper_output_topic_step` DROP INDEX `uk_paper_output_topic_step_run`;

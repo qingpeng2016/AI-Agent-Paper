@@ -31,7 +31,7 @@ type topicRunInput struct {
 	HumanCheckpoint bool     `json:"human_checkpoint"`
 	MaxPapers       int      `json:"max_papers"`
 	MaxIdeas        int      `json:"max_ideas"`
-	AuditRounds     int      `json:"audit_rounds"`
+	ExecRounds      int      `json:"exec_rounds"`
 }
 
 type storedLiteratureHit struct {
@@ -60,7 +60,7 @@ type TopicDiscoveryRunService struct {
 	steps       repository.PaperOutputTopicStepRepo
 	litReviews  repository.PaperOutputLiteratureReviewRepo
 	catalog     repository.PaperRefCatalogRepo
-	litSource   repository.PaperRefLiteratureSourceRepo
+	litSource   repository.PaperLiteraturePlatformRepo
 	litSearch   *LiteratureSearchService
 	llmRepo     repository.PaperLLMRepo
 	llm         *LLMChatService
@@ -71,7 +71,7 @@ func NewTopicDiscoveryRunService(
 	steps repository.PaperOutputTopicStepRepo,
 	litReviews repository.PaperOutputLiteratureReviewRepo,
 	catalog repository.PaperRefCatalogRepo,
-	litSource repository.PaperRefLiteratureSourceRepo,
+	litSource repository.PaperLiteraturePlatformRepo,
 	litSearch *LiteratureSearchService,
 	llmRepo repository.PaperLLMRepo,
 	llm *LLMChatService,
@@ -283,7 +283,7 @@ func (s *TopicDiscoveryRunService) defaultAuditLevelCode(ctx context.Context) st
 			return rows[0].Code
 		}
 	}
-	return "polished"
+	return "standard"
 }
 
 func (s *TopicDiscoveryRunService) prepareRun(ctx context.Context, userID uint, req request.TopicDiscoveryRunRequest) (topicRunInput, error) {
@@ -323,7 +323,7 @@ func (s *TopicDiscoveryRunService) prepareRun(ctx context.Context, userID uint, 
 		HumanCheckpoint: req.HumanCheckpoint,
 		MaxPapers:       int(intensity.MaxPapers),
 		MaxIdeas:        int(intensity.MaxIdeas),
-		AuditRounds:     int(audit.AuditRounds),
+		ExecRounds:      int(intensity.ExecRounds),
 	}
 	return input, nil
 }
@@ -365,6 +365,14 @@ func (s *TopicDiscoveryRunService) loadRunInput(ctx context.Context, userID uint
 	var input topicRunInput
 	if err := json.Unmarshal(step.InputParams, &input); err != nil {
 		return topicRunInput{}, errorx.ErrTopicRunNotFound
+	}
+	if input.ExecRounds < 1 && strings.TrimSpace(input.Intensity) != "" {
+		if inten, err := s.catalog.FindExecutionIntensityByCode(ctx, strings.TrimSpace(input.Intensity)); err == nil && inten != nil {
+			input.ExecRounds = int(inten.ExecRounds)
+		}
+	}
+	if input.ExecRounds < 1 {
+		input.ExecRounds = 1
 	}
 	return input, nil
 }
@@ -668,12 +676,11 @@ func (s *TopicDiscoveryRunService) stageContext(ctx context.Context, userID uint
 }
 
 type stageLLMResolve struct {
-	model          *entity.PaperLLMModelConfig
-	binding        *entity.PaperLLMWorkflowBinding
-	defPrompt      *entity.PaperLLMPromptTemplate
-	stagePrompt    *entity.PaperLLMPromptTemplate
-	system         string
-	userPrefix     string
+	model       *entity.PaperLLMModelConfig
+	defPrompt   *entity.PaperLLMPromptTemplate
+	stagePrompt *entity.PaperLLMPromptTemplate
+	system      string
+	userPrefix  string
 }
 
 func (s *TopicDiscoveryRunService) contentLocaleForStep(ctx context.Context, step *entity.PaperOutputTopicStep) string {
@@ -786,11 +793,6 @@ func (s *TopicDiscoveryRunService) persistLLMCallLog(
 		id := resolved.model.ID
 		modelCfgID = &id
 	}
-	var bindingID *uint
-	if resolved.binding != nil && resolved.binding.ID > 0 {
-		id := resolved.binding.ID
-		bindingID = &id
-	}
 	var promptTplID *uint
 	if resolved.stagePrompt != nil && resolved.stagePrompt.ID > 0 {
 		id := resolved.stagePrompt.ID
@@ -809,9 +811,8 @@ func (s *TopicDiscoveryRunService) persistLLMCallLog(
 	row := &entity.PaperLLMCallLog{
 		ManuscriptID:      manuscriptID,
 		StageCode:         &stage,
-		ModelConfigID:     modelCfgID,
-		WorkflowBindingID: bindingID,
-		PromptTemplateID:  promptTplID,
+		ModelConfigID:    modelCfgID,
+		PromptTemplateID: promptTplID,
 		ModelName:         resolved.model.ModelName,
 		PromptTokens:      promptTok,
 		CompletionTokens:  completionTok,
@@ -824,27 +825,19 @@ func (s *TopicDiscoveryRunService) persistLLMCallLog(
 
 func (s *TopicDiscoveryRunService) resolveStageLLM(ctx context.Context, stageCode string, vars map[string]string, locale string) (*stageLLMResolve, error) {
 	locale = NormalizeContentLanguage(locale)
-	binding, err := s.llmRepo.GetActiveBindingByStage(ctx, stageCode)
+	defPrompt, _ := s.llmRepo.GetActivePromptByStage(ctx, "default")
+	stagePrompt, _ := s.llmRepo.GetActivePromptByStage(ctx, stageCode)
+	modelConfigID := modelConfigIDFromTopicPrompts(stagePrompt, defPrompt)
+	model, err := s.llmRepo.ResolveActiveModel(ctx, modelConfigID)
 	if err != nil {
 		return nil, err
 	}
-	if binding == nil {
-		binding, err = s.llmRepo.GetActiveBindingByStage(ctx, "default")
-		if err != nil || binding == nil {
-			return nil, errorx.ErrLLMNotConfigured.WithDetail(
-				"缺少 paper_llm_workflow_binding（stage=" + stageCode + " 或 default）",
-			)
-		}
-	}
-	model, err := s.llmRepo.GetActiveModelByID(ctx, binding.ModelConfigID)
-	if err != nil || model == nil {
+	if model == nil {
 		return nil, errorx.ErrLLMNotConfigured.WithDetail(
-			"paper_llm_model_config 不存在或未 active（binding model_config_id=" +
-				fmt.Sprintf("%d", binding.ModelConfigID) + "）",
+			"缺少 paper_llm_model_config（template_topic description.model_config_id=" +
+				fmt.Sprintf("%d", modelConfigID) + " 且无 active 默认端点）",
 		)
 	}
-	defPrompt, _ := s.llmRepo.GetActivePromptByStage(ctx, "default")
-	stagePrompt, _ := s.llmRepo.GetActivePromptByStage(ctx, stageCode)
 	renderVars := mergePromptVars(vars, locale)
 	system := ""
 	if defPrompt != nil {
@@ -859,7 +852,6 @@ func (s *TopicDiscoveryRunService) resolveStageLLM(ctx context.Context, stageCod
 	}
 	return &stageLLMResolve{
 		model:       model,
-		binding:     binding,
 		defPrompt:   defPrompt,
 		stagePrompt: stagePrompt,
 		system:      system,

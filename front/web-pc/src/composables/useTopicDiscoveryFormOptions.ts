@@ -10,7 +10,7 @@ const disciplineSelectOptions = ref<PaperSelectOption[]>([])
 const intensityOptions = ref<PaperSelectOption[]>([])
 const auditOptions = ref<PaperSelectOption[]>([])
 const defaultIntensityCode = ref('balanced')
-const defaultAuditLevelCode = ref('polished')
+const defaultAuditLevelCode = ref('standard')
 const literatureSourceOptions = ref<LiteratureSourceOption[]>([])
 const defaultLiteratureSourceCodes = ref<string[]>([])
 const ready = ref(false)
@@ -29,12 +29,12 @@ function applyFallbackOptions() {
     { value: 'deep', label: '更深' },
   ]
   auditOptions.value = [
+    { value: 'polished', label: '基础' },
     { value: 'standard', label: '标准' },
-    { value: 'polished', label: '精修' },
     { value: 'strict', label: '严格' },
   ]
   defaultIntensityCode.value = 'balanced'
-  defaultAuditLevelCode.value = 'polished'
+  defaultAuditLevelCode.value = 'standard'
   literatureSourceOptions.value = LITERATURE_SOURCE_OPTIONS.map((s, i) => ({
     code: s.code,
     label: s.label,

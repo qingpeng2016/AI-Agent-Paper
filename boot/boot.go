@@ -91,7 +91,7 @@ func BuildContainer() *dig.Container {
 	_ = c.Provide(mysql.NewCouponCampaignsImpl)
 	_ = c.Provide(mysql.NewUserCouponsImpl)
 	_ = c.Provide(mysql.NewUserTrackEventsImpl)
-	_ = c.Provide(mysql.NewPaperRefLiteratureSourceImpl)
+	_ = c.Provide(mysql.NewPaperLiteraturePlatformImpl)
 	_ = c.Provide(mysql.NewPaperRefCatalogImpl)
 	_ = c.Provide(mysql.NewPaperManuscriptImpl)
 	_ = c.Provide(mysql.NewPaperOutputTopicStepImpl)

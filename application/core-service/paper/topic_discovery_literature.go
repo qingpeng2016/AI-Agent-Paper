@@ -269,6 +269,7 @@ func (s *TopicDiscoveryRunService) buildAuditUserExtra(
 		}
 		return "\n【新颖性摘要 summary_text】\n" + noveltySummary
 	}()
+	gateBlock := auditGateInstructionsBlock(ctx, s.catalog, input.AuditLevel, locale)
 	if locale == "en" {
 		return fmt.Sprintf(`Audit round %d/%d
 Target venue: %s
@@ -295,7 +296,7 @@ Audit level: %s
 2. Assess whether novelty supports the ideas; flag contradictions or over-claims.
 3. Reviewer-style audit: unsupported claims, missing baselines/comparisons, unclear contributions.
 4. Also produce a literature review (Markdown in content_medium): synthesize Corpus and vetted ideas/novelty; pick thematic/chronological/method for structure; citations must use Corpus ref_id.
-
+%s
 Return ONLY valid JSON (final round must include literature_review):
 {
   "audit": {
@@ -326,6 +327,7 @@ Return ONLY valid JSON (final round must include literature_review):
 			ideasJSON,
 			noveltyJSON,
 			noveltyExtra,
+			gateBlock,
 			jsonStringFieldsLocaleHint(locale),
 		)
 	}
@@ -354,7 +356,7 @@ Return ONLY valid JSON (final round must include literature_review):
 2. 新颖性结论是否支撑 idea，有无与文献/方向矛盾或过度声称。
 3. 以严格审稿人视角给出审查结论：论断是否有文献支持、是否缺少基线/对照、贡献是否清晰；列出 unsupported claims、缺失基线/对照、贡献含糊等问题。
 4. **同时生成文献综述**（Markdown 正文）：综合 Corpus 与已通过审查的 idea/novelty，结构清晰（thematic/chronological/method 择一写入 structure），引用须使用 Corpus 中的 ref_id；正文写入 content_medium。
-
+%s
 输出 ONLY valid JSON（最后一轮须含 literature_review）：
 {
   "audit": {
@@ -385,6 +387,7 @@ Return ONLY valid JSON (final round must include literature_review):
 		ideasJSON,
 		noveltyJSON,
 		noveltyExtra,
+		gateBlock,
 		jsonStringFieldsLocaleHint(locale),
 	)
 }

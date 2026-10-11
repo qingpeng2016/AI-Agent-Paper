@@ -6,12 +6,11 @@ export type TopicDiscoveryFormOptionsResponse = {
     label: string
     name_en?: string
     sort: number
-    literature_source_codes?: string[]
   }>
   execution_intensities: Array<{
     code: string
     label: string
-    multiplier: number
+    exec_rounds: number
     max_papers: number
     max_ideas: number
     is_default?: boolean
@@ -19,10 +18,9 @@ export type TopicDiscoveryFormOptionsResponse = {
   audit_levels: Array<{
     code: string
     label: string
-    citation_strength: number
-    claim_strength: number
-    kill_argument_strength: number
-    audit_rounds: number
+    llm_description_citation_check_code: number
+    llm_description_claim_check_code: number
+    llm_description_kill_check_code: number
     is_default?: boolean
   }>
   literature_sources?: Array<{

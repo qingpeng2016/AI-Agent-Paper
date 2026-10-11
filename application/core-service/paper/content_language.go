@@ -20,7 +20,7 @@ func jsonStringFieldsLocaleHint(locale string) string {
 	return "JSON 内字符串字段使用中文。"
 }
 
-// PromptLocaleVars 供 paper_template_llm_prompt 占位符（与论文 content_language 一致）。
+// PromptLocaleVars 供 paper_llm_description（含 template_topic）占位符（与论文 content_language 一致）。
 func PromptLocaleVars(locale string) map[string]string {
 	locale = NormalizeContentLanguage(locale)
 	if locale == "en" {

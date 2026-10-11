@@ -454,7 +454,7 @@ export const DEFAULT_LITERATURE_REVIEW: LiteratureReviewForm = {
   includeExperimentContext: true,
   includeGap: true,
   intensity: 'balanced',
-  auditLevel: 'polished',
+  auditLevel: 'standard',
 }
 
 export const DEFAULT_EXPERIMENT_PLANNING: ExperimentPlanningForm = {
@@ -527,7 +527,7 @@ export const DEFAULT_TOPIC_DISCOVERY: TopicDiscoveryForm = {
   venue: 'NeurIPS/ICLR/ICML',
   sourceCodes: ['arxiv', 'openalex', 'semantic_scholar'],
   intensity: 'balanced',
-  auditLevel: 'polished',
+  auditLevel: 'standard',
   humanCheckpoint: true,
 }
 
@@ -561,7 +561,7 @@ export const DEFAULT_ENV_PREFERENCE: EnvironmentPreferenceForm = {
   defaultVenueText: 'NeurIPS/ICLR/ICML',
   literatureSourceCodes: ['arxiv', 'openalex', 'semantic_scholar'],
   intensity: 'balanced',
-  auditLevel: 'polished',
+  auditLevel: 'standard',
   humanCheckpoint: true,
   referenceGateEnabled: true,
 }

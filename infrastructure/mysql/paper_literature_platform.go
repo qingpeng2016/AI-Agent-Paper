@@ -9,16 +9,16 @@ import (
 	"gorm.io/gorm"
 )
 
-type PaperRefLiteratureSourceImpl struct {
+type PaperLiteraturePlatformImpl struct {
 	db *gorm.DB
 }
 
-func NewPaperRefLiteratureSourceImpl(db *gorm.DB) repository.PaperRefLiteratureSourceRepo {
-	return &PaperRefLiteratureSourceImpl{db: db}
+func NewPaperLiteraturePlatformImpl(db *gorm.DB) repository.PaperLiteraturePlatformRepo {
+	return &PaperLiteraturePlatformImpl{db: db}
 }
 
-func (r *PaperRefLiteratureSourceImpl) FindActiveByCode(ctx context.Context, code string) (*entity.PaperRefLiteratureSource, error) {
-	var row entity.PaperRefLiteratureSource
+func (r *PaperLiteraturePlatformImpl) FindActiveByCode(ctx context.Context, code string) (*entity.PaperLiteraturePlatform, error) {
+	var row entity.PaperLiteraturePlatform
 	err := r.db.WithContext(ctx).
 		Where("code = ? AND status = ?", code, "active").
 		First(&row).Error
@@ -31,8 +31,8 @@ func (r *PaperRefLiteratureSourceImpl) FindActiveByCode(ctx context.Context, cod
 	return &row, nil
 }
 
-func (r *PaperRefLiteratureSourceImpl) ListActiveOrdered(ctx context.Context) ([]entity.PaperRefLiteratureSource, error) {
-	var rows []entity.PaperRefLiteratureSource
+func (r *PaperLiteraturePlatformImpl) ListActiveOrdered(ctx context.Context) ([]entity.PaperLiteraturePlatform, error) {
+	var rows []entity.PaperLiteraturePlatform
 	err := r.db.WithContext(ctx).
 		Where("status = ?", "active").
 		Order("priority ASC, id ASC").

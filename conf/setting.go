@@ -90,7 +90,7 @@ type Alipay struct {
 	Gateway    string `mapstructure:"gateway"`
 }
 
-// 文献 HTTP 端点 fallback（运行时以 paper_ref_literature_source 为准）
+// 文献 HTTP 端点 fallback（运行时以 paper_literature_platform 为准）
 const (
 	DefaultLiteratureArxivBaseURL           = "https://export.arxiv.org/api/query"
 	DefaultLiteratureOpenAlexBaseURL        = "https://api.openalex.org/works"
