@@ -8,6 +8,7 @@ type TopicDiscoveryRunRequest struct {
 	Description     string   `json:"description"`
 	Direction       string   `json:"direction"` // 兼容旧版单框；新版请传 keywords + description
 	Venue           string   `json:"venue"`
+	VenueCodes      []string `json:"venue_codes"`
 	SourceCodes     []string `json:"source_codes"`
 	Intensity       string   `json:"intensity"`
 	AuditLevel      string   `json:"audit_level"`

@@ -29,6 +29,17 @@ export type TopicDiscoveryFormOptionsResponse = {
     priority: number
     default_selected: boolean
   }>
+  venues?: Array<{
+    code: string
+    label: string
+    venue_type: string
+  }>
+}
+
+export type VenueOption = {
+  code: string
+  label: string
+  venueType: string
 }
 
 export type LiteratureSourceOption = {
@@ -52,6 +63,7 @@ export type TopicDiscoveryRunRequest = {
   description: string
   direction?: string
   venue: string
+  venue_codes?: string[]
   source_codes: string[]
   intensity: string
   audit_level: string
@@ -77,18 +89,54 @@ export type TopicDiscoveryStepDTO = {
 }
 
 /** 从 retrieve 步的 input_params 回填选题表单（刷新 / 检查点继续） */
+export function formatVenueTextFromCodes(
+  codes: readonly string[],
+  venues: readonly VenueOption[],
+): string {
+  if (!codes.length) return ''
+  return codes
+    .map((c) => venues.find((v) => v.code === c)?.label ?? c)
+    .filter(Boolean)
+    .join(' / ')
+}
+
+export function inferVenueCodesFromText(
+  text: string,
+  venues: readonly VenueOption[],
+): string[] {
+  const parts = text
+    .split(/[/／|,，、]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+  const out: string[] = []
+  for (const part of parts) {
+    const lower = part.toLowerCase()
+    const byCode = venues.find((v) => v.code === part || v.code.toLowerCase() === lower)
+    if (byCode) {
+      out.push(byCode.code)
+      continue
+    }
+    const byLabel = venues.find(
+      (v) => v.label === part || v.label.toLowerCase() === lower,
+    )
+    if (byLabel) out.push(byLabel.code)
+  }
+  return [...new Set(out)]
+}
+
 export function applyStoredTopicRunInputToForm(
   form: {
     disciplineCode: string
     keywords: string
     description: string
-    venue: string
+    venueCodes: string[]
     sourceCodes: string[]
     intensity: string
     auditLevel: string
     humanCheckpoint: boolean
   },
   run?: TopicDiscoveryRunResponse | null,
+  venues: readonly VenueOption[] = [],
 ): void {
   if (!run) return
   if (isTopicRunTerminalCompleted(run)) return
@@ -123,8 +171,14 @@ export function applyStoredTopicRunInputToForm(
 
   const discipline = String(p.discipline_code ?? '').trim()
   if (discipline) form.disciplineCode = discipline
-  const venue = String(p.venue ?? '').trim()
-  if (venue) form.venue = venue
+  if (Array.isArray(p.venue_codes) && p.venue_codes.length) {
+    form.venueCodes = (p.venue_codes as unknown[]).map((c) => String(c).trim()).filter(Boolean)
+  } else {
+    const venue = String(p.venue ?? '').trim()
+    if (venue && venues.length) {
+      form.venueCodes = inferVenueCodesFromText(venue, venues)
+    }
+  }
   if (Array.isArray(p.source_codes) && p.source_codes.length) {
     form.sourceCodes = (p.source_codes as unknown[]).map((c) => String(c).trim()).filter(Boolean)
   }
@@ -281,6 +335,8 @@ export function defaultLiteratureSourceCodesFromOptions(
 
 export async function fetchTopicDiscoveryFormOptions(): Promise<{
   disciplineSelectOptions: PaperSelectOption[]
+  venueOptions: VenueOption[]
+  venueSelectOptions: PaperSelectOption[]
   intensityOptions: PaperSelectOption[]
   auditOptions: PaperSelectOption[]
   literatureSources: LiteratureSourceOption[]
@@ -315,8 +371,18 @@ export async function fetchTopicDiscoveryFormOptions(): Promise<{
       priority: x.priority,
       defaultSelected: Boolean(x.default_selected),
     }))
+  const venueOptions = (d.venues ?? [])
+    .slice()
+    .sort((a, b) => a.label.localeCompare(b.label, 'zh-CN') || a.code.localeCompare(b.code))
+    .map((x) => ({
+      code: x.code,
+      label: x.label,
+      venueType: x.venue_type,
+    }))
   return {
     disciplineSelectOptions: d.disciplines.map((x) => ({ value: x.code, label: x.label })),
+    venueOptions,
+    venueSelectOptions: venueOptions.map((x) => ({ value: x.code, label: x.label })),
     intensityOptions: d.execution_intensities.map((x) => ({ value: x.code, label: x.label })),
     auditOptions: d.audit_levels.map((x) => ({ value: x.code, label: x.label })),
     literatureSources,

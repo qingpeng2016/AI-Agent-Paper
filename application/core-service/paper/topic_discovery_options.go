@@ -32,11 +32,24 @@ func (s *TopicDiscoveryOptionsService) GetFormOptions(ctx context.Context) (*res
 	if err != nil {
 		return nil, err
 	}
+	venues, err := s.catalog.ListActiveVenues(ctx)
+	if err != nil {
+		return nil, err
+	}
 
 	out := &response.TopicDiscoveryFormOptions{
 		Disciplines:      make([]response.TopicDiscoveryDisciplineOption, 0, len(disciplines)),
+		Venues:           make([]response.TopicDiscoveryVenueOption, 0, len(venues)),
 		ExecutionIntents: make([]response.TopicDiscoveryExecutionIntensityOption, 0, len(intensities)),
 		AuditLevels:      make([]response.TopicDiscoveryAuditLevelOption, 0, len(audits)),
+	}
+
+	for _, v := range venues {
+		out.Venues = append(out.Venues, response.TopicDiscoveryVenueOption{
+			Code:      v.Code,
+			Label:     v.Name,
+			VenueType: v.VenueType,
+		})
 	}
 
 	for _, d := range disciplines {

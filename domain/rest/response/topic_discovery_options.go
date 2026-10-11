@@ -2,9 +2,16 @@ package response
 
 type TopicDiscoveryFormOptions struct {
 	Disciplines       []TopicDiscoveryDisciplineOption           `json:"disciplines"`
+	Venues            []TopicDiscoveryVenueOption                `json:"venues"`
 	ExecutionIntents  []TopicDiscoveryExecutionIntensityOption   `json:"execution_intensities"`
 	AuditLevels       []TopicDiscoveryAuditLevelOption           `json:"audit_levels"`
 	LiteratureSources []TopicDiscoveryLiteratureSourceOption     `json:"literature_sources"`
+}
+
+type TopicDiscoveryVenueOption struct {
+	Code      string `json:"code"`
+	Label     string `json:"label"`
+	VenueType string `json:"venue_type"`
 }
 
 type TopicDiscoveryLiteratureSourceOption struct {

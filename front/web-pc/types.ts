@@ -326,7 +326,8 @@ export type TopicDiscoveryForm = {
   keywords: string
   /** 研究背景、问题与手段等详细说明 */
   description: string
-  venue: string
+  /** paper_ref_venue.code，多选 */
+  venueCodes: string[]
   /** 多源检索（写入 paper_output_topic_step retrieve 步 result.literature_hits） */
   sourceCodes: string[]
   intensity: ExecutionIntensity
@@ -524,7 +525,7 @@ export const DEFAULT_TOPIC_DISCOVERY: TopicDiscoveryForm = {
   disciplineCode: 'cs_ai',
   keywords: '',
   description: '',
-  venue: 'NeurIPS/ICLR/ICML',
+  venueCodes: ['neurips', 'iclr', 'icml'],
   sourceCodes: ['arxiv', 'openalex', 'semantic_scholar'],
   intensity: 'balanced',
   auditLevel: 'standard',

@@ -12,6 +12,8 @@ import {
   commitTopicDiscoveryManuscript,
   parseRetrieveLiteratureLinks,
   applyStoredTopicRunInputToForm,
+  formatVenueTextFromCodes,
+  inferVenueCodesFromText,
   isTopicRunTerminalCompleted,
   type TopicDiscoveryRunResponse,
   type TopicDiscoveryStepDTO,
@@ -48,6 +50,7 @@ import PaperMyManuscriptsPanel from './PaperMyManuscriptsPanel.vue'
 import PaperInviteRebatePanel from './PaperInviteRebatePanel.vue'
 import PaperPersonalCenterPanel from './PaperPersonalCenterPanel.vue'
 import PaperSelect from './PaperSelect.vue'
+import PaperMultiSelect from './PaperMultiSelect.vue'
 import PaperWorkflowPanels from './PaperWorkflowPanels.vue'
 
 type TopicFlowStepRuntime = {
@@ -245,6 +248,8 @@ const {
   disciplineSelectOptions,
   intensityOptions,
   auditOptions,
+  venueOptions,
+  venueSelectOptions,
   ready: topicFormOptionsReady,
   applyCatalogIntensityAuditDefaults,
   literatureSourceOptions,
@@ -577,7 +582,13 @@ loadEnvFromStorage()
 loadManuscriptsFromStorage()
 loadLitReviewFlagsFromStorage()
 loadExperimentPlanFlagsFromStorage()
-topicForm.venue = envPreference.defaultVenueText || topicForm.venue
+{
+  const fromEnv = inferVenueCodesFromText(
+    envPreference.defaultVenueText,
+    venueOptions.value,
+  )
+  if (fromEnv.length) topicForm.venueCodes = fromEnv
+}
 topicForm.sourceCodes = [...envPreference.literatureSourceCodes]
 topicForm.intensity = envPreference.intensity
 topicForm.auditLevel = envPreference.auditLevel
@@ -642,7 +653,13 @@ function recordModuleOperationLog(
 }
 
 function onEnvironmentSaved() {
-  topicForm.venue = envPreference.defaultVenueText || topicForm.venue
+  {
+    const fromEnv = inferVenueCodesFromText(
+      envPreference.defaultVenueText,
+      venueOptions.value,
+    )
+    if (fromEnv.length) topicForm.venueCodes = fromEnv
+  }
   topicForm.intensity = envPreference.intensity
   topicForm.auditLevel = envPreference.auditLevel
   topicForm.humanCheckpoint = envPreference.humanCheckpoint
@@ -1185,7 +1202,8 @@ function buildTopicRunRequest(action: 'start' | 'continue') {
     keywords: parseTopicKeywords(topicForm.keywords),
     description: topicForm.description.trim(),
     direction: direction || undefined,
-    venue: topicForm.venue,
+    venue: formatVenueTextFromCodes(topicForm.venueCodes, venueOptions.value),
+    venue_codes: [...topicForm.venueCodes],
     source_codes: [...topicForm.sourceCodes],
     intensity: topicForm.intensity,
     audit_level: topicForm.auditLevel,
@@ -1213,7 +1231,7 @@ async function hydrateTopicRunFromServer(msId: string): Promise<void> {
         return
       }
       if (!isTopicRunTerminalCompleted(data)) {
-        applyStoredTopicRunInputToForm(topicForm, data)
+        applyStoredTopicRunInputToForm(topicForm, data, venueOptions.value)
       }
       syncTopicDisciplineFromCurrentManuscript()
       syncTopicRunUiAfterServer(msId, data)
@@ -1674,6 +1692,10 @@ async function onPrimaryAction() {
       ElMessage.warning('请至少选择一个文献来源（检索在选题发现完成）')
       return
     }
+    if (topicForm.venueCodes.length === 0) {
+      ElMessage.warning('请至少选择一个目标会议/期刊')
+      return
+    }
   }
   if (activeModule.value === 'topic-discovery') {
     if (topicReadyForLiteratureReview.value) {
@@ -2015,8 +2037,13 @@ watch(
 
           <label class="paper-field">
             <span class="paper-label">目标会议/期刊</span>
-            <input v-model="topicForm.venue" type="text" class="paper-input" />
-            <span class="paper-hint">用于约束贡献类型、实验标准和写作风格。</span>
+            <PaperMultiSelect
+              v-model="topicForm.venueCodes"
+              :options="venueSelectOptions"
+              placeholder="请选择（可多选）"
+              :disabled="topicRunBusy || currentTopicRun.status === 'checkpoint'"
+            />
+            <span class="paper-hint">用于约束贡献类型、实验标准和写作风格；可多选。</span>
           </label>
 
           <label class="paper-field">

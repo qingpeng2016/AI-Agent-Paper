@@ -3,6 +3,7 @@ import {
   fetchTopicDiscoveryFormOptions,
   type LiteratureSourceOption,
   type PaperSelectOption,
+  type VenueOption,
 } from '@/api/topicDiscovery'
 import { DISCIPLINE_OPTIONS, LITERATURE_SOURCE_OPTIONS } from '@paper/types'
 
@@ -12,6 +13,8 @@ const auditOptions = ref<PaperSelectOption[]>([])
 const defaultIntensityCode = ref('balanced')
 const defaultAuditLevelCode = ref('standard')
 const literatureSourceOptions = ref<LiteratureSourceOption[]>([])
+const venueOptions = ref<VenueOption[]>([])
+const venueSelectOptions = ref<PaperSelectOption[]>([])
 const defaultLiteratureSourceCodes = ref<string[]>([])
 const ready = ref(false)
 const loading = ref(false)
@@ -96,6 +99,10 @@ export async function reloadTopicDiscoveryFormOptions(): Promise<void> {
     if (opts.defaultAuditLevelCode) {
       defaultAuditLevelCode.value = opts.defaultAuditLevelCode
     }
+    if (opts.venueOptions.length) {
+      venueOptions.value = opts.venueOptions
+      venueSelectOptions.value = opts.venueSelectOptions
+    }
     if (opts.literatureSources.length) {
       literatureSourceOptions.value = opts.literatureSources
       defaultLiteratureSourceCodes.value = opts.defaultLiteratureSourceCodes
@@ -133,6 +140,8 @@ export function useTopicDiscoveryFormOptions() {
     defaultIntensityCode: readonly(defaultIntensityCode),
     defaultAuditLevelCode: readonly(defaultAuditLevelCode),
     literatureSourceOptions: readonly(literatureSourceOptions),
+    venueOptions: readonly(venueOptions),
+    venueSelectOptions: readonly(venueSelectOptions),
     defaultLiteratureSourceCodes: readonly(defaultLiteratureSourceCodes),
     applyCatalogIntensityAuditDefaults,
     literatureSourceLabel,

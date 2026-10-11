@@ -25,6 +25,7 @@ type topicRunInput struct {
 	Description     string   `json:"description"`
 	Direction       string   `json:"direction"`
 	Venue           string   `json:"venue"`
+	VenueCodes      []string `json:"venue_codes"`
 	SourceCodes     []string `json:"source_codes"`
 	Intensity       string   `json:"intensity"`
 	AuditLevel      string   `json:"audit_level"`
@@ -311,12 +312,19 @@ func (s *TopicDiscoveryRunService) prepareRun(ctx context.Context, userID uint, 
 		return topicRunInput{}, errorx.ErrParamsError
 	}
 
+	venue := strings.TrimSpace(req.Venue)
+	venueCodes := normalizeStringList(req.VenueCodes)
+	if venue == "" && len(venueCodes) > 0 {
+		venue = s.venueLabelsFromCodes(ctx, venueCodes)
+	}
+
 	input := topicRunInput{
 		DisciplineCode:  strings.TrimSpace(req.DisciplineCode),
 		Keywords:        keywords,
 		Description:     description,
 		Direction:       direction,
-		Venue:           strings.TrimSpace(req.Venue),
+		Venue:           venue,
+		VenueCodes:      venueCodes,
 		SourceCodes:     req.SourceCodes,
 		Intensity:       intensityCode,
 		AuditLevel:      auditCode,
@@ -994,4 +1002,34 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func normalizeStringList(raw []string) []string {
+	out := make([]string, 0, len(raw))
+	seen := map[string]struct{}{}
+	for _, s := range raw {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		if _, ok := seen[s]; ok {
+			continue
+		}
+		seen[s] = struct{}{}
+		out = append(out, s)
+	}
+	return out
+}
+
+func (s *TopicDiscoveryRunService) venueLabelsFromCodes(ctx context.Context, codes []string) string {
+	labels := make([]string, 0, len(codes))
+	for _, code := range codes {
+		v, err := s.catalog.FindVenueByCode(ctx, code)
+		if err != nil || v == nil {
+			labels = append(labels, code)
+			continue
+		}
+		labels = append(labels, v.Name)
+	}
+	return strings.Join(labels, " / ")
 }
