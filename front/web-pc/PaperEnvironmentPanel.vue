@@ -71,7 +71,12 @@ async function saveEnvironment() {
       <div class="pc-field-grid">
         <label class="pc-field">
           <span class="pc-label">默认学科</span>
-          <PaperSelect v-model="envPreference.disciplineCode" :options="disciplineSelectOptions" />
+          <PaperSelect
+            v-model="envPreference.disciplineCode"
+            :options="disciplineSelectOptions"
+            filterable
+            filter-placeholder="输入学科名称筛选"
+          />
         </label>
 
         <label class="pc-field">

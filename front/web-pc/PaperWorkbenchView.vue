@@ -275,13 +275,9 @@ const createManuscriptForm = reactive<{ disciplineCode: string; title: string; c
 })
 let createManuscriptDialogResolve: ((ok: boolean) => void) | null = null
 
-function pickDefaultDisciplineCode(): string {
-  return disciplineSelectOptions.value[0]?.value ?? ''
-}
-
 async function openCreateManuscriptDialog(): Promise<boolean> {
   await reloadTopicDiscoveryFormOptions()
-  createManuscriptForm.disciplineCode = pickDefaultDisciplineCode()
+  createManuscriptForm.disciplineCode = ''
   createManuscriptForm.title = ''
   createManuscriptForm.contentLanguage = 'en'
   createManuscriptDialogVisible.value = true
@@ -1814,6 +1810,9 @@ watch(
               <PaperSelect
                 v-model="createManuscriptForm.disciplineCode"
                 :options="disciplineSelectOptions"
+                placeholder="请选择"
+                filterable
+                filter-placeholder="输入学科名称筛选"
               />
             </div>
             <div>

@@ -551,7 +551,7 @@ export const LITERATURE_SOURCE_OPTIONS = [
 ] as const
 
 export const DISCIPLINE_OPTIONS = [
-  { code: 'cs_ai', label: '计算机 / 人工智能' },
+  { code: 'cs_ai', label: '人工智能' },
   { code: 'general', label: '跨学科通用' },
 ] as const
 
