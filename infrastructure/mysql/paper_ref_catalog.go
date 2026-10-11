@@ -107,3 +107,42 @@ func (r *PaperRefCatalogImpl) FindLLMDescriptionByCode(ctx context.Context, code
 	}
 	return &row, nil
 }
+
+func (r *PaperRefCatalogImpl) ListActiveVenues(ctx context.Context) ([]entity.PaperRefVenue, error) {
+	var rows []entity.PaperRefVenue
+	err := r.db.WithContext(ctx).
+		Where("status = ?", "active").
+		Order("name ASC, id ASC").
+		Find(&rows).Error
+	return rows, err
+}
+
+func (r *PaperRefCatalogImpl) FindVenueByCode(ctx context.Context, code string) (*entity.PaperRefVenue, error) {
+	if code == "" {
+		return nil, nil
+	}
+	var row entity.PaperRefVenue
+	err := r.db.WithContext(ctx).Where("code = ? AND status = ?", code, "active").First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+func (r *PaperRefCatalogImpl) FindVenueByID(ctx context.Context, id uint64) (*entity.PaperRefVenue, error) {
+	if id == 0 {
+		return nil, nil
+	}
+	var row entity.PaperRefVenue
+	err := r.db.WithContext(ctx).Where("id = ? AND status = ?", id, "active").First(&row).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
