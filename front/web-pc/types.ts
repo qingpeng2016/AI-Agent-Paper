@@ -525,7 +525,7 @@ export const DEFAULT_TOPIC_DISCOVERY: TopicDiscoveryForm = {
   disciplineCode: 'cs_ai',
   keywords: '',
   description: '',
-  venueCodes: ['neurips', 'iclr', 'icml'],
+  venueCodes: [],
   sourceCodes: ['arxiv', 'openalex', 'semantic_scholar'],
   intensity: 'balanced',
   auditLevel: 'standard',
@@ -559,7 +559,7 @@ export const ENV_PREFERENCE_STORAGE_KEY = 'atm:paper:environment:v3'
 
 export const DEFAULT_ENV_PREFERENCE: EnvironmentPreferenceForm = {
   disciplineCode: 'cs_ai',
-  defaultVenueText: 'NeurIPS/ICLR/ICML',
+  defaultVenueText: '',
   literatureSourceCodes: ['arxiv', 'openalex', 'semantic_scholar'],
   intensity: 'balanced',
   auditLevel: 'standard',
