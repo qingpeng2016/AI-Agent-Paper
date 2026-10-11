@@ -318,6 +318,11 @@
   font-weight: 400;
 }
 
+.paper-message-box__form .paper-select-value:not(.paper-select-value--muted) {
+  color: var(--atm-text, #1e1b4b);
+  font-weight: 600;
+}
+
 .paper-create-ms-panel .paper-message-box__form .paper-select-trigger {
   height: 44px;
 }

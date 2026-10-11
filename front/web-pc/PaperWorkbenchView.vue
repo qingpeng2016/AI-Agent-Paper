@@ -2048,7 +2048,7 @@ watch(
           </label>
 
           <label class="paper-field">
-            <span class="paper-label">目标会议/期刊</span>
+            <span class="paper-label">目标会议/期刊 <em class="req">*</em></span>
             <PaperMultiSelect
               v-model="topicForm.venueCodes"
               :options="venueSelectOptions"
@@ -2072,7 +2072,7 @@ watch(
         </div>
 
         <div class="paper-field paper-field--block paper-field--section-gap">
-          <span class="paper-label">文献来源（检索用）</span>
+          <span class="paper-label">文献来源（检索用） <em class="req">*</em></span>
           <div class="paper-check-group">
             <label
               v-for="src in literatureSourceOptions"
@@ -3123,7 +3123,6 @@ watch(
 
 .paper-input--readonly,
 .paper-input--like-discipline {
-  color: #64748b;
   background: #eef2f6;
   border-color: #e2e8f0;
 }
@@ -3131,6 +3130,10 @@ watch(
 .paper-input--readonly {
   cursor: default;
   user-select: none;
+}
+
+.paper-input--like-discipline:not(.paper-input--discipline-unset) {
+  color: var(--atm-text, #1e1b4b);
 }
 
 .paper-input--like-discipline::placeholder,

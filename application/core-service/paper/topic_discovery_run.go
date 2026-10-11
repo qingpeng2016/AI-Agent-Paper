@@ -293,7 +293,7 @@ func (s *TopicDiscoveryRunService) prepareRun(ctx context.Context, userID uint, 
 		return topicRunInput{}, errorx.ErrParamsError
 	}
 	if len(req.SourceCodes) == 0 {
-		return topicRunInput{}, errorx.ErrParamsError
+		return topicRunInput{}, errorx.ErrParamsError.WithDetail("请至少选择一个文献来源")
 	}
 	intensityCode := strings.TrimSpace(req.Intensity)
 	if intensityCode == "" {
@@ -316,6 +316,9 @@ func (s *TopicDiscoveryRunService) prepareRun(ctx context.Context, userID uint, 
 	venueCodes := normalizeStringList(req.VenueCodes)
 	if venue == "" && len(venueCodes) > 0 {
 		venue = s.venueLabelsFromCodes(ctx, venueCodes)
+	}
+	if len(venueCodes) == 0 && venue == "" {
+		return topicRunInput{}, errorx.ErrParamsError.WithDetail("请至少选择一个目标会议/期刊")
 	}
 
 	input := topicRunInput{
