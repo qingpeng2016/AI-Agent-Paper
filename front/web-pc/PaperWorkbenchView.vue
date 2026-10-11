@@ -184,8 +184,9 @@ async function prepareModuleContent(moduleId: PaperModuleId) {
       reloadManuscriptsFromStorage: loadManuscriptsFromStorage,
     })
     if (moduleId === 'topic-discovery') {
-      const msId = activeManuscriptId.value
-      if (msId) await hydrateTopicRunFromServer(msId)
+      const msId =
+        (await ensureManuscriptWhenEmpty()) ?? activeManuscriptId.value
+      if (msId && /^\d+$/.test(msId)) await hydrateTopicRunFromServer(msId)
     }
   } finally {
     if (seq === moduleSwitchSeq) {
