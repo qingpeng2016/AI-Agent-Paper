@@ -6,12 +6,12 @@ import (
 )
 
 type PaperLLMDescription struct {
-	ID              uint64 `gorm:"column:id;primaryKey;autoIncrement"`
-	DescriptionCode uint64 `gorm:"column:description_code;not null;uniqueIndex:uk_paper_llm_description_code"`
+	DescriptionCode uint64 `gorm:"column:description_code;primaryKey"`
+	PromptScene     string `gorm:"column:prompt_scene;size:32;not null;default:shared"`
 	ModelConfigID   uint64 `gorm:"column:model_config_id;not null;default:0"`
-	PromptCode    string `gorm:"column:prompt_code;size:64;not null"`
-	PromptType     string    `gorm:"column:prompt_type;size:128;not null"`
-	PromptName     string    `gorm:"column:prompt_name;size:256;not null;default:''"`
+	PromptCode  string `gorm:"column:prompt_code;size:64;not null"`
+	PromptName  string `gorm:"column:prompt_name;size:128;not null"`
+	PromptDesc  string `gorm:"column:prompt_desc;size:256;not null;default:''"`
 	LlmDescZh      string    `gorm:"column:llm_desc_zh;type:mediumtext;not null"`
 	LlmDescEn      string    `gorm:"column:llm_desc_en;type:mediumtext;not null"`
 	Status         string    `gorm:"column:status;size:16;not null;default:active"`

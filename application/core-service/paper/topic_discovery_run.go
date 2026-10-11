@@ -273,7 +273,7 @@ func (s *TopicDiscoveryRunService) defaultExecutionIntensityCode(ctx context.Con
 }
 
 func (s *TopicDiscoveryRunService) defaultAuditLevelCode(ctx context.Context) string {
-	rows, err := s.catalog.ListAuditLevels(ctx)
+	rows, err := s.catalog.ListAuditLevels(ctx, entity.LLMSceneTopic)
 	if err == nil {
 		for _, r := range rows {
 			if r.IsDefault {
@@ -307,7 +307,7 @@ func (s *TopicDiscoveryRunService) prepareRun(ctx context.Context, userID uint, 
 	if err != nil || intensity == nil {
 		return topicRunInput{}, errorx.ErrParamsError
 	}
-	audit, err := s.catalog.FindAuditLevelByCode(ctx, auditCode)
+	audit, err := s.catalog.FindAuditLevelByCode(ctx, entity.LLMSceneTopic, auditCode)
 	if err != nil || audit == nil {
 		return topicRunInput{}, errorx.ErrParamsError
 	}

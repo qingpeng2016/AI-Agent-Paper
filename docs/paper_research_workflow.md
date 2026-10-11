@@ -56,7 +56,7 @@
 
 ### 3.1 检索入库
 
-1. 根据 **关键词、详细描述** 检索文献（数量可配置，如 `paper_llm_constraint_exec_intensity.max_papers`）  
+1. 根据 **关键词、详细描述** 检索文献（数量可配置，如 `paper_exec_intensity_topic.max_papers`）  
 2. **下载原文** 至 storage（如 `paper-files/`），retrieve 步落库 hits / brief  
 3. 可选：**用户上传** 参考文献，合并进 Corpus（须走校验 → verified）
 
@@ -222,9 +222,9 @@
 
 | 配置 | 表/位置 | 作用阶段 |
 |------|---------|----------|
-| 执行强度 | `paper_llm_constraint_exec_intensity` | `exec_rounds`（审计 LLM 轮数）、`max_papers`、`max_ideas` |
-| 三门禁档位 | `paper_llm_constraint_gate` | `llm_description_*_check_code` → `description_code`（1xxxx；0=关该 gate） |
-| LLM 文案库 | `paper_llm_description` | `description_code`（按 prompt_code 分段）、`prompt_name`、`model_config_id` |
+| 执行强度 | `paper_exec_intensity_topic` | `exec_rounds`（审计 LLM 轮数）、`max_papers`、`max_ideas` |
+| 三门禁档位 | `paper_llm_constraint_gate`（`prompt_scene`=topic/write_paper） | `llm_description_*_check_code` → `description_code`（topic 10000+ / write_paper 11000+；0=关该 gate） |
+| LLM 文案库 | `paper_llm_description` | `description_code`（按 prompt_code 分段）、`prompt_name` / `prompt_desc`、`model_config_id` |
 | Venue 约束 | `paper_ref_venue` | 每 venue 一条 `llm_description_codes`（默认 20000–20002）；选题 run `input_params.venue_codes` |
 | 选题环节话术 | `paper_llm_description` + `paper_llm_template_topic` | stage_code → `llm_description_code`（30000 段） |
 | 迭代上限 | 待增或 env | `max_revision_rounds`（选题/正文可分开） |

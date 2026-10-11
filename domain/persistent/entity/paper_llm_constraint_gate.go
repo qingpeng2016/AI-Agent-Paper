@@ -1,6 +1,12 @@
 package entity
 
+const (
+	LLMSceneTopic      = "topic"
+	LLMSceneWritePaper = "write_paper"
+)
+
 type PaperLLMConstraintGate struct {
+	PromptScene                   string `gorm:"primaryKey;column:prompt_scene;size:32"`
 	Code                          string `gorm:"primaryKey;column:code;size:16"`
 	Name                          string `gorm:"column:name;size:64;not null"`
 	LlmDescriptionCitationCheckCode uint64 `gorm:"column:llm_description_citation_check_code;not null;default:0"`

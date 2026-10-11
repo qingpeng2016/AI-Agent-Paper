@@ -1,6 +1,6 @@
 package entity
 
-type PaperLLMConstraintExecIntensity struct {
+type PaperExecIntensityTopic struct {
 	Code       string `gorm:"primaryKey;column:code;size:16"`
 	Name       string `gorm:"column:name;size:64;not null"`
 	ExecRounds uint8  `gorm:"column:exec_rounds;not null;default:1"`
@@ -9,6 +9,6 @@ type PaperLLMConstraintExecIntensity struct {
 	IsDefault  bool   `gorm:"column:is_default;not null;default:0"`
 }
 
-func (PaperLLMConstraintExecIntensity) TableName() string {
-	return "paper_llm_constraint_exec_intensity"
+func (PaperExecIntensityTopic) TableName() string {
+	return "paper_exec_intensity_topic"
 }

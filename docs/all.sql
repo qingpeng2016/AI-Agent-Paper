@@ -17,7 +17,7 @@
 -- | output     | paper_output_*（各模块业务产出，均含 manuscript_id） |
 -- | user       | paper_user_preference, paper_user_literature |
 -- | model      | paper_llm_model_config, paper_llm_template_topic, |
--- |            | paper_llm_description, paper_llm_constraint_gate, paper_llm_constraint_exec_intensity |
+-- |            | paper_llm_description, paper_llm_constraint_gate, paper_exec_intensity_topic, paper_exec_intensity_write_paper |
 -- | llm        | paper_llm_call_logs |
 -- 业务表均含 manuscript_id → paper_manuscript.id（逻辑外键，不设 DB FK）
 
@@ -291,25 +291,34 @@ CREATE TABLE IF NOT EXISTS `paper_literature_platform` (
   KEY `idx_paper_literature_platform_active_priority` (`status`, `priority`, `id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文献检索平台（API 配置）';
 
-CREATE TABLE IF NOT EXISTS `paper_llm_constraint_exec_intensity` (
+CREATE TABLE IF NOT EXISTS `paper_exec_intensity_topic` (
   `code`         VARCHAR(16)  NOT NULL COMMENT '档位键 fast|balanced|deep',
   `name`         VARCHAR(64)  NOT NULL COMMENT '展示名',
   `exec_rounds`  TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '审计迭代轮数',
-  `max_papers`   INT UNSIGNED NOT NULL DEFAULT 80 COMMENT '检索文献上限（选题/综述等）',
+  `max_papers`   INT UNSIGNED NOT NULL DEFAULT 80 COMMENT '检索文献上限（选题发现）',
   `max_ideas`    INT UNSIGNED NOT NULL DEFAULT 12 COMMENT '选题候选 idea 上限',
   `is_default`   TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '前端默认选中项，仅一条应为 1',
   PRIMARY KEY (`code`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='LLM 约束·执行强度档位';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='选题发现·执行强度档位';
+
+CREATE TABLE IF NOT EXISTS `paper_exec_intensity_write_paper` (
+  `code`         VARCHAR(16)  NOT NULL COMMENT '档位键 fast|balanced|deep',
+  `name`         VARCHAR(64)  NOT NULL COMMENT '展示名',
+  `exec_rounds`  TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '审计迭代轮数',
+  `is_default`   TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '前端默认选中项，仅一条应为 1',
+  PRIMARY KEY (`code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='论文写作·执行强度档位';
 
 CREATE TABLE IF NOT EXISTS `paper_llm_constraint_gate` (
+  `prompt_scene`       VARCHAR(32)  NOT NULL COMMENT 'topic|write_paper',
   `code`               VARCHAR(16)  NOT NULL COMMENT '档位键 standard|polished|strict',
   `name`               VARCHAR(64)  NOT NULL COMMENT '展示名',
-  `llm_description_citation_check_code` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'paper_llm_description.description_code；0=关引用门禁',
-  `llm_description_claim_check_code`    BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'paper_llm_description.description_code；0=关论断门禁',
-  `llm_description_kill_check_code`     BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'paper_llm_description.description_code；0=关驳论门禁',
-  `is_default`         TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '前端默认选中项，仅一条应为 1',
-  PRIMARY KEY (`code`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='LLM 约束·三门禁档位（直链 paper_llm_description）';
+  `llm_description_citation_check_code` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'paper_llm_description.description_code',
+  `llm_description_claim_check_code`    BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'paper_llm_description.description_code',
+  `llm_description_kill_check_code`     BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'paper_llm_description.description_code',
+  `is_default`         TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '前端默认选中项，每 prompt_scene 仅一条应为 1',
+  PRIMARY KEY (`prompt_scene`, `code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='审计等级';
 
 -- ---------------------------------------------------------------------------
 -- 2. 稿件线与用户默认（工作台「当前论文」= paper_manuscript）
@@ -394,20 +403,19 @@ CREATE TABLE IF NOT EXISTS `paper_llm_template_topic` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='选题环节 stage→description；模型见 description.model_config_id';
 
 CREATE TABLE IF NOT EXISTS `paper_llm_description` (
-  `id`                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '内部主键',
-  `description_code`  BIGINT UNSIGNED NOT NULL COMMENT '业务键：1xxxx=constraint_gate 2xxxx=constraint_venue 3xxxx=template_topic（每类 10000 段）',
+  `description_code`  BIGINT UNSIGNED NOT NULL COMMENT '业务键；gate 1xxxx venue 2xxxx template_topic 3xxxx（每类 10000 段）',
+  `prompt_scene`      VARCHAR(32)  NOT NULL DEFAULT 'shared' COMMENT 'topic|write_paper|shared',
   `model_config_id`   BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0=全模型默认；非 0=paper_llm_model_config.id',
-  `prompt_code`       VARCHAR(64)  NOT NULL COMMENT 'constraint_gate|constraint_venue|template_topic',
-  `prompt_type`       VARCHAR(128) NOT NULL COMMENT '展示用分类名',
-  `prompt_name`       VARCHAR(256) NOT NULL DEFAULT '' COMMENT '运营展示名',
+  `prompt_code`       VARCHAR(64)  NOT NULL DEFAULT '' COMMENT 'constraint_gate|constraint_venue|template_topic',
+  `prompt_name`       VARCHAR(128) NOT NULL COMMENT '类型名：门禁约束、期刊会议约束、选题环节话术等',
+  `prompt_desc`       VARCHAR(256) NOT NULL DEFAULT '' COMMENT '运营/后台展示名',
   `llm_desc_zh`       MEDIUMTEXT   NOT NULL COMMENT '注入 LLM 的中文正文；支持 {{var}}',
   `llm_desc_en`       MEDIUMTEXT   NOT NULL COMMENT '注入 LLM 的英文正文；支持 {{var}}',
   `status`            VARCHAR(16)  NOT NULL DEFAULT 'active' COMMENT 'active|disabled',
   `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_paper_llm_description_code` (`description_code`),
-  UNIQUE KEY `uk_paper_llm_description_scope` (`model_config_id`, `prompt_code`, `prompt_name`),
+  PRIMARY KEY (`description_code`),
+  UNIQUE KEY `uk_paper_llm_description_scope` (`model_config_id`, `prompt_code`, `prompt_desc`),
   KEY `idx_paper_llm_description_status` (`status`),
   KEY `idx_paper_llm_description_model` (`model_config_id`),
   KEY `idx_paper_llm_description_prompt_code` (`prompt_code`)
@@ -651,7 +659,7 @@ ON DUPLICATE KEY UPDATE
 -- 10. 种子数据 — Paper（强度、审计、学科、venue、文献源）
 -- ---------------------------------------------------------------------------
 
-INSERT INTO `paper_llm_constraint_exec_intensity` (`code`, `name`, `exec_rounds`, `max_papers`, `max_ideas`, `is_default`) VALUES
+INSERT INTO `paper_exec_intensity_topic` (`code`, `name`, `exec_rounds`, `max_papers`, `max_ideas`, `is_default`) VALUES
   ('fast',     '更快', 1, 4, 1, 0),
   ('balanced', '平衡', 2, 2, 1, 1),
   ('deep',     '更深', 3, 3, 1, 0)
@@ -662,47 +670,87 @@ ON DUPLICATE KEY UPDATE
   `max_ideas` = VALUES(`max_ideas`),
   `is_default` = VALUES(`is_default`);
 
-INSERT INTO `paper_llm_description` (`description_code`, `model_config_id`, `prompt_code`, `prompt_type`, `prompt_name`, `llm_desc_zh`, `llm_desc_en`) VALUES
-(10000, 1, 'constraint_gate', '门禁约束', '引用门禁·基础',
+INSERT INTO `paper_exec_intensity_write_paper` (`code`, `name`, `exec_rounds`, `is_default`) VALUES
+  ('fast',     '更快', 1, 0),
+  ('balanced', '平衡', 2, 1),
+  ('deep',     '更深', 3, 0)
+ON DUPLICATE KEY UPDATE
+  `name` = VALUES(`name`),
+  `exec_rounds` = VALUES(`exec_rounds`),
+  `is_default` = VALUES(`is_default`);
+
+INSERT INTO `paper_llm_description` (`description_code`, `prompt_scene`, `model_config_id`, `prompt_code`, `prompt_name`, `prompt_desc`, `llm_desc_zh`, `llm_desc_en`) VALUES
+(10000, 'topic', 1, 'constraint_gate', '门禁约束', '引用门禁·基础',
  '引用门禁（基础）：ref_id/reference_keys/citations 须对应 verified Corpus；禁止编造文献；无法溯源则 blocker。',
  'Citation (basic): refs must map to verified Corpus; no fabrication; missing traceability is blocker.'),
-(10001, 1, 'constraint_gate', '门禁约束', '引用门禁·标准',
+(10001, 'topic', 1, 'constraint_gate', '门禁约束', '引用门禁·标准',
  '引用门禁（标准）：含基础项；literature_review 关键句须有 citations；idea reference_keys 须完整合理；orphan ref 为 major。',
  'Citation (standard): includes basic; review claims need citations; idea keys complete; orphan refs major.'),
-(10002, 1, 'constraint_gate', '门禁约束', '引用门禁·严格',
+(10002, 'topic', 1, 'constraint_gate', '门禁约束', '引用门禁·严格',
  '引用门禁（严格）：含标准项；逐段抽查综述与 idea 引用是否充分、是否 over-cite 无关文献。',
  'Citation (strict): includes standard; section-level citation adequacy review.'),
-(10003, 1, 'constraint_gate', '门禁约束', '论断门禁·基础',
+(10003, 'topic', 1, 'constraint_gate', '门禁约束', '论断门禁·基础',
  '论断门禁（基础）：贡献须可被 Corpus 支撑；禁止无证据的 SOTA/首创表述。',
  'Claim (basic): contributions supportable; no unsupported SOTA/first claims.'),
-(10004, 1, 'constraint_gate', '门禁约束', '论断门禁·标准',
+(10004, 'topic', 1, 'constraint_gate', '门禁约束', '论断门禁·标准',
  '论断门禁（标准）：含基础；SOTA 须点明基线/指标；contribution 符合 venue allowed 类型；实验计划与核心 claim 对齐（无计划且需实验为 major）。',
  'Claim (standard): baselines for SOTA; venue contribution types; plan aligns with claims.'),
-(10005, 1, 'constraint_gate', '门禁约束', '论断门禁·严格',
+(10005, 'topic', 1, 'constraint_gate', '门禁约束', '论断门禁·严格',
  '论断门禁（严格）：含标准；禁止因果夸大；empirical 须含可复现性要点；缺则为 major。',
  'Claim (strict): no causal overreach; reproducibility hints required for empirical claims.'),
-(10006, 1, 'constraint_gate', '门禁约束', '驳论门禁·基础',
+(10006, 'topic', 1, 'constraint_gate', '门禁约束', '驳论门禁·基础',
  '驳论门禁（基础）：venue 明显不匹配则 blocker；列出拒稿式理由。',
  'Kill (basic): clear venue misfit is blocker.'),
-(10007, 1, 'constraint_gate', '门禁约束', '驳论门禁·标准',
+(10007, 'topic', 1, 'constraint_gate', '门禁约束', '驳论门禁·标准',
  '驳论门禁（标准）：含基础；致命 flaw、与 Corpus 矛盾且未讨论、假新颖为 blocker/major。',
  'Kill (standard): fatal flaws, contradictions, false novelty.'),
-(10008, 1, 'constraint_gate', '门禁约束', '驳论门禁·严格',
+(10008, 'topic', 1, 'constraint_gate', '门禁约束', '驳论门禁·严格',
  '驳论门禁（严格）：含标准；实验/数据不可行、不可复现为 major/blocker。',
- 'Kill (strict): infeasible or non-reproducible experiments.')
+ 'Kill (strict): infeasible or non-reproducible experiments.'),
+(11000, 'write_paper', 1, 'constraint_gate', '门禁约束', '引用门禁·基础·写作',
+ '引用门禁（基础）：正文 citations/ref_id 须对应 verified Corpus；禁止编造文献；无法溯源则 blocker。',
+ 'Citation (basic, manuscript): in-text refs must map to verified Corpus; no fabrication; missing traceability is blocker.'),
+(11001, 'write_paper', 1, 'constraint_gate', '门禁约束', '引用门禁·标准·写作',
+ '引用门禁（标准）：含基础项；Related Work/Method/Experiment 等关键句须有 citations；orphan ref 为 major。',
+ 'Citation (standard, manuscript): includes basic; key sections need citations; orphan refs major.'),
+(11002, 'write_paper', 1, 'constraint_gate', '门禁约束', '引用门禁·严格·写作',
+ '引用门禁（严格）：含标准项；逐段抽查全文引用是否充分、是否 over-cite 无关文献。',
+ 'Citation (strict, manuscript): includes standard; section-level citation adequacy across full draft.'),
+(11003, 'write_paper', 1, 'constraint_gate', '门禁约束', '论断门禁·基础·写作',
+ '论断门禁（基础）：摘要与正文 claim 须可被 Corpus/实验结果支撑；禁止无证据的 SOTA/首创表述。',
+ 'Claim (basic, manuscript): abstract and body claims supportable; no unsupported SOTA/first claims.'),
+(11004, 'write_paper', 1, 'constraint_gate', '门禁约束', '论断门禁·标准·写作',
+ '论断门禁（标准）：含基础；SOTA 须点明基线/指标；贡献类型符合 venue；实验节与摘要/结论 claim 一致。',
+ 'Claim (standard, manuscript): baselines for SOTA; venue contribution types; experiments align with claims.'),
+(11005, 'write_paper', 1, 'constraint_gate', '门禁约束', '论断门禁·严格·写作',
+ '论断门禁（严格）：含标准；禁止因果夸大；empirical 须含可复现性要点；缺则为 major。',
+ 'Claim (strict, manuscript): no causal overreach; reproducibility hints required for empirical claims.'),
+(11006, 'write_paper', 1, 'constraint_gate', '门禁约束', '驳论门禁·基础·写作',
+ '驳论门禁（基础）：venue 明显不匹配则 blocker；列出拒稿式理由。',
+ 'Kill (basic, manuscript): clear venue misfit is blocker.'),
+(11007, 'write_paper', 1, 'constraint_gate', '门禁约束', '驳论门禁·标准·写作',
+ '驳论门禁（标准）：含基础；致命 flaw、与 Corpus/实验矛盾且未讨论、假新颖为 blocker/major。',
+ 'Kill (standard, manuscript): fatal flaws, contradictions, false novelty.'),
+(11008, 'write_paper', 1, 'constraint_gate', '门禁约束', '驳论门禁·严格·写作',
+ '驳论门禁（严格）：含标准；实验/数据不可行、不可复现为 major/blocker。',
+ 'Kill (strict, manuscript): infeasible or non-reproducible experiments.')
 ON DUPLICATE KEY UPDATE
+  `prompt_scene` = VALUES(`prompt_scene`),
   `model_config_id` = VALUES(`model_config_id`),
   `prompt_code` = VALUES(`prompt_code`),
-  `prompt_type` = VALUES(`prompt_type`),
   `prompt_name` = VALUES(`prompt_name`),
+  `prompt_desc` = VALUES(`prompt_desc`),
   `llm_desc_zh` = VALUES(`llm_desc_zh`), `llm_desc_en` = VALUES(`llm_desc_en`);
 
 INSERT INTO `paper_llm_constraint_gate` (
-  `code`, `name`, `llm_description_citation_check_code`, `llm_description_claim_check_code`, `llm_description_kill_check_code`, `is_default`
+  `prompt_scene`, `code`, `name`, `llm_description_citation_check_code`, `llm_description_claim_check_code`, `llm_description_kill_check_code`, `is_default`
 ) VALUES
-  ('polished', '基础', 10000, 10003, 10006, 0),
-  ('standard', '标准', 10001, 10004, 10007, 1),
-  ('strict',   '严格', 10002, 10005, 10008, 0)
+  ('topic', 'polished', '基础', 10000, 10003, 10006, 0),
+  ('topic', 'standard', '标准', 10001, 10004, 10007, 1),
+  ('topic', 'strict',   '严格', 10002, 10005, 10008, 0),
+  ('write_paper', 'polished', '基础', 11000, 11003, 11006, 0),
+  ('write_paper', 'standard', '标准', 11001, 11004, 11007, 1),
+  ('write_paper', 'strict',   '严格', 11002, 11005, 11008, 0)
 ON DUPLICATE KEY UPDATE
   `name` = VALUES(`name`),
   `llm_description_citation_check_code` = VALUES(`llm_description_citation_check_code`),
@@ -710,7 +758,7 @@ ON DUPLICATE KEY UPDATE
   `llm_description_kill_check_code` = VALUES(`llm_description_kill_check_code`),
   `is_default` = VALUES(`is_default`);
 
-INSERT INTO `paper_llm_description` (`description_code`, `model_config_id`, `prompt_code`, `prompt_type`, `prompt_name`, `llm_desc_zh`, `llm_desc_en`) VALUES
+INSERT INTO `paper_llm_description` (`description_code`, `model_config_id`, `prompt_code`, `prompt_name`, `prompt_desc`, `llm_desc_zh`, `llm_desc_en`) VALUES
 (20000, 1, 'constraint_venue', '期刊会议约束', '通用·贡献类型',
  '每条 idea 的 contribution 须明确属于 allowed 之一，并与方向一致；勿混合未声明的类型。',
  'Each idea contribution must map to one allowed type and match the direction.'),
@@ -732,11 +780,11 @@ INSERT INTO `paper_llm_description` (`description_code`, `model_config_id`, `pro
 ON DUPLICATE KEY UPDATE
   `model_config_id` = VALUES(`model_config_id`),
   `prompt_code` = VALUES(`prompt_code`),
-  `prompt_type` = VALUES(`prompt_type`),
   `prompt_name` = VALUES(`prompt_name`),
+  `prompt_desc` = VALUES(`prompt_desc`),
   `llm_desc_zh` = VALUES(`llm_desc_zh`), `llm_desc_en` = VALUES(`llm_desc_en`);
 
-INSERT INTO `paper_llm_description` (`description_code`, `model_config_id`, `prompt_code`, `prompt_type`, `prompt_name`, `llm_desc_zh`, `llm_desc_en`) VALUES
+INSERT INTO `paper_llm_description` (`description_code`, `model_config_id`, `prompt_code`, `prompt_name`, `prompt_desc`, `llm_desc_zh`, `llm_desc_en`) VALUES
 (30000, 0, 'template_topic', '选题环节话术', 'default',
  '你是 Paper Agent 平台的学术科研助手。只根据用户消息中给出的文献与前置步骤结果作答，不得编造未出现的来源或实验。{{output_language_rule}} 若要求 JSON，严格遵守用户消息中的 schema。',
  'You are an academic research assistant for the Paper Agent platform. Answer only from literature and prior-step results in the user message; do not fabricate sources or experiments. {{output_language_rule}} When JSON is required, follow the schema in the user message.'),
@@ -752,8 +800,8 @@ INSERT INTO `paper_llm_description` (`description_code`, `model_config_id`, `pro
 ON DUPLICATE KEY UPDATE
   `model_config_id` = VALUES(`model_config_id`),
   `prompt_code` = VALUES(`prompt_code`),
-  `prompt_type` = VALUES(`prompt_type`),
   `prompt_name` = VALUES(`prompt_name`),
+  `prompt_desc` = VALUES(`prompt_desc`),
   `llm_desc_zh` = VALUES(`llm_desc_zh`), `llm_desc_en` = VALUES(`llm_desc_en`);
 
 INSERT INTO `paper_ref_discipline` (`code`, `name`, `name_en`, `sort`) VALUES
@@ -955,7 +1003,7 @@ ON DUPLICATE KEY UPDATE
 INSERT INTO `paper_llm_template_topic` (`stage_code`, `stage_name`, `llm_description_code`, `status`)
 SELECT 'default', '默认（全局兜底）', d.`description_code`, 'active'
 FROM `paper_llm_description` d
-WHERE d.`prompt_code` = 'template_topic' AND d.`prompt_name` = 'default' LIMIT 1
+WHERE d.`prompt_code` = 'template_topic' AND d.`prompt_desc` = 'default' LIMIT 1
 ON DUPLICATE KEY UPDATE
   `stage_name` = VALUES(`stage_name`),
   `llm_description_code` = VALUES(`llm_description_code`),
@@ -964,7 +1012,7 @@ ON DUPLICATE KEY UPDATE
 INSERT INTO `paper_llm_template_topic` (`stage_code`, `stage_name`, `llm_description_code`, `status`)
 SELECT 'generate_ideas', '脑暴候选选题', d.`description_code`, 'active'
 FROM `paper_llm_description` d
-WHERE d.`prompt_code` = 'template_topic' AND d.`prompt_name` = 'generate_ideas' LIMIT 1
+WHERE d.`prompt_code` = 'template_topic' AND d.`prompt_desc` = 'generate_ideas' LIMIT 1
 ON DUPLICATE KEY UPDATE
   `stage_name` = VALUES(`stage_name`),
   `llm_description_code` = VALUES(`llm_description_code`),
@@ -973,7 +1021,7 @@ ON DUPLICATE KEY UPDATE
 INSERT INTO `paper_llm_template_topic` (`stage_code`, `stage_name`, `llm_description_code`, `status`)
 SELECT 'audit', '审查结论+生成文献综述', d.`description_code`, 'active'
 FROM `paper_llm_description` d
-WHERE d.`prompt_code` = 'template_topic' AND d.`prompt_name` = 'audit' LIMIT 1
+WHERE d.`prompt_code` = 'template_topic' AND d.`prompt_desc` = 'audit' LIMIT 1
 ON DUPLICATE KEY UPDATE
   `stage_name` = VALUES(`stage_name`),
   `llm_description_code` = VALUES(`llm_description_code`),
@@ -982,7 +1030,7 @@ ON DUPLICATE KEY UPDATE
 INSERT INTO `paper_llm_template_topic` (`stage_code`, `stage_name`, `llm_description_code`, `status`)
 SELECT 'experiment_plan', '生成实验方案', d.`description_code`, 'active'
 FROM `paper_llm_description` d
-WHERE d.`prompt_code` = 'template_topic' AND d.`prompt_name` = 'experiment_plan' LIMIT 1
+WHERE d.`prompt_code` = 'template_topic' AND d.`prompt_desc` = 'experiment_plan' LIMIT 1
 ON DUPLICATE KEY UPDATE
   `stage_name` = VALUES(`stage_name`),
   `llm_description_code` = VALUES(`llm_description_code`),
@@ -1043,12 +1091,12 @@ WHERE `prompt_code` = 'template_topic' AND @paper_llm_model_id IS NOT NULL;
 -- ---------------------------------------------------------------------------
 -- 升级脚本（已有库执行一次即可）
 -- ---------------------------------------------------------------------------
--- ALTER TABLE `paper_llm_constraint_exec_intensity`
+-- ALTER TABLE `paper_exec_intensity_topic`
 --   ADD COLUMN `is_default` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '前端默认选中项，仅一条应为 1' AFTER `max_ideas`;
 -- ALTER TABLE `paper_llm_constraint_audit`
 --   ADD COLUMN `is_default` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '前端默认选中项，仅一条应为 1' AFTER `audit_rounds`;
--- UPDATE `paper_llm_constraint_exec_intensity` SET `is_default` = 0;
--- UPDATE `paper_llm_constraint_exec_intensity` SET `is_default` = 1 WHERE `code` = 'balanced';
+-- UPDATE `paper_exec_intensity_topic` SET `is_default` = 0;
+-- UPDATE `paper_exec_intensity_topic` SET `is_default` = 1 WHERE `code` = 'balanced';
 -- UPDATE `paper_llm_constraint_audit` SET `is_default` = 0;
 -- UPDATE `paper_llm_constraint_audit` SET `is_default` = 1 WHERE `code` = 'polished';
 -- ALTER TABLE `paper_output_topic_step`

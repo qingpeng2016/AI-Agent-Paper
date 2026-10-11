@@ -3,6 +3,7 @@ package mysql
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/repository"
@@ -53,24 +54,26 @@ func (r *PaperRefCatalogImpl) ListActiveDisciplines(ctx context.Context) ([]enti
 	return rows, err
 }
 
-func (r *PaperRefCatalogImpl) ListExecutionIntensities(ctx context.Context) ([]entity.PaperLLMConstraintExecIntensity, error) {
-	var rows []entity.PaperLLMConstraintExecIntensity
+func (r *PaperRefCatalogImpl) ListExecutionIntensities(ctx context.Context) ([]entity.PaperExecIntensityTopic, error) {
+	var rows []entity.PaperExecIntensityTopic
 	err := r.db.WithContext(ctx).
 		Order("FIELD(code, 'fast', 'balanced', 'deep'), code ASC").
 		Find(&rows).Error
 	return rows, err
 }
 
-func (r *PaperRefCatalogImpl) ListAuditLevels(ctx context.Context) ([]entity.PaperLLMConstraintGate, error) {
+func (r *PaperRefCatalogImpl) ListAuditLevels(ctx context.Context, scene string) ([]entity.PaperLLMConstraintGate, error) {
 	var rows []entity.PaperLLMConstraintGate
-	err := r.db.WithContext(ctx).
-		Order("FIELD(code, 'standard', 'polished', 'strict'), code ASC").
-		Find(&rows).Error
+	q := r.db.WithContext(ctx)
+	if strings.TrimSpace(scene) != "" {
+		q = q.Where("prompt_scene = ?", strings.TrimSpace(scene))
+	}
+	err := q.Order("FIELD(code, 'standard', 'polished', 'strict'), code ASC").Find(&rows).Error
 	return rows, err
 }
 
-func (r *PaperRefCatalogImpl) FindExecutionIntensityByCode(ctx context.Context, code string) (*entity.PaperLLMConstraintExecIntensity, error) {
-	var row entity.PaperLLMConstraintExecIntensity
+func (r *PaperRefCatalogImpl) FindExecutionIntensityByCode(ctx context.Context, code string) (*entity.PaperExecIntensityTopic, error) {
+	var row entity.PaperExecIntensityTopic
 	err := r.db.WithContext(ctx).Where("code = ?", code).First(&row).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
@@ -81,9 +84,9 @@ func (r *PaperRefCatalogImpl) FindExecutionIntensityByCode(ctx context.Context, 
 	return &row, nil
 }
 
-func (r *PaperRefCatalogImpl) FindAuditLevelByCode(ctx context.Context, code string) (*entity.PaperLLMConstraintGate, error) {
+func (r *PaperRefCatalogImpl) FindAuditLevelByCode(ctx context.Context, scene, code string) (*entity.PaperLLMConstraintGate, error) {
 	var row entity.PaperLLMConstraintGate
-	err := r.db.WithContext(ctx).Where("code = ?", code).First(&row).Error
+	err := r.db.WithContext(ctx).Where("prompt_scene = ? AND code = ?", strings.TrimSpace(scene), code).First(&row).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, nil
 	}

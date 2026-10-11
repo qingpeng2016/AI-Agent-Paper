@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
 )
 
 func compactDirectionForPrompt(input topicRunInput) string {
@@ -269,7 +271,7 @@ func (s *TopicDiscoveryRunService) buildAuditUserExtra(
 		}
 		return "\n【新颖性摘要 summary_text】\n" + noveltySummary
 	}()
-	gateBlock := auditGateInstructionsBlock(ctx, s.catalog, input.AuditLevel, locale)
+	gateBlock := auditGateInstructionsBlock(ctx, s.catalog, entity.LLMSceneTopic, input.AuditLevel, locale)
 	if locale == "en" {
 		return fmt.Sprintf(`Audit round %d/%d
 Target venue: %s

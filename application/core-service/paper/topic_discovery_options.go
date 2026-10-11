@@ -3,6 +3,7 @@ package paper
 import (
 	"context"
 
+	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/repository"
 	"github.com/qingpeng2016/ai-agent-paper/domain/rest/response"
 )
@@ -28,7 +29,7 @@ func (s *TopicDiscoveryOptionsService) GetFormOptions(ctx context.Context) (*res
 	if err != nil {
 		return nil, err
 	}
-	audits, err := s.catalog.ListAuditLevels(ctx)
+	audits, err := s.catalog.ListAuditLevels(ctx, entity.LLMSceneTopic)
 	if err != nil {
 		return nil, err
 	}

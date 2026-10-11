@@ -18,8 +18,8 @@ func LLMDescForLocale(locale string, llmDescZh, llmDescEn string) string {
 
 // auditGateInstructionsBlock 按审计档位拼接三门禁 LLM 指令（id=0 的 gate 跳过）。
 // llm_description_*_check_code 均为 paper_llm_description.description_code。
-func auditGateInstructionsBlock(ctx context.Context, catalog repository.PaperRefCatalogRepo, auditLevelCode, locale string) string {
-	level, err := catalog.FindAuditLevelByCode(ctx, strings.TrimSpace(auditLevelCode))
+func auditGateInstructionsBlock(ctx context.Context, catalog repository.PaperRefCatalogRepo, scene, auditLevelCode, locale string) string {
+	level, err := catalog.FindAuditLevelByCode(ctx, strings.TrimSpace(scene), strings.TrimSpace(auditLevelCode))
 	if err != nil || level == nil {
 		return ""
 	}
