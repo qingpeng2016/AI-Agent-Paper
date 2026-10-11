@@ -601,6 +601,14 @@ const currentManuscript = computed(
     manuscripts.value.find((m) => m.id === activeManuscriptId.value) ?? activeManuscripts.value[0],
 )
 
+const topicDisciplineUnset = computed(() => {
+  const m = currentManuscript.value
+  if (!m) return true
+  if (m.disciplineLabel?.trim()) return false
+  if (m.disciplineCode?.trim()) return false
+  return true
+})
+
 const topicDisciplineDisplayLabel = computed(() => {
   const m = currentManuscript.value
   if (m?.disciplineLabel) return m.disciplineLabel
@@ -2029,7 +2037,11 @@ watch(
         <div class="paper-field-grid">
           <label class="paper-field">
             <span class="paper-label">学科</span>
-            <div class="paper-input paper-input--readonly" aria-readonly="true">
+            <div
+              class="paper-input paper-input--like-discipline paper-input--readonly"
+              :class="{ 'paper-input--discipline-unset': topicDisciplineUnset }"
+              aria-readonly="true"
+            >
               {{ topicDisciplineDisplayLabel }}
             </div>
             <span class="paper-hint">与当前论文创建时选定的学科一致，不可在此修改</span>
@@ -3121,7 +3133,8 @@ watch(
   user-select: none;
 }
 
-.paper-input--like-discipline::placeholder {
+.paper-input--like-discipline::placeholder,
+.paper-input--discipline-unset {
   color: #94a3b8;
 }
 

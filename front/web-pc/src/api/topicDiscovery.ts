@@ -53,6 +53,15 @@ type ApiEnvelope<T> = { code: number; message?: string; data: T }
 
 export type PaperSelectOption = { value: string; label: string }
 
+/** 与 paper_llm_constraint_exec_intensity 种子一致；form-options 失败或 execution_intensities 为空时使用 */
+export const EXEC_INTENSITY_FALLBACK_OPTIONS: PaperSelectOption[] = [
+  { value: 'fast', label: '更快' },
+  { value: 'balanced', label: '平衡' },
+  { value: 'deep', label: '更深' },
+]
+
+export const DEFAULT_EXEC_INTENSITY_CODE = 'balanced'
+
 const FORM_OPTIONS_TIMEOUT_MS = 8_000
 
 export type TopicDiscoveryRunRequest = {

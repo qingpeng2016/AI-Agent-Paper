@@ -1,6 +1,8 @@
 import { readonly, ref } from 'vue'
 import {
   fetchTopicDiscoveryFormOptions,
+  DEFAULT_EXEC_INTENSITY_CODE,
+  EXEC_INTENSITY_FALLBACK_OPTIONS,
   type LiteratureSourceOption,
   type PaperSelectOption,
   type VenueOption,
@@ -10,7 +12,7 @@ import { DISCIPLINE_OPTIONS, LITERATURE_SOURCE_OPTIONS } from '@paper/types'
 const disciplineSelectOptions = ref<PaperSelectOption[]>([])
 const intensityOptions = ref<PaperSelectOption[]>([])
 const auditOptions = ref<PaperSelectOption[]>([])
-const defaultIntensityCode = ref('balanced')
+const defaultIntensityCode = ref(DEFAULT_EXEC_INTENSITY_CODE)
 const defaultAuditLevelCode = ref('standard')
 const literatureSourceOptions = ref<LiteratureSourceOption[]>([])
 const venueOptions = ref<VenueOption[]>([])
@@ -26,17 +28,13 @@ function applyFallbackOptions() {
     value: d.code,
     label: d.label,
   }))
-  intensityOptions.value = [
-    { value: 'fast', label: '更快' },
-    { value: 'balanced', label: 'Balanced（平衡）' },
-    { value: 'deep', label: '更深' },
-  ]
+  intensityOptions.value = [...EXEC_INTENSITY_FALLBACK_OPTIONS]
   auditOptions.value = [
     { value: 'polished', label: '基础' },
     { value: 'standard', label: '标准' },
     { value: 'strict', label: '严格' },
   ]
-  defaultIntensityCode.value = 'balanced'
+  defaultIntensityCode.value = DEFAULT_EXEC_INTENSITY_CODE
   defaultAuditLevelCode.value = 'standard'
   literatureSourceOptions.value = LITERATURE_SOURCE_OPTIONS.map((s, i) => ({
     code: s.code,
@@ -91,11 +89,13 @@ export async function reloadTopicDiscoveryFormOptions(): Promise<void> {
     const opts = await fetchTopicDiscoveryFormOptions()
     if (seq !== reloadSeq) return
     disciplineSelectOptions.value = opts.disciplineSelectOptions
-    intensityOptions.value = opts.intensityOptions
+    intensityOptions.value = opts.intensityOptions.length
+      ? opts.intensityOptions
+      : [...EXEC_INTENSITY_FALLBACK_OPTIONS]
     auditOptions.value = opts.auditOptions
-    if (opts.defaultIntensityCode) {
-      defaultIntensityCode.value = opts.defaultIntensityCode
-    }
+    defaultIntensityCode.value = opts.intensityOptions.length
+      ? opts.defaultIntensityCode || DEFAULT_EXEC_INTENSITY_CODE
+      : DEFAULT_EXEC_INTENSITY_CODE
     if (opts.defaultAuditLevelCode) {
       defaultAuditLevelCode.value = opts.defaultAuditLevelCode
     }

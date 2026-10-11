@@ -653,9 +653,9 @@ ON DUPLICATE KEY UPDATE
 -- ---------------------------------------------------------------------------
 
 INSERT INTO `paper_llm_constraint_exec_intensity` (`code`, `name`, `exec_rounds`, `max_papers`, `max_ideas`, `is_default`) VALUES
-  ('fast',     '更快', 1, 30,  6, 0),
-  ('balanced', 'Balanced（平衡）', 2, 80,  12, 1),
-  ('deep',     '更深', 3, 200, 20, 0)
+  ('fast',     '更快', 1, 4, 1, 0),
+  ('balanced', '平衡', 2, 2, 1, 1),
+  ('deep',     '更深', 3, 3, 1, 0)
 ON DUPLICATE KEY UPDATE
   `name` = VALUES(`name`),
   `exec_rounds` = VALUES(`exec_rounds`),
