@@ -2011,7 +2011,7 @@ watch(
           <input
             v-model="topicForm.keywords"
             type="text"
-            class="paper-input"
+            class="paper-input paper-input--like-discipline"
             placeholder="多个关键词用逗号分隔"
           />
         </label>
@@ -2020,7 +2020,7 @@ watch(
           <span class="paper-label">详细描述 <em class="req">*</em></span>
           <textarea
             v-model="topicForm.description"
-            class="paper-textarea"
+            class="paper-textarea paper-input--like-discipline"
             rows="5"
             placeholder="研究的背景，研究的内容"
           />
@@ -3109,12 +3109,25 @@ watch(
   box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.22);
 }
 
-.paper-input--readonly {
+.paper-input--readonly,
+.paper-input--like-discipline {
   color: #64748b;
   background: #eef2f6;
   border-color: #e2e8f0;
+}
+
+.paper-input--readonly {
   cursor: default;
   user-select: none;
+}
+
+.paper-input--like-discipline::placeholder {
+  color: #94a3b8;
+}
+
+.paper-input--like-discipline:focus {
+  color: var(--atm-text, #1e1b4b);
+  background: #f8fafc;
 }
 
 .paper-hint {
