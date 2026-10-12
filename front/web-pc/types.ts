@@ -548,7 +548,7 @@ export const DEFAULT_TOPIC_DISCOVERY: TopicDiscoveryForm = {
   intensity: 'balanced',
   auditLevel: 'standard',
   humanCheckpoint: true,
-  randomReferences: false,
+  randomReferences: true,
 }
 
 export type EnvironmentPreferenceForm = {

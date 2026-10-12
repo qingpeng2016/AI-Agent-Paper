@@ -110,7 +110,6 @@ async function saveEnvironment() {
             <span>{{ src.label }}</span>
           </label>
         </div>
-        <span class="pc-hint">所有结果必须进入真实文献验证流程。</span>
       </div>
 
       <label class="pc-check">

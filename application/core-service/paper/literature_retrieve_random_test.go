@@ -13,6 +13,15 @@ func TestPickUnusedRandomSlot_offset(t *testing.T) {
 	}
 }
 
+func TestLiteratureSequentialAdvanceSlot(t *testing.T) {
+	if got := literatureSequentialAdvanceSlot(sourceArxiv, 0); got != 10 {
+		t.Fatalf("arxiv slot %d want 10", got)
+	}
+	if got := literatureSequentialAdvanceSlot(sourceOpenAlex, 1); got != 2 {
+		t.Fatalf("openalex page %d want 2", got)
+	}
+}
+
 func TestLiteratureRoundLimits(t *testing.T) {
 	lim := literatureRoundLimits(10)
 	want := [5]int{2, 2, 2, 2, 2}

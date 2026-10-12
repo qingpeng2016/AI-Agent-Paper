@@ -11,6 +11,9 @@ import (
 // 选题发现 · 随机文献检索：固定 5 次第三方请求，均分目标篇数。
 const literatureRetrieveRandomRounds = 5
 
+// 顺序检索：每页条数；返回少于此数即视为该平台在该关键词下已无更多结果。
+const literatureSequentialPageSize = 10
+
 var literatureRetrieveSupportedSources = map[string]struct{}{
 	sourceArxiv:           {},
 	sourceOpenAlex:        {},
@@ -214,6 +217,20 @@ func (s *TopicDiscoveryRunService) retrieveLiteratureRandom(
 	return hits, extraMeta
 }
 
+func literatureSequentialInitialSlot(sourceCode string) int {
+	if sourceCode == sourceOpenAlex {
+		return 1
+	}
+	return 0
+}
+
+func literatureSequentialAdvanceSlot(sourceCode string, slot int) int {
+	if sourceCode == sourceOpenAlex {
+		return slot + 1
+	}
+	return slot + literatureSequentialPageSize
+}
+
 func (s *TopicDiscoveryRunService) retrieveLiteratureSequential(
 	ctx context.Context,
 	query string,
@@ -238,42 +255,52 @@ func (s *TopicDiscoveryRunService) retrieveLiteratureSequential(
 			})
 			continue
 		}
-		need := input.MaxPapers - len(hits)
-		if need <= 0 {
-			break
-		}
-		limit := need
-		if limit > 50 {
-			limit = 50
-		}
-		reqInput := map[string]any{"query": query, "limit": limit}
-		slot := 0
-		if code == sourceOpenAlex {
-			slot = 1
-		}
-		searchResult, searchErr := s.litSearch.SearchPlatformPage(ctx, code, query, limit, slot)
-		logEntry := LiteraturePlatformRequestLog{
-			SourceCode: code,
-			Input:      reqInput,
-		}
-		if searchErr != nil {
-			logEntry.Error = searchErr.Error()
-			AppendLiteraturePlatformRequest(extraMeta, logEntry)
-			continue
-		}
-		if searchResult == nil {
-			logEntry.Error = "empty search result"
-			AppendLiteraturePlatformRequest(extraMeta, logEntry)
-			continue
-		}
-		logEntry.Response = searchResult
-		AppendLiteraturePlatformRequest(extraMeta, logEntry)
 		srcRow, _ := s.litSource.FindActiveByCode(ctx, code)
 		var sourceID uint
 		if srcRow != nil {
 			sourceID = srcRow.ID
 		}
-		hits = appendLiteratureSearchHits(hits, seen, searchResult, code, sourceID, query, input.MaxPapers)
+
+		slot := literatureSequentialInitialSlot(code)
+		for page := 1; len(hits) < input.MaxPapers; page++ {
+			limit := literatureSequentialPageSize
+			reqInput := map[string]any{
+				"query":            query,
+				"limit":            limit,
+				"slot":             slot,
+				"page":             page,
+				"sequential_mode":  true,
+			}
+			searchResult, searchErr := s.litSearch.SearchPlatformPage(ctx, code, query, limit, slot)
+			logEntry := LiteraturePlatformRequestLog{
+				SourceCode: code,
+				Input:      reqInput,
+			}
+			if searchErr != nil {
+				logEntry.Error = searchErr.Error()
+				AppendLiteraturePlatformRequest(extraMeta, logEntry)
+				break
+			}
+			if searchResult == nil {
+				logEntry.Error = "empty search result"
+				AppendLiteraturePlatformRequest(extraMeta, logEntry)
+				break
+			}
+			logEntry.Response = searchResult
+			AppendLiteraturePlatformRequest(extraMeta, logEntry)
+
+			before := len(hits)
+			hits = appendLiteratureSearchHits(hits, seen, searchResult, code, sourceID, query, input.MaxPapers)
+			returned := len(searchResult.Hits)
+			if returned < literatureSequentialPageSize {
+				break
+			}
+			if len(hits) == before {
+				// 本页有结果但均已重复，避免死循环
+				break
+			}
+			slot = literatureSequentialAdvanceSlot(code, slot)
+		}
 	}
 	return hits, extraMeta
 }

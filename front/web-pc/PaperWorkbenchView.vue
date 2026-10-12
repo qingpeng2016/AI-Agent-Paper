@@ -2081,7 +2081,7 @@ watch(
         </div>
 
         <div class="paper-field paper-field--block paper-field--section-gap">
-          <span class="paper-label">文献来源（检索用） <em class="req">*</em></span>
+          <span class="paper-label">文献来源 <em class="req">*</em></span>
           <div class="paper-check-group">
             <label
               v-for="src in literatureSourceOptions"
@@ -2096,7 +2096,6 @@ watch(
               <span>{{ src.label }}</span>
             </label>
           </div>
-          <span class="paper-hint">所有结果必须进入真实文献验证流程。</span>
           <label class="paper-check paper-check--nested">
             <input
               v-model="topicForm.randomReferences"
@@ -2104,7 +2103,7 @@ watch(
               :disabled="topicRunBusy || currentTopicRun.status === 'checkpoint'"
             />
             <span class="paper-check-row">
-              <span>随机参考文献（每次随机获取第三方不同的参考文献）</span>
+              <span>每次运行随机参考文献</span>
               <ElTooltip
                 content="勾选后，每次运行随机获取第三方论文，否则会顺序获取第三方论文多次可能是一样的"
                 placement="top"
@@ -2122,19 +2121,22 @@ watch(
           </label>
         </div>
 
-        <label class="paper-check">
-          <input
-            v-model="topicForm.humanCheckpoint"
-            type="checkbox"
-            :disabled="topicRunBusy || currentTopicRun.status === 'checkpoint'"
-          />
-          <span>
-            <strong>人工检查点</strong>
-            <span class="paper-hint paper-hint--inline">
-              开启后三步各暂停一次：检索入库 → 脑暴（含新颖性）→ 审计，每步需确认并继续
-            </span>
+        <div class="paper-field paper-field--block paper-field--gap-below-sources">
+          <span class="paper-label">关键位置确认</span>
+          <div class="paper-check-group">
+            <label class="paper-check paper-check--inline">
+              <input
+                v-model="topicForm.humanCheckpoint"
+                type="checkbox"
+                :disabled="topicRunBusy || currentTopicRun.status === 'checkpoint'"
+              />
+              <span>人工检查点</span>
+            </label>
+          </div>
+          <span class="paper-hint">
+            开启后三步各暂停一次：检索入库 → 脑暴（含新颖性）→ 审计，每步需确认并继续
           </span>
-        </label>
+        </div>
       </section>
 
       <section
@@ -3114,6 +3116,10 @@ watch(
 
 .paper-field--section-gap {
   margin-top: 28px;
+}
+
+.paper-field--gap-below-sources {
+  margin-top: 16px;
 }
 
 .paper-label {
