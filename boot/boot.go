@@ -3,9 +3,7 @@ package boot
 import (
 	bot "github.com/qingpeng2016/ai-agent-paper/application/bot"
 	couponexpire "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/coupon_expire"
-	experimentplan "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/experiment_plan"
-	topicaudit "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/topic_audit"
-	topicgenerateideas "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/topic_generate_ideas"
+	topicdiscovery "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/topic_discovery"
 	topicliteraturedownload "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/topic_literature_download"
 	viplevelsync "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/vip_level_sync"
 	botscheduleconfig "github.com/qingpeng2016/ai-agent-paper/application/core-service/bot_schedule_config"
@@ -73,9 +71,7 @@ func BuildContainer() *dig.Container {
 	_ = c.Provide(viplevelsync.NewVipLevelSyncJob)
 	_ = c.Provide(couponexpire.NewCouponExpireJob)
 	_ = c.Provide(topicliteraturedownload.NewTopicLiteratureDownloadJob)
-	_ = c.Provide(topicgenerateideas.NewTopicGenerateIdeasJob)
-	_ = c.Provide(topicaudit.NewTopicAuditJob)
-	_ = c.Provide(experimentplan.NewExperimentPlanJob)
+	_ = c.Provide(topicdiscovery.NewTopicDiscoveryJob)
 	_ = c.Provide(bot.NewScheduler)
 	_ = c.Provide(bot.NewEntry)
 

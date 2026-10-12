@@ -1,4 +1,4 @@
-package topicaudit
+package topicdiscovery
 
 import (
 	"context"
@@ -13,28 +13,28 @@ import (
 )
 
 const (
-	ModuleAIAgentPaper  = "ai_agent_paper"
-	TaskTopicAuditLLM   = "topic_audit_llm"
-	scanLimit           = 20
+	ModuleAIAgentPaper      = "ai_agent_paper"
+	TaskTopicDiscoveryLLM   = "topic_discovery_llm"
+	scanLimit               = 20
 )
 
-type TopicAuditJob struct {
+type TopicDiscoveryJob struct {
 	steps repository.PaperOutputTopicStepRepo
 	runs  *papersvc.TopicDiscoveryRunService
 }
 
-func NewTopicAuditJob(
+func NewTopicDiscoveryJob(
 	steps repository.PaperOutputTopicStepRepo,
 	runs *papersvc.TopicDiscoveryRunService,
-) *TopicAuditJob {
-	return &TopicAuditJob{steps: steps, runs: runs}
+) *TopicDiscoveryJob {
+	return &TopicDiscoveryJob{steps: steps, runs: runs}
 }
 
-// Run 扫描 status=running 且 stage_code=audit，调用 LLM；成功 completed，失败 failed。
-func (j *TopicAuditJob) Run(ctx context.Context) {
-	rows, err := j.steps.ListByStatusAndStage(ctx, "running", "audit", scanLimit)
+// Run 扫描 topic_discovery=running，执行生成包↔审计迭代。
+func (j *TopicDiscoveryJob) Run(ctx context.Context) {
+	rows, err := j.steps.ListByStatusAndStage(ctx, "running", "topic_discovery", scanLimit)
 	if err != nil {
-		logger.ErrorZ(ctx, "topic-audit-list-failed", zap.Error(err))
+		logger.ErrorZ(ctx, "topic-discovery-list-failed", zap.Error(err))
 		return
 	}
 	if len(rows) == 0 {
@@ -50,13 +50,13 @@ func (j *TopicAuditJob) Run(ctx context.Context) {
 			failed++
 		}
 	}
-	logger.InfoZ(ctx, "topic-audit-finished",
+	logger.InfoZ(ctx, "topic-discovery-finished",
 		zap.Int("scanned", len(rows)),
 		zap.Int("completed", completed),
 		zap.Int("failed", failed))
 }
 
-func (j *TopicAuditJob) processOne(ctx context.Context, step *entity.PaperOutputTopicStep) string {
+func (j *TopicDiscoveryJob) processOne(ctx context.Context, step *entity.PaperOutputTopicStep) string {
 	if j.runs == nil {
 		j.markFailed(ctx, step, "TopicDiscoveryRunService 未注入")
 		return "failed"
@@ -71,8 +71,8 @@ func (j *TopicAuditJob) processOne(ctx context.Context, step *entity.PaperOutput
 		return "failed"
 	}
 
-	if err := j.runs.RunAuditAndLiteratureReviewLLM(ctx, uint(step.UserID), step.RunVersion, step, input); err != nil {
-		logger.WarnZ(ctx, "topic-audit-llm-failed",
+	if err := j.runs.RunTopicDiscoveryLLM(ctx, uint(step.UserID), step.RunVersion, step, input); err != nil {
+		logger.WarnZ(ctx, "topic-discovery-llm-failed",
 			zap.Uint64("step_id", step.ID),
 			zap.Error(err))
 		j.markFailed(ctx, step, err.Error())
@@ -81,7 +81,7 @@ func (j *TopicAuditJob) processOne(ctx context.Context, step *entity.PaperOutput
 	return "completed"
 }
 
-func (j *TopicAuditJob) finishAlreadyDone(ctx context.Context, step *entity.PaperOutputTopicStep) string {
+func (j *TopicDiscoveryJob) finishAlreadyDone(ctx context.Context, step *entity.PaperOutputTopicStep) string {
 	if strings.TrimSpace(step.Status) == "completed" {
 		return "completed"
 	}
@@ -89,13 +89,13 @@ func (j *TopicAuditJob) finishAlreadyDone(ctx context.Context, step *entity.Pape
 	step.Status = "completed"
 	step.CompletedAt = &now
 	if err := j.steps.SaveStep(ctx, step); err != nil {
-		logger.ErrorZ(ctx, "topic-audit-reconcile-save", zap.Error(err))
+		logger.ErrorZ(ctx, "topic-discovery-reconcile-save", zap.Error(err))
 		return ""
 	}
 	return "completed"
 }
 
-func (j *TopicAuditJob) markFailed(ctx context.Context, step *entity.PaperOutputTopicStep, reason string) {
+func (j *TopicDiscoveryJob) markFailed(ctx context.Context, step *entity.PaperOutputTopicStep, reason string) {
 	meta := papersvc.LoadStepExtra(step)
 	meta["error"] = strings.TrimSpace(reason)
 	delete(meta, "async_llm")
@@ -103,9 +103,9 @@ func (j *TopicAuditJob) markFailed(ctx context.Context, step *entity.PaperOutput
 	step.Status = "failed"
 	now := time.Now()
 	step.CompletedAt = &now
-	sum := "审查与文献综述失败"
+	sum := "选题发现失败"
 	step.SummaryText = &sum
 	if err := j.steps.SaveStep(ctx, step); err != nil {
-		logger.ErrorZ(ctx, "topic-audit-fail-save", zap.Uint64("step_id", step.ID), zap.Error(err))
+		logger.ErrorZ(ctx, "topic-discovery-fail-save", zap.Uint64("step_id", step.ID), zap.Error(err))
 	}
 }

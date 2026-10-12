@@ -8,9 +8,7 @@ import (
 	"time"
 
 	couponexpire "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/coupon_expire"
-	experimentplan "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/experiment_plan"
-	topicaudit "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/topic_audit"
-	topicgenerateideas "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/topic_generate_ideas"
+	topicdiscovery "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/topic_discovery"
 	topicliteraturedownload "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/topic_literature_download"
 	viplevelsync "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/vip_level_sync"
 	botscheduleconfig "github.com/qingpeng2016/ai-agent-paper/application/core-service/bot_schedule_config"
@@ -29,9 +27,7 @@ type Scheduler struct {
 	vipLevelSyncJob              *viplevelsync.VipLevelSyncJob
 	couponExpireJob              *couponexpire.CouponExpireJob
 	topicLiteratureDownloadJob   *topicliteraturedownload.TopicLiteratureDownloadJob
-	topicGenerateIdeasJob        *topicgenerateideas.TopicGenerateIdeasJob
-	topicAuditJob                *topicaudit.TopicAuditJob
-	experimentPlanJob            *experimentplan.ExperimentPlanJob
+	topicDiscoveryJob            *topicdiscovery.TopicDiscoveryJob
 	ns                       *gocron.Scheduler
 	jobMap                   map[string]*gocron.Job
 	configMap                map[string]float64
@@ -45,18 +41,14 @@ func NewScheduler(
 	vipLevelSyncJob *viplevelsync.VipLevelSyncJob,
 	couponExpireJob *couponexpire.CouponExpireJob,
 	topicLiteratureDownloadJob *topicliteraturedownload.TopicLiteratureDownloadJob,
-	topicGenerateIdeasJob *topicgenerateideas.TopicGenerateIdeasJob,
-	topicAuditJob *topicaudit.TopicAuditJob,
-	experimentPlanJob *experimentplan.ExperimentPlanJob,
+	topicDiscoveryJob *topicdiscovery.TopicDiscoveryJob,
 ) *Scheduler {
 	return &Scheduler{
 		botScheduleConfigService:   botScheduleConfigService,
 		vipLevelSyncJob:            vipLevelSyncJob,
 		couponExpireJob:            couponExpireJob,
 		topicLiteratureDownloadJob: topicLiteratureDownloadJob,
-		topicGenerateIdeasJob:      topicGenerateIdeasJob,
-		topicAuditJob:              topicAuditJob,
-		experimentPlanJob:          experimentPlanJob,
+		topicDiscoveryJob:          topicDiscoveryJob,
 		ns:                       gocron.NewScheduler(time.Local),
 		jobMap:                   make(map[string]*gocron.Job),
 		configMap:                make(map[string]float64),
@@ -249,17 +241,9 @@ func (s *Scheduler) getAIAgentPaperHandleFunc(taskName string) func() {
 		return func() {
 			s.topicLiteratureDownloadJob.Run(context.Background())
 		}
-	case topicgenerateideas.TaskTopicGenerateIdeasLLM:
+	case topicdiscovery.TaskTopicDiscoveryLLM:
 		return func() {
-			s.topicGenerateIdeasJob.Run(context.Background())
-		}
-	case topicaudit.TaskTopicAuditLLM:
-		return func() {
-			s.topicAuditJob.Run(context.Background())
-		}
-	case experimentplan.TaskExperimentPlanLLM:
-		return func() {
-			s.experimentPlanJob.Run(context.Background())
+			s.topicDiscoveryJob.Run(context.Background())
 		}
 	default:
 		return nil

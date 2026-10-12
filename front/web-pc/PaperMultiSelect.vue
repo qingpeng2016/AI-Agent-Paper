@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
 
 export type PaperMultiSelectOption = {
   value: string
@@ -12,8 +12,16 @@ const props = withDefaults(
     options: readonly PaperMultiSelectOption[]
     placeholder?: string
     disabled?: boolean
+    /** 下拉内搜索框，按 label / value 过滤选项 */
+    filterable?: boolean
+    filterPlaceholder?: string
   }>(),
-  { placeholder: '请选择', disabled: false },
+  {
+    placeholder: '请选择',
+    disabled: false,
+    filterable: false,
+    filterPlaceholder: '输入关键词筛选',
+  },
 )
 
 const emit = defineEmits<{
@@ -22,9 +30,21 @@ const emit = defineEmits<{
 
 const open = ref(false)
 const root = ref<HTMLElement | null>(null)
+const filterInputRef = ref<HTMLInputElement | null>(null)
+const filterQuery = ref('')
 const ignoreNextToggle = ref(false)
 
 const selectedSet = computed(() => new Set(props.modelValue))
+
+const filteredOptions = computed(() => {
+  if (!props.filterable) return props.options
+  const q = filterQuery.value.trim().toLowerCase()
+  if (!q) return props.options
+  return props.options.filter(
+    (o) =>
+      o.label.toLowerCase().includes(q) || o.value.toLowerCase().includes(q),
+  )
+})
 
 const currentLabel = computed(() => {
   if (!props.modelValue.length) {
@@ -39,8 +59,26 @@ const currentLabel = computed(() => {
 
 const showPlaceholderStyle = computed(() => props.modelValue.length === 0)
 
+function resetFilterQuery() {
+  filterQuery.value = ''
+}
+
 function closeMenu() {
   open.value = false
+  resetFilterQuery()
+}
+
+function focusFilterInput() {
+  if (!props.filterable) return
+  void nextTick(() => {
+    filterInputRef.value?.focus()
+  })
+}
+
+function openPanel() {
+  open.value = true
+  resetFilterQuery()
+  focusFilterInput()
 }
 
 function togglePanel() {
@@ -49,7 +87,18 @@ function togglePanel() {
     ignoreNextToggle.value = false
     return
   }
-  open.value = !open.value
+  if (open.value) {
+    closeMenu()
+  } else {
+    openPanel()
+  }
+}
+
+function onFilterKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') {
+    e.preventDefault()
+    closeMenu()
+  }
 }
 
 function toggleValue(value: string, checked: boolean) {
@@ -89,21 +138,43 @@ onUnmounted(() => document.removeEventListener('pointerdown', onDocumentPointerD
       </span>
       <span class="paper-select-chevron" aria-hidden="true">▾</span>
     </button>
-    <div v-if="open" class="paper-multi-panel" role="listbox" @click.stop @mousedown.stop>
-      <div v-if="options.length" class="paper-multi-grid">
-        <label
-          v-for="o in options"
-          :key="o.value"
-          class="paper-multi-row"
-          :class="{ 'paper-multi-row--checked': isChecked(o.value) }"
-        >
-          <input
-            type="checkbox"
-            :checked="isChecked(o.value)"
-            @change="toggleValue(o.value, ($event.target as HTMLInputElement).checked)"
-          />
-          <span class="paper-multi-label">{{ o.label }}</span>
-        </label>
+    <div
+      v-if="open"
+      class="paper-multi-panel"
+      :class="{ 'paper-multi-panel--filterable': filterable }"
+      role="listbox"
+      @click.stop
+      @mousedown.stop
+    >
+      <div v-if="filterable" class="paper-select-search">
+        <input
+          ref="filterInputRef"
+          v-model="filterQuery"
+          type="search"
+          class="paper-select-search-input"
+          :placeholder="filterPlaceholder"
+          autocomplete="off"
+          spellcheck="false"
+          @keydown="onFilterKeydown"
+        />
+      </div>
+      <div v-if="options.length" class="paper-multi-body">
+        <div v-if="filteredOptions.length" class="paper-multi-grid">
+          <label
+            v-for="o in filteredOptions"
+            :key="o.value"
+            class="paper-multi-row"
+            :class="{ 'paper-multi-row--checked': isChecked(o.value) }"
+          >
+            <input
+              type="checkbox"
+              :checked="isChecked(o.value)"
+              @change="toggleValue(o.value, ($event.target as HTMLInputElement).checked)"
+            />
+            <span class="paper-multi-label">{{ o.label }}</span>
+          </label>
+        </div>
+        <p v-else class="paper-multi-empty">无匹配项</p>
       </div>
       <p v-else class="paper-multi-empty">暂无可选 venue</p>
     </div>
@@ -170,13 +241,60 @@ onUnmounted(() => document.removeEventListener('pointerdown', onDocumentPointerD
   top: calc(100% + 4px);
   right: 0;
   left: 0;
-  max-height: 320px;
+  max-height: min(400px, 58vh);
   padding: 8px;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   background: #fff;
   border: 1px solid #e2e8f0;
   border-radius: 10px;
   box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+}
+
+.paper-multi-panel--filterable {
+  display: flex;
+  flex-direction: column;
+  height: min(400px, 58vh);
+  max-height: min(400px, 58vh);
+  padding: 0;
+  overflow: hidden;
+}
+
+.paper-select-search {
+  flex-shrink: 0;
+  padding: 8px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.paper-select-search-input {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 14px;
+  color: #1e1b4b;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  outline: none;
+}
+
+.paper-select-search-input:focus {
+  border-color: #94a3b8;
+  box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.18);
+}
+
+.paper-select-search-input::placeholder {
+  color: #94a3b8;
+}
+
+.paper-multi-body {
+  flex: 1;
+  min-height: 0;
+  padding: 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .paper-multi-grid {

@@ -19,7 +19,7 @@ import (
 	"gorm.io/datatypes"
 )
 
-var topicDiscoveryStages = []string{"retrieve", "generate_ideas", "audit"}
+var topicDiscoveryStages = []string{"retrieve", "topic_discovery"}
 
 type topicRunInput struct {
 	DisciplineCode  string   `json:"discipline_code"`
@@ -63,6 +63,7 @@ type TopicDiscoveryRunService struct {
 	manuscripts repository.PaperManuscriptRepo
 	steps       repository.PaperOutputTopicStepRepo
 	litReviews  repository.PaperOutputLiteratureReviewRepo
+	expPlans    repository.PaperOutputExperimentPlanRepo
 	catalog     repository.PaperRefCatalogRepo
 	litSource   repository.PaperLiteraturePlatformRepo
 	litSearch   *LiteratureSearchService
@@ -74,6 +75,7 @@ func NewTopicDiscoveryRunService(
 	manuscripts repository.PaperManuscriptRepo,
 	steps repository.PaperOutputTopicStepRepo,
 	litReviews repository.PaperOutputLiteratureReviewRepo,
+	expPlans repository.PaperOutputExperimentPlanRepo,
 	catalog repository.PaperRefCatalogRepo,
 	litSource repository.PaperLiteraturePlatformRepo,
 	litSearch *LiteratureSearchService,
@@ -84,6 +86,7 @@ func NewTopicDiscoveryRunService(
 		manuscripts: manuscripts,
 		steps:       steps,
 		litReviews:  litReviews,
+		expPlans:    expPlans,
 		catalog:     catalog,
 		litSource:   litSource,
 		litSearch:   litSearch,
@@ -455,10 +458,8 @@ func (s *TopicDiscoveryRunService) executeStage(ctx context.Context, userID uint
 	switch stageCode {
 	case "retrieve":
 		execErr = s.stageRetrieve(ctx, step, input)
-	case "generate_ideas":
-		execErr = s.stageBeginGenerateIdeasAsync(ctx, userID, runVersion, step)
-	case "audit":
-		execErr = s.stageBeginAuditAsync(ctx, userID, runVersion, step)
+	case "topic_discovery":
+		execErr = s.stageBeginTopicDiscoveryAsync(ctx, userID, runVersion, step)
 	default:
 		execErr = errorx.ErrTopicStepInvalid
 	}
@@ -478,7 +479,7 @@ func (s *TopicDiscoveryRunService) executeStage(ctx context.Context, userID uint
 		}
 		return execErr
 	}
-	if (stageCode == "retrieve" || stageCode == "generate_ideas" || stageCode == "audit") && strings.TrimSpace(step.Status) == "running" {
+	if (stageCode == "retrieve" || stageCode == "topic_discovery") && strings.TrimSpace(step.Status) == "running" {
 		if step.StartedAt == nil {
 			step.StartedAt = &stageStarted
 		}
@@ -626,7 +627,7 @@ func relIfExists(pdfURL, externalKey string) string {
 func (s *TopicDiscoveryRunService) stageContext(ctx context.Context, userID uint, runVersion int) (string, error) {
 	var parts []string
 	for _, stage := range topicDiscoveryStages {
-		if stage == "audit" {
+		if stage == "topic_discovery" {
 			continue
 		}
 		st, err := s.steps.GetStep(ctx, uint64(userID), runVersion, stage)
@@ -678,7 +679,7 @@ func (s *TopicDiscoveryRunService) callStageLLM(
 	persistStepLLMInput(step, stageCode, resolved.system, user, modelName)
 	start := time.Now()
 	text, usage, err := s.llm.Complete(ctx, resolved.model, resolved.system, user)
-	s.persistLLMCallLog(ctx, step.ManuscriptID, stageCode, resolved, usage, int(time.Since(start).Milliseconds()), err)
+	s.persistLLMCallLog(ctx, step.ManuscriptID, stageCode, resolved, resolved.system, user, text, usage, int(time.Since(start).Milliseconds()), err)
 	if err != nil {
 		persistStepLLMInput(step, stageCode, resolved.system, user, modelName)
 	}
@@ -738,6 +739,7 @@ func (s *TopicDiscoveryRunService) persistLLMCallLog(
 	manuscriptID uint64,
 	stageCode string,
 	resolved *stageLLMResolve,
+	system, user, responseText string,
 	usage LLMUsage,
 	latencyMs int,
 	callErr error,
@@ -774,17 +776,30 @@ func (s *TopicDiscoveryRunService) persistLLMCallLog(
 	if usage.CompletionTokens > 0 {
 		completionTok = &usage.CompletionTokens
 	}
+	reqPayload := map[string]any{
+		"stage_code":    stageCode,
+		"system_prompt": strings.TrimSpace(system),
+		"user_prompt":   strings.TrimSpace(user),
+	}
+	respPayload := map[string]any{
+		"text": strings.TrimSpace(responseText),
+	}
+	if callErr != nil {
+		respPayload["error"] = callErr.Error()
+	}
 	row := &entity.PaperLLMCallLog{
-		ManuscriptID:      manuscriptID,
-		StageCode:         &stage,
+		ManuscriptID:     manuscriptID,
+		StageCode:        &stage,
 		ModelConfigID:    modelCfgID,
 		PromptTemplateID: promptTplID,
-		ModelName:         resolved.model.ModelName,
-		PromptTokens:      promptTok,
-		CompletionTokens:  completionTok,
-		LatencyMs:         latencyMs,
-		Status:            status,
-		CreatedAt:         time.Now(),
+		ModelName:        resolved.model.ModelName,
+		RequestJSON:      mustJSON(reqPayload),
+		ResponseJSON:     mustJSON(respPayload),
+		PromptTokens:     promptTok,
+		CompletionTokens: completionTok,
+		LatencyMs:        latencyMs,
+		Status:           status,
+		CreatedAt:        time.Now(),
 	}
 	_ = s.llmRepo.InsertCallLog(ctx, row)
 }
@@ -793,6 +808,12 @@ func (s *TopicDiscoveryRunService) resolveStageLLM(ctx context.Context, stageCod
 	locale = NormalizeContentLanguage(locale)
 	defPrompt, _ := s.llmRepo.GetActivePromptByStage(ctx, "default")
 	stagePrompt, _ := s.llmRepo.GetActivePromptByStage(ctx, stageCode)
+	if stagePrompt == nil && stageCode == topicLLMStageGenerate {
+		stagePrompt, _ = s.llmRepo.GetActivePromptByStage(ctx, "generate_ideas")
+	}
+	if stagePrompt == nil && stageCode == topicLLMStageAudit {
+		stagePrompt, _ = s.llmRepo.GetActivePromptByStage(ctx, "audit")
+	}
 	modelConfigID := modelConfigIDFromTopicPrompts(stagePrompt, defPrompt)
 	model, err := s.llmRepo.ResolveActiveModel(ctx, modelConfigID)
 	if err != nil {

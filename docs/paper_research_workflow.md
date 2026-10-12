@@ -222,7 +222,7 @@
 
 | 配置 | 表/位置 | 作用阶段 |
 |------|---------|----------|
-| 执行强度 | `paper_exec_intensity_topic` | `exec_rounds`（审计 LLM 轮数）、`max_papers`、`max_ideas` |
+| 执行强度 | `paper_exec_intensity_topic` | `exec_rounds`（生成↔审计迭代轮数）、`max_papers`、`max_ideas` |
 | 三门禁档位 | `paper_llm_constraint_gate`（`prompt_scene`=topic/write_paper） | `llm_description_*_check_code` → `description_code`（topic 10000+ / write_paper 11000+；0=关该 gate） |
 | LLM 文案库 | `paper_llm_description` | `description_code`（按 prompt_code 分段）、`prompt_name` / `prompt_desc`、`model_config_id` |
 | Venue 约束 | `paper_ref_venue` | 每 venue 一条 `llm_description_codes`（默认 20000–20002）；选题 run `input_params.venue_codes` |
@@ -238,8 +238,9 @@
 
 | 设计 | 现状简述 |
 |------|----------|
-| 一步输出四块 + 实验计划 | 分 `retrieve` / `generate_ideas` / `audit`；实验计划多在综述模块单独 LLM |
-| 审计不过 → 回灌 regenerate | audit 有多轮，**未**带 audit_report 重跑 generate |
+| 两步 UI：检索 + 选题发现 | `retrieve` + `topic_discovery`（bot `topic_discovery_llm`） |
+| 生成包 ↔ 审计迭代 | `exec_rounds` 驱动；修订轮带上一版 bundle + audit_report |
+| 实验计划 | 含于生成包；不再单独 `experiment_plan_llm` bot |
 | 三门禁强度 | DB 有字段，**未**接入 audit prompt/规则 |
 | Venue 约束注入 | 多为 venue 字符串进 prompt；**待**按 primary venue → profile → description 加载 |
 | 用户上传 + 随机检索 | 需扩展 retrieve |

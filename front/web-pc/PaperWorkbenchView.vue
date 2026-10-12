@@ -94,20 +94,12 @@ const CHECKPOINT_COPY: Record<TopicCheckpointKey, Omit<TopicCheckpointView, 'key
       '覆盖缺口：2025 Q1 同方向预印本偏少，可加深检索或补 Crossref',
     ],
   },
-  generate_ideas_ready: {
-    title: '候选选题（脑暴）',
+  topic_discovery_ready: {
+    title: '选题发现产出',
     lines: [
-      'Idea A：稀疏注意力 + 动态路由 — 一句话 claim + 12 条 reference keys',
-      'Idea B：层级 KV 压缩 — 可测指标：吞吐 / 困惑度',
-      'Idea C：训练无关 token 合并 — 偏系统向，需补实验资源说明',
-    ],
-  },
-  audit_ready: {
-    title: '审查结论与文献综述',
-    lines: [
-      '贴题复核：第二步脑暴与新颖性是否与方向一致（演示）',
-      '审查结论：blocker/major/minor 与 off_topic 说明',
-      '已生成文献综述摘要，写入 paper_output_literature_review（演示）',
+      'idea + 新颖性 + 文献综述 + 实验计划（可无）',
+      '生成↔三门禁审计迭代直至通过或达轮数上限',
+      '综述与实验方案已写入对应产出表（演示）',
     ],
   },
 }
@@ -959,6 +951,7 @@ function stepStatusFromApi(raw: string): TopicFlowStepStatus {
 
 const TOPIC_STEP_RUNNING_HINT: Record<string, string> = {
   retrieve: '文献 PDF 下载与入库中…',
+  topic_discovery: 'AI 选题发现（生成与门禁迭代）…',
   generate_ideas: 'AI 脑暴选题与新颖性分析中…',
   audit: 'AI 审查结论与文献综述生成中…',
 }
@@ -1083,7 +1076,29 @@ function linesFromApiStep(step?: TopicDiscoveryStepDTO): string[] {
     return lines.length ? lines : ['检索已完成']
   }
 
-  if (step.stage_code === 'generate_ideas') {
+  if (step.stage_code === 'topic_discovery' || step.stage_code === 'generate_ideas') {
+    if (step.stage_code === 'topic_discovery') {
+      const passed = result.passed
+      const iters = (result.iterations as unknown[]) ?? []
+      const lines: string[] = []
+      if (typeof passed === 'boolean') {
+        lines.push(passed ? `门禁通过（${iters.length} 轮）` : `未完全通过（${iters.length} 轮，保留最后一版）`)
+      }
+      const lr = result.literature_review as { title?: string; summary?: string } | undefined
+      if (lr?.title?.trim()) lines.push(`文献综述：${lr.title.trim()}`)
+      const ideas = (result.ideas as Array<{ title?: string }>) ?? []
+      for (const idea of ideas.slice(0, 5)) {
+        if (idea.title?.trim()) lines.push(`· ${idea.title.trim()}`)
+      }
+      const finalAudit = result.final_audit as { summary?: string; issues?: Array<{ severity?: string; claim?: string }> } | undefined
+      if (finalAudit?.summary?.trim()) lines.push(finalAudit.summary.trim())
+      if (finalAudit?.issues?.length) {
+        lines.push(
+          ...finalAudit.issues.slice(0, 4).map((iss) => `[${iss.severity ?? 'issue'}] ${iss.claim ?? ''}`.trim()),
+        )
+      }
+      if (lines.length) return lines.slice(0, 12)
+    }
     const ideas = (result.ideas as Array<{ title?: string; problem?: string }>) ?? []
     const ideaLines = ideas.slice(0, 8).map((idea, i) => {
       const t = idea.title?.trim() || `Idea ${i + 1}`
@@ -1391,7 +1406,7 @@ function syncRunningFlagFromServer(msId: string) {
 }
 
 function finalizeTopicDiscoveryRun(_msId: string) {
-  recordModuleOperationLog('topic-discovery', '运行工作流（retrieve → ideas → audit）')
+  recordModuleOperationLog('topic-discovery', '运行工作流（retrieve → topic_discovery）')
 }
 
 function resetTopicRunForAction(msId: string) {
@@ -2075,6 +2090,7 @@ watch(
               v-model="topicForm.venueCodes"
               :options="venueSelectOptions"
               placeholder="请选择（可多选）"
+              filterable
               :disabled="topicRunBusy || currentTopicRun.status === 'checkpoint'"
             />
             <span class="paper-hint">用于约束贡献类型、实验标准和写作风格；可多选。</span>
@@ -2083,7 +2099,7 @@ watch(
           <label class="paper-field">
             <span class="paper-label">执行强度</span>
             <PaperSelect v-model="topicForm.intensity" :options="intensityOptions" />
-            <span class="paper-hint">控制检索数量、迭代轮数和输出深度。</span>
+            <span class="paper-hint">控制检索数量、生成↔门禁审计迭代轮数（exec_rounds）与 idea 条数。</span>
           </label>
 
           <label class="paper-field">

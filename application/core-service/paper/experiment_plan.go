@@ -49,47 +49,17 @@ func NewExperimentPlanService(
 	}
 }
 
-// EnqueueGenerate 立即将文献综述标为 generating_experiment_plan，由 bot 异步调 LLM。
+// EnqueueGenerate 实验方案已在选题发现生成包中产出；保留接口以提示前端。
 func (s *ExperimentPlanService) EnqueueGenerate(
 	ctx context.Context,
 	userID uint,
 	manuscriptID, reviewID uint64,
 ) error {
-	if manuscriptID == 0 || reviewID == 0 {
-		return errorx.ErrParamsError
-	}
-	ms, err := s.manuscripts.GetByIDForUser(ctx, uint(manuscriptID), userID)
-	if err != nil {
-		return errorx.ErrParamsError.WithDetail(err.Error())
-	}
-	if ms == nil {
-		return errorx.ErrParamsError.WithDetail("manuscript 不存在或无权访问")
-	}
-	row, err := s.reviews.GetByIDForUser(ctx, reviewID, manuscriptID, userID)
-	if err != nil {
-		return errorx.ErrParamsError.WithDetail(err.Error())
-	}
-	if row == nil {
-		return errorx.ErrParamsError.WithDetail("文献综述不存在或无权操作")
-	}
-	st := strings.TrimSpace(row.Status)
-	if st == "deleted" {
-		return errorx.ErrParamsError.WithDetail("文献综述已删除")
-	}
-	if st == LitReviewStatusGeneratingExperimentPlan {
-		return errorx.ErrParamsError.WithDetail("实验方案生成中，请稍候")
-	}
-	if st != "completed" && st != LitReviewStatusExperimentPlanFailed {
-		return errorx.ErrParamsError.WithDetail("当前状态不可生成实验方案")
-	}
-	ok, err := s.reviews.TryBeginExperimentPlanGeneration(ctx, reviewID, manuscriptID, userID)
-	if err != nil {
-		return errorx.ErrParamsError.WithDetail(err.Error())
-	}
-	if !ok {
-		return errorx.ErrParamsError.WithDetail("无法开始生成实验方案")
-	}
-	return nil
+	_ = ctx
+	_ = userID
+	_ = manuscriptID
+	_ = reviewID
+	return errorx.ErrParamsError.WithDetail("实验方案已在选题发现步骤中生成；若缺失请重新运行选题发现")
 }
 
 // RunExperimentPlanLLM bot：对 generating_experiment_plan 的综述调用 LLM 并落库。

@@ -353,10 +353,7 @@ export type TopicDiscoveryForm = {
 }
 
 /** 选题发现每步完成后的人工确认点（与 stage 一一对应） */
-export type TopicCheckpointKey =
-  | 'retrieve_ready'
-  | 'generate_ideas_ready'
-  | 'audit_ready'
+export type TopicCheckpointKey = 'retrieve_ready' | 'topic_discovery_ready'
 
 export type TopicFlowStepDef = {
   stageCode: string
@@ -371,14 +368,9 @@ export const TOPIC_DISCOVERY_FLOW_STEPS: TopicFlowStepDef[] = [
     checkpointKey: 'retrieve_ready',
   },
   {
-    stageCode: 'generate_ideas',
-    label: '脑暴选题+新颖性检查',
-    checkpointKey: 'generate_ideas_ready',
-  },
-  {
-    stageCode: 'audit',
-    label: '审查结论+生成文献综述',
-    checkpointKey: 'audit_ready',
+    stageCode: 'topic_discovery',
+    label: '选题发现（生成与门禁迭代）',
+    checkpointKey: 'topic_discovery_ready',
   },
 ]
 

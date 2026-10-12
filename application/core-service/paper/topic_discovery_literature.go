@@ -393,3 +393,106 @@ Return ONLY valid JSON (final round must include literature_review):
 		jsonStringFieldsLocaleHint(locale),
 	)
 }
+
+// buildTopicAuditOnlyUserExtra 仅审计生成包（idea/novelty/综述/实验计划），不再次生成正文。
+func (s *TopicDiscoveryRunService) buildTopicAuditOnlyUserExtra(
+	ctx context.Context,
+	userID uint,
+	runVersion int,
+	input topicRunInput,
+	round, rounds int,
+	locale, generateBundleJSON string,
+) string {
+	locale = NormalizeContentLanguage(locale)
+	brief, refIDs, _ := s.literatureBriefForRun(ctx, userID, runVersion)
+	briefText := formatLiteratureBriefForPrompt(brief)
+	refsLine := strings.Join(refIDs, ", ")
+	if refsLine == "" {
+		refsLine = "（无）"
+	}
+	gateBlock := auditGateInstructionsBlock(ctx, s.catalog, entity.LLMSceneTopic, input.AuditLevel, locale)
+	if locale == "en" {
+		return fmt.Sprintf(`Audit round %d/%d (generate ↔ audit iteration)
+Target venue: %s
+Audit level: %s
+
+[Keywords]
+%s
+
+[Research description]
+%s
+
+[Literature brief] (cite only these ref_id: %s)
+%s
+
+[Generate bundle — ideas, novelty, literature_review, experiment_plan]
+%s
+
+[Requirements]
+1. Apply citation, claim, and kill gates to the entire bundle; tag each issue with gate=citation|claim|kill and severity=blocker|major|minor.
+2. If experiment_plan is null, skip claim checks that require experiments.
+3. Set audit.passed true only when no blocker-level issues remain.
+%s
+Return ONLY valid JSON:
+{
+  "audit": {
+    "passed": false,
+    "issues": [{"gate":"citation|claim|kill","severity":"blocker|major|minor","claim":"","fix":""}],
+    "summary": "",
+    "off_topic": {"aligned": true, "notes": ""}
+  }
+}
+%s`,
+			round, rounds,
+			input.Venue, input.AuditLevel,
+			keywordsLine(input),
+			compactDirectionForPrompt(input),
+			refsLine,
+			briefText,
+			generateBundleJSON,
+			gateBlock,
+			jsonStringFieldsLocaleHint(locale),
+		)
+	}
+	return fmt.Sprintf(`审计轮次 %d/%d（生成↔审计迭代）
+目标期刊：%s
+审计档位：%s
+
+【用户关键词】
+%s
+
+【研究描述】
+%s
+
+【文献简报】（仅可引用下列 ref_id：%s）
+%s
+
+【本轮生成包 — idea / 新颖性 / 文献综述 / 实验计划】
+%s
+
+【审计要求】
+1. 对生成包全文适用引用、论断、驳论三门禁；每条 issue 标注 gate 与 severity。
+2. experiment_plan 为 null 时，跳过依赖实验设计的论断项。
+3. 仅当无 blocker 级 issue 时设 audit.passed 为 true。
+%s
+输出 ONLY valid JSON：
+{
+  "audit": {
+    "passed": false,
+    "issues": [{"gate":"citation|claim|kill","severity":"blocker|major|minor","claim":"","fix":""}],
+    "summary": "审查结论摘要",
+    "off_topic": {"aligned": true, "notes": ""}
+  }
+}
+%s`,
+		round, rounds,
+		input.Venue, input.AuditLevel,
+		keywordsLine(input),
+		compactDirectionForPrompt(input),
+		refsLine,
+		briefText,
+		generateBundleJSON,
+		gateBlock,
+		jsonStringFieldsLocaleHint(locale),
+	)
+}

@@ -241,3 +241,13 @@ func (r *PaperOutputLiteratureReviewImpl) GetIDByExperimentPlanID(
 	}
 	return id, nil
 }
+
+func (r *PaperOutputLiteratureReviewImpl) LinkExperimentPlan(
+	ctx context.Context,
+	reviewID, planID, userID, manuscriptID uint64,
+) error {
+	return r.db.WithContext(ctx).
+		Model(&entity.PaperOutputLiteratureReview{}).
+		Where("id = ? AND user_id = ? AND manuscript_id = ?", reviewID, userID, manuscriptID).
+		Update("experiment_plan_id", planID).Error
+}

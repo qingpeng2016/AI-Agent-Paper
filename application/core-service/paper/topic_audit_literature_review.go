@@ -6,123 +6,10 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
 	"gorm.io/datatypes"
 )
-
-// stageBeginAuditAsync 仅标记 running，由 bot 异步调用 LLM（审查 + 文献综述）。
-func (s *TopicDiscoveryRunService) stageBeginAuditAsync(
-	ctx context.Context,
-	userID uint,
-	runVersion int,
-	step *entity.PaperOutputTopicStep,
-) error {
-	ideas, err := s.steps.GetStep(ctx, uint64(userID), runVersion, "generate_ideas")
-	if err != nil || ideas == nil || strings.TrimSpace(ideas.Status) != "completed" {
-		return fmt.Errorf("generate_ideas 未完成，无法开始审查与文献综述")
-	}
-	if len(step.Result) > 0 && strings.TrimSpace(step.Status) == "completed" {
-		return nil
-	}
-	sum := "审查结论与文献综述生成中…"
-	step.SummaryText = &sum
-	step.Status = "running"
-	step.CompletedAt = nil
-	meta := LoadStepExtra(step)
-	meta["async_llm"] = true
-	step.Extra = mustJSON(meta)
-	return s.steps.SaveStep(ctx, step)
-}
-
-// RunAuditAndLiteratureReviewLLM bot：审计 + 写入 paper_output_literature_review。
-func (s *TopicDiscoveryRunService) RunAuditAndLiteratureReviewLLM(
-	ctx context.Context,
-	userID uint,
-	runVersion int,
-	auditStep *entity.PaperOutputTopicStep,
-	input topicRunInput,
-) error {
-	ideas, err := s.steps.GetStep(ctx, uint64(userID), runVersion, "generate_ideas")
-	if err != nil || ideas == nil || strings.TrimSpace(ideas.Status) != "completed" {
-		return fmt.Errorf("generate_ideas 未完成")
-	}
-
-	rounds := input.ExecRounds
-	if rounds < 1 {
-		rounds = 1
-	}
-	var roundOutputs []map[string]any
-	var lastText string
-	var totalUsage LLMUsage
-	var litReviewPayload map[string]any
-
-	for r := 1; r <= rounds; r++ {
-		locale := s.contentLocaleForStep(ctx, auditStep)
-		userMsg := s.buildAuditUserExtra(ctx, userID, runVersion, input, r, rounds, locale)
-		text, usage, err := s.callStageLLM(ctx, auditStep, "audit", map[string]string{
-			"direction": compactDirectionForPrompt(input),
-			"keywords":  keywordsLine(input),
-			"venue":     input.Venue,
-		}, userMsg)
-		if err != nil {
-			return err
-		}
-		lastText = text
-		totalUsage.PromptTokens += usage.PromptTokens
-		totalUsage.CompletionTokens += usage.CompletionTokens
-		auditRound, litPart := parseAuditLiteratureReviewLLMResponse(text)
-		if len(litPart) > 0 {
-			litReviewPayload = litPart
-		}
-		roundOutputs = append(roundOutputs, auditRound)
-	}
-
-	result := map[string]any{"rounds": roundOutputs}
-	if litReviewPayload != nil {
-		result["literature_review"] = litReviewPayload
-	}
-
-	var litReviewID uint64
-	if s.litReviews != nil && litReviewPayload != nil {
-		id, saveErr := s.persistLiteratureReviewFromLLM(ctx, auditStep, input, userID, runVersion, litReviewPayload)
-		if saveErr != nil {
-			return saveErr
-		}
-		litReviewID = id
-		if litReviewID > 0 {
-			result["literature_review_id"] = litReviewID
-		}
-	}
-
-	auditStep.Result = mustJSON(result)
-	if summary := auditSummaryFromRounds(roundOutputs, litReviewPayload); summary != "" {
-		auditStep.SummaryText = ptrString(summary)
-	} else {
-		auditStep.SummaryText = ptrString(lastText)
-	}
-	appendUsageMeta(auditStep, totalUsage)
-	meta := LoadStepExtra(auditStep)
-	meta["includes_literature_review"] = litReviewPayload != nil
-	if litReviewID > 0 {
-		meta["literature_review_id"] = litReviewID
-	}
-	delete(meta, "async_llm")
-	meta["async_llm_done"] = true
-	auditStep.Extra = mustJSON(meta)
-
-	if auditStep.ManuscriptID > 0 {
-		if err := s.manuscripts.SetCurrentForUser(ctx, userID, uint(auditStep.ManuscriptID)); err != nil {
-			return err
-		}
-	}
-
-	done := time.Now()
-	auditStep.Status = "completed"
-	auditStep.CompletedAt = &done
-	return s.steps.SaveStep(ctx, auditStep)
-}
 
 func parseAuditLiteratureReviewLLMResponse(text string) (auditRound map[string]any, literatureReview map[string]any) {
 	text = strings.TrimSpace(text)
@@ -222,7 +109,7 @@ func (s *TopicDiscoveryRunService) persistLiteratureReviewFromLLM(
 	})
 	metaSnap, _ := json.Marshal(map[string]any{
 		"topic_step_id": auditStep.ID,
-		"stage_code":    "audit",
+		"stage_code":    "topic_discovery",
 	})
 
 	row := &entity.PaperOutputLiteratureReview{

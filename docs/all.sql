@@ -295,7 +295,7 @@ CREATE TABLE IF NOT EXISTS `paper_literature_platform` (
 CREATE TABLE IF NOT EXISTS `paper_exec_intensity_topic` (
   `code`         VARCHAR(16)  NOT NULL COMMENT '档位键 fast|balanced|deep',
   `name`         VARCHAR(64)  NOT NULL COMMENT '展示名',
-  `exec_rounds`  TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '审计迭代轮数',
+  `exec_rounds`  TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '选题生成↔审计迭代轮数（Corpus 冻结）',
   `max_papers`   INT UNSIGNED NOT NULL DEFAULT 80 COMMENT '检索文献上限（选题发现）',
   `max_ideas`    INT UNSIGNED NOT NULL DEFAULT 12 COMMENT '选题候选 idea 上限',
   `is_default`   TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '前端默认选中项，仅一条应为 1',
@@ -305,7 +305,7 @@ CREATE TABLE IF NOT EXISTS `paper_exec_intensity_topic` (
 CREATE TABLE IF NOT EXISTS `paper_exec_intensity_write_paper` (
   `code`         VARCHAR(16)  NOT NULL COMMENT '档位键 fast|balanced|deep',
   `name`         VARCHAR(64)  NOT NULL COMMENT '展示名',
-  `exec_rounds`  TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '审计迭代轮数',
+  `exec_rounds`  TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '选题生成↔审计迭代轮数（Corpus 冻结）',
   `is_default`   TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '前端默认选中项，仅一条应为 1',
   PRIMARY KEY (`code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='论文写作·执行强度档位';
@@ -432,7 +432,7 @@ CREATE TABLE IF NOT EXISTS `paper_output_topic_step` (
   `manuscript_id`     BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '论文 ID；选题未确认综述前为 0，确认后反填',
   `user_id`           BIGINT UNSIGNED NOT NULL COMMENT '用户 ID',
   `run_version`       INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '该用户选题第几轮（同轮四步相同）',
-  `stage_code`        VARCHAR(32)  NOT NULL COMMENT 'retrieve|generate_ideas|audit（旧 run 可有 novelty）',
+  `stage_code`        VARCHAR(32)  NOT NULL COMMENT 'retrieve|topic_discovery（旧 run 可有 generate_ideas/audit/novelty）',
   `status`            VARCHAR(16)  NOT NULL DEFAULT 'pending' COMMENT 'pending|running|completed|failed|cancelled',
   `result`            JSON         DEFAULT NULL COMMENT '本步产出：retrieve→literature_hits[]；generate_ideas→ideas[]；novelty/audit→报告结构',
   `summary_text`      MEDIUMTEXT   DEFAULT NULL COMMENT '本步可读摘要/报告',
@@ -516,7 +516,7 @@ CREATE TABLE IF NOT EXISTS `paper_output_figure` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='图表记录（上传 + 一键生成）';
 
 -- ---------------------------------------------------------------------------
--- 7. LLM 调用日志（计费、排错；不存完整 prompt 时可只存 hash）
+-- 7. LLM 调用日志（计费、排错；每次调用存 request/response JSON）
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS `paper_llm_call_logs` (
@@ -526,6 +526,8 @@ CREATE TABLE IF NOT EXISTS `paper_llm_call_logs` (
   `model_config_id` BIGINT UNSIGNED DEFAULT NULL COMMENT 'paper_llm_model_config.id',
   `prompt_template_id` BIGINT UNSIGNED DEFAULT NULL COMMENT 'paper_llm_template_topic.id',
   `model_name`      VARCHAR(128) NOT NULL COMMENT '模型名快照',
+  `request_json`    JSON         NOT NULL COMMENT '请求快照：stage_code、system_prompt、user_prompt',
+  `response_json`   JSON         NOT NULL COMMENT '响应快照：text；失败时含 error',
   `prompt_tokens`   INT          DEFAULT NULL COMMENT '输入 token',
   `completion_tokens` INT        DEFAULT NULL COMMENT '输出 token',
   `latency_ms`      INT          NOT NULL DEFAULT 0 COMMENT '耗时毫秒',
@@ -627,25 +629,9 @@ INSERT INTO `bot_schedule_config` (
   ),
   (
     'ai_agent_paper',
-    'topic_generate_ideas_llm',
-    15,
-    '选题 generate_ideas=running：异步调用 LLM 脑暴+新颖性预填',
-    1,
-    1
-  ),
-  (
-    'ai_agent_paper',
-    'topic_audit_llm',
-    15,
-    '选题 audit=running：异步调用 LLM 审查结论+文献综述并写入 paper_output_literature_review',
-    1,
-    1
-  ),
-  (
-    'ai_agent_paper',
-    'experiment_plan_llm',
-    15,
-    '文献综述 generating_experiment_plan：异步 LLM 生成实验方案',
+    'topic_discovery_llm',
+    2,
+    '选题 topic_discovery=running：生成包↔三门禁审计迭代，写入综述与实验方案',
     1,
     1
   )
@@ -1013,7 +999,7 @@ ON DUPLICATE KEY UPDATE
   `status` = VALUES(`status`);
 
 INSERT INTO `paper_llm_template_topic` (`stage_code`, `stage_name`, `llm_description_code`, `status`)
-SELECT 'generate_ideas', '脑暴候选选题', d.`description_code`, 'active'
+SELECT 'topic_generate', '选题生成包', d.`description_code`, 'active'
 FROM `paper_llm_description` d
 WHERE d.`prompt_code` = 'template_topic' AND d.`prompt_desc` = 'generate_ideas' LIMIT 1
 ON DUPLICATE KEY UPDATE
@@ -1022,18 +1008,9 @@ ON DUPLICATE KEY UPDATE
   `status` = VALUES(`status`);
 
 INSERT INTO `paper_llm_template_topic` (`stage_code`, `stage_name`, `llm_description_code`, `status`)
-SELECT 'audit', '审查结论+生成文献综述', d.`description_code`, 'active'
+SELECT 'topic_audit', '选题审计', d.`description_code`, 'active'
 FROM `paper_llm_description` d
 WHERE d.`prompt_code` = 'template_topic' AND d.`prompt_desc` = 'audit' LIMIT 1
-ON DUPLICATE KEY UPDATE
-  `stage_name` = VALUES(`stage_name`),
-  `llm_description_code` = VALUES(`llm_description_code`),
-  `status` = VALUES(`status`);
-
-INSERT INTO `paper_llm_template_topic` (`stage_code`, `stage_name`, `llm_description_code`, `status`)
-SELECT 'experiment_plan', '生成实验方案', d.`description_code`, 'active'
-FROM `paper_llm_description` d
-WHERE d.`prompt_code` = 'template_topic' AND d.`prompt_desc` = 'experiment_plan' LIMIT 1
 ON DUPLICATE KEY UPDATE
   `stage_name` = VALUES(`stage_name`),
   `llm_description_code` = VALUES(`llm_description_code`),
