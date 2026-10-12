@@ -10,6 +10,7 @@ type PaperRefVenue struct {
 	ID                  uint           `gorm:"primaryKey;column:id"`
 	Code                string         `gorm:"column:code;size:64;not null"`
 	Name                string         `gorm:"column:name;size:256;not null"`
+	Sort                int            `gorm:"column:sort;not null;default:100"`
 	VenueType           string         `gorm:"column:venue_type;size:16;not null"`
 	LLMDescriptionCodes datatypes.JSON `gorm:"column:llm_description_codes;not null"`
 	Publisher           *string        `gorm:"column:publisher;size:128"`

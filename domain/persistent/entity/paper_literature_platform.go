@@ -16,7 +16,7 @@ type PaperLiteraturePlatform struct {
 	ConfigSchema    datatypes.JSON `gorm:"column:config_schema"`
 	DefaultConfig   datatypes.JSON `gorm:"column:default_config"`
 	RateLimitHint   *string        `gorm:"column:rate_limit_hint;size:256"`
-	Priority        int            `gorm:"column:priority;not null;default:100"`
+	Sort            int            `gorm:"column:sort;not null;default:100"`
 	DefaultSelected bool           `gorm:"column:default_selected;not null;default:0"`
 	Status          string         `gorm:"column:status;size:16;not null;default:active"`
 	CreatedAt       time.Time      `gorm:"column:created_at"`

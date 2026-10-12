@@ -36,11 +36,13 @@ function applyFallbackOptions() {
   ]
   defaultIntensityCode.value = DEFAULT_EXEC_INTENSITY_CODE
   defaultAuditLevelCode.value = 'standard'
+  // form-options 不可用时的本地 fallback（默认勾选对齐 all.sql 种子，非线上库表）
+  const fallbackDefaultSelected = new Set(['arxiv', 'openalex', 'semantic_scholar'])
   literatureSourceOptions.value = LITERATURE_SOURCE_OPTIONS.map((s, i) => ({
     code: s.code,
     label: s.label,
-    priority: i + 1,
-    defaultSelected: ['arxiv', 'openalex', 'semantic_scholar'].includes(s.code),
+    sort: i + 1,
+    defaultSelected: fallbackDefaultSelected.has(s.code),
   }))
   defaultLiteratureSourceCodes.value = literatureSourceOptions.value
     .filter((s) => s.defaultSelected)

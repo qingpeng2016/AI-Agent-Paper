@@ -222,7 +222,7 @@ func (s *TopicDiscoveryRunService) retrieveLiteratureSequential(
 ) ([]storedLiteratureHit, map[string]any) {
 	seen := map[string]struct{}{}
 	hits := make([]storedLiteratureHit, 0, input.MaxPapers)
-	for _, code := range s.orderSourceCodesByPriority(ctx, input.SourceCodes) {
+	for _, code := range s.orderSourceCodesBySort(ctx, input.SourceCodes) {
 		if len(hits) >= input.MaxPapers {
 			break
 		}

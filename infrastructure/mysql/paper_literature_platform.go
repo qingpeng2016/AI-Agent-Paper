@@ -35,7 +35,7 @@ func (r *PaperLiteraturePlatformImpl) ListActiveOrdered(ctx context.Context) ([]
 	var rows []entity.PaperLiteraturePlatform
 	err := r.db.WithContext(ctx).
 		Where("status = ?", "active").
-		Order("priority ASC, id ASC").
+		Order("sort ASC, id ASC").
 		Find(&rows).Error
 	if err != nil {
 		return nil, err

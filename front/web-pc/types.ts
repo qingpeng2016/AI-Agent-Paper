@@ -543,7 +543,8 @@ export const DEFAULT_TOPIC_DISCOVERY: TopicDiscoveryForm = {
   keywords: '',
   description: '',
   venueCodes: [],
-  sourceCodes: ['arxiv', 'openalex', 'semantic_scholar'],
+  /** 由 form-options 的 default_selected 填充，勿写死平台列表 */
+  sourceCodes: [],
   intensity: 'balanced',
   auditLevel: 'standard',
   humanCheckpoint: true,
@@ -578,7 +579,8 @@ export const ENV_PREFERENCE_STORAGE_KEY = 'atm:paper:environment:v3'
 export const DEFAULT_ENV_PREFERENCE: EnvironmentPreferenceForm = {
   disciplineCode: 'cs_ai',
   defaultVenueText: '',
-  literatureSourceCodes: ['arxiv', 'openalex', 'semantic_scholar'],
+  /** 由 form-options 的 default_selected 填充 */
+  literatureSourceCodes: [],
   intensity: 'balanced',
   auditLevel: 'standard',
   humanCheckpoint: true,

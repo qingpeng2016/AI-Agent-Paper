@@ -50,6 +50,7 @@ func (s *TopicDiscoveryOptionsService) GetFormOptions(ctx context.Context) (*res
 			Code:      v.Code,
 			Label:     v.Name,
 			VenueType: v.VenueType,
+			Sort:      v.Sort,
 		})
 	}
 
@@ -96,7 +97,7 @@ func (s *TopicDiscoveryOptionsService) GetFormOptions(ctx context.Context) (*res
 		out.LiteratureSources = append(out.LiteratureSources, response.TopicDiscoveryLiteratureSourceOption{
 			Code:            src.Code,
 			Label:           src.Name,
-			Priority:        src.Priority,
+			Sort:            src.Sort,
 			DefaultSelected: src.DefaultSelected,
 		})
 	}

@@ -26,13 +26,14 @@ export type TopicDiscoveryFormOptionsResponse = {
   literature_sources?: Array<{
     code: string
     label: string
-    priority: number
+    sort: number
     default_selected: boolean
   }>
   venues?: Array<{
     code: string
     label: string
     venue_type: string
+    sort: number
   }>
 }
 
@@ -40,12 +41,13 @@ export type VenueOption = {
   code: string
   label: string
   venueType: string
+  sort: number
 }
 
 export type LiteratureSourceOption = {
   code: string
   label: string
-  priority: number
+  sort: number
   defaultSelected: boolean
 }
 
@@ -378,20 +380,21 @@ export async function fetchTopicDiscoveryFormOptions(): Promise<{
   const d = body.data
   const literatureSources = (d.literature_sources ?? [])
     .slice()
-    .sort((a, b) => a.priority - b.priority || a.code.localeCompare(b.code))
+    .sort((a, b) => a.sort - b.sort || a.code.localeCompare(b.code))
     .map((x) => ({
       code: x.code,
       label: x.label,
-      priority: x.priority,
+      sort: x.sort,
       defaultSelected: Boolean(x.default_selected),
     }))
   const venueOptions = (d.venues ?? [])
     .slice()
-    .sort((a, b) => a.label.localeCompare(b.label, 'zh-CN') || a.code.localeCompare(b.code))
+    .sort((a, b) => a.sort - b.sort || a.code.localeCompare(b.code))
     .map((x) => ({
       code: x.code,
       label: x.label,
       venueType: x.venue_type,
+      sort: x.sort,
     }))
   return {
     disciplineSelectOptions: d.disciplines.map((x) => ({ value: x.code, label: x.label })),

@@ -480,7 +480,7 @@ func (s *TopicDiscoveryRunService) executeStage(ctx context.Context, userID uint
 	return s.steps.SaveStep(ctx, step)
 }
 
-func (s *TopicDiscoveryRunService) orderSourceCodesByPriority(ctx context.Context, selected []string) []string {
+func (s *TopicDiscoveryRunService) orderSourceCodesBySort(ctx context.Context, selected []string) []string {
 	active, err := s.litSource.ListActiveOrdered(ctx)
 	if err != nil || len(active) == 0 {
 		return selected

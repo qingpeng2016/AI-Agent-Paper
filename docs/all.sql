@@ -260,6 +260,7 @@ CREATE TABLE IF NOT EXISTS `paper_ref_venue` (
   `id`              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'venue ID',
   `code`            VARCHAR(64)  NOT NULL COMMENT 'venue 键，如 neurips|iclr|nature',
   `name`            VARCHAR(256) NOT NULL COMMENT 'NeurIPS / Nature 等',
+  `sort`            INT          NOT NULL DEFAULT 100 COMMENT '选题下拉展示顺序，越小越靠前',
   `venue_type`      VARCHAR(16)  NOT NULL COMMENT 'conference|journal|workshop|other',
   `llm_description_codes` JSON NOT NULL DEFAULT (JSON_ARRAY(20000, 20001, 20002)) COMMENT 'paper_llm_description.description_code 列表（如 constraint_venue 2xxxx）',
   `publisher`       VARCHAR(128) DEFAULT NULL COMMENT '出版方',
@@ -281,14 +282,14 @@ CREATE TABLE IF NOT EXISTS `paper_literature_platform` (
   `config_schema`   JSON         DEFAULT NULL COMMENT '连接参数 JSON Schema（Key 名、必填项）',
   `default_config`  JSON         DEFAULT NULL COMMENT '默认非密钥配置',
   `rate_limit_hint` VARCHAR(256) DEFAULT NULL COMMENT '限流说明',
-  `priority`        INT          NOT NULL DEFAULT 100 COMMENT '检索与 UI 展示顺序，越小越优先',
+  `sort`            INT          NOT NULL DEFAULT 100 COMMENT '检索与 UI 展示顺序，越小越靠前',
   `default_selected` TINYINT(1)  NOT NULL DEFAULT 0 COMMENT '选题表单默认勾选',
   `status`          VARCHAR(16)  NOT NULL DEFAULT 'active' COMMENT 'active|disabled',
   `created_at`      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at`      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_paper_literature_platform_code` (`code`),
-  KEY `idx_paper_literature_platform_active_priority` (`status`, `priority`, `id`)
+  KEY `idx_paper_literature_platform_active_sort` (`status`, `sort`, `id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文献检索平台（API 配置）';
 
 CREATE TABLE IF NOT EXISTS `paper_exec_intensity_topic` (
@@ -999,6 +1000,8 @@ ON DUPLICATE KEY UPDATE
   `website_url` = VALUES(`website_url`),
   `status` = VALUES(`status`);
 
+UPDATE `paper_ref_venue` SET `sort` = `id`;
+
 -- 阶段 JSON schema 见 Go 内 user message；环节话术正文在 paper_llm_description（template_topic）
 INSERT INTO `paper_llm_template_topic` (`stage_code`, `stage_name`, `llm_description_code`, `status`)
 SELECT 'default', '默认（全局兜底）', d.`description_code`, 'active'
@@ -1036,7 +1039,7 @@ ON DUPLICATE KEY UPDATE
   `llm_description_code` = VALUES(`llm_description_code`),
   `status` = VALUES(`status`);
 
-INSERT INTO `paper_literature_platform` (`code`, `name`, `api_kind`, `base_url`, `auth_type`, `default_config`, `config_schema`, `priority`, `default_selected`) VALUES
+INSERT INTO `paper_literature_platform` (`code`, `name`, `api_kind`, `base_url`, `auth_type`, `default_config`, `config_schema`, `sort`, `default_selected`) VALUES
   ('arxiv', 'arXiv', 'rest', 'https://export.arxiv.org/api/query', 'none', NULL, NULL, 1, 1),
   ('openalex', 'OpenAlex', 'rest', 'https://api.openalex.org/works', 'none',
    JSON_OBJECT('mailto', ''),
@@ -1052,7 +1055,7 @@ ON DUPLICATE KEY UPDATE
   `auth_type` = VALUES(`auth_type`),
   `default_config` = VALUES(`default_config`),
   `config_schema` = VALUES(`config_schema`),
-  `priority` = VALUES(`priority`),
+  `sort` = VALUES(`sort`),
   `default_selected` = VALUES(`default_selected`);
 
 -- ---------------------------------------------------------------------------

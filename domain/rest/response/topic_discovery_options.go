@@ -12,12 +12,13 @@ type TopicDiscoveryVenueOption struct {
 	Code      string `json:"code"`
 	Label     string `json:"label"`
 	VenueType string `json:"venue_type"`
+	Sort      int    `json:"sort"`
 }
 
 type TopicDiscoveryLiteratureSourceOption struct {
 	Code            string `json:"code"`
 	Label           string `json:"label"`
-	Priority        int    `json:"priority"`
+	Sort            int    `json:"sort"`
 	DefaultSelected bool   `json:"default_selected"`
 }
 

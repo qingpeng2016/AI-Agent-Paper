@@ -115,7 +115,7 @@ func (r *PaperRefCatalogImpl) ListActiveVenues(ctx context.Context) ([]entity.Pa
 	var rows []entity.PaperRefVenue
 	err := r.db.WithContext(ctx).
 		Where("status = ?", "active").
-		Order("name ASC, id ASC").
+		Order("sort ASC, id ASC").
 		Find(&rows).Error
 	return rows, err
 }

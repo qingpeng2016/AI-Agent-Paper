@@ -255,6 +255,7 @@ const {
   applyCatalogIntensityAuditDefaults,
   literatureSourceOptions,
   applyDefaultLiteratureSourceCodes,
+  applyDefaultLiteratureSources,
 } = useTopicDiscoveryFormOptions()
 
 const envPreferenceFromStorage = ref(false)
@@ -385,12 +386,20 @@ function loadEnvFromStorage() {
 }
 
 watch(topicFormOptionsReady, (ready) => {
-  if (!ready || envPreferenceFromStorage.value) return
-  applyCatalogIntensityAuditDefaults(envPreference)
-  applyDefaultLiteratureSourceCodes(envPreference)
-  topicForm.intensity = envPreference.intensity
-  topicForm.auditLevel = envPreference.auditLevel
-  topicForm.sourceCodes = [...envPreference.literatureSourceCodes]
+  if (!ready) return
+  if (!envPreferenceFromStorage.value) {
+    applyCatalogIntensityAuditDefaults(envPreference)
+    applyDefaultLiteratureSourceCodes(envPreference)
+    topicForm.intensity = envPreference.intensity
+    topicForm.auditLevel = envPreference.auditLevel
+  }
+  if (topicForm.sourceCodes.length === 0) {
+    if (envPreference.literatureSourceCodes.length > 0) {
+      topicForm.sourceCodes = [...envPreference.literatureSourceCodes]
+    } else {
+      applyDefaultLiteratureSources(topicForm)
+    }
+  }
 })
 
 function loadLitReviewFlagsFromStorage() {
@@ -586,7 +595,6 @@ loadExperimentPlanFlagsFromStorage()
   )
   if (fromEnv.length) topicForm.venueCodes = fromEnv
 }
-topicForm.sourceCodes = [...envPreference.literatureSourceCodes]
 topicForm.intensity = envPreference.intensity
 topicForm.auditLevel = envPreference.auditLevel
 topicForm.humanCheckpoint = envPreference.humanCheckpoint
