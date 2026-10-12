@@ -36,19 +36,38 @@ func NewClient(http *httpx.Client, sources repository.PaperLiteraturePlatformRep
 }
 
 func (c *Client) Search(ctx context.Context, q httpentity.ArxivSearchQuery) ([]httpentity.ArxivPaper, error) {
+	papers, _, err := c.searchFeed(ctx, q)
+	return papers, err
+}
+
+func (c *Client) Count(ctx context.Context, query string) (int, error) {
+	_, total, err := c.searchFeed(ctx, httpentity.ArxivSearchQuery{Query: query, MaxResults: 1, Start: 0})
+	return total, err
+}
+
+func (c *Client) searchFeed(ctx context.Context, q httpentity.ArxivSearchQuery) ([]httpentity.ArxivPaper, int, error) {
 	searchQuery := url.QueryEscape("all:" + q.Query)
-	apiURL := fmt.Sprintf("%s?search_query=%s&start=0&max_results=%d", c.baseURL, searchQuery, q.MaxResults)
+	start := q.Start
+	if start < 0 {
+		start = 0
+	}
+	maxResults := q.MaxResults
+	if maxResults <= 0 {
+		maxResults = 1
+	}
+	apiURL := fmt.Sprintf("%s?search_query=%s&start=%d&max_results=%d", c.baseURL, searchQuery, start, maxResults)
 	resp, err := c.http.Get(ctx, apiURL, nil, nil)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	if resp.StatusCode() != http.StatusOK {
-		return nil, fmt.Errorf("arxiv http %d", resp.StatusCode())
+		return nil, 0, fmt.Errorf("arxiv http %d", resp.StatusCode())
 	}
 	var feed feedXML
 	if err := xml.Unmarshal(resp.Body(), &feed); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
+	total := feed.TotalResults
 	out := make([]httpentity.ArxivPaper, 0, len(feed.Entries))
 	for _, e := range feed.Entries {
 		p := entryToPaper(e)
@@ -56,11 +75,12 @@ func (c *Client) Search(ctx context.Context, q httpentity.ArxivSearchQuery) ([]h
 			out = append(out, p)
 		}
 	}
-	return out, nil
+	return out, total, nil
 }
 
 type feedXML struct {
-	Entries []entryXML `xml:"entry"`
+	TotalResults int        `xml:"http://a9.com/-/spec/opensearch/1.1/ totalResults"`
+	Entries      []entryXML `xml:"entry"`
 }
 
 type entryXML struct {

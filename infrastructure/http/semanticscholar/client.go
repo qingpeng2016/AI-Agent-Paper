@@ -34,11 +34,28 @@ func NewClient(http *httpx.Client, sources repository.PaperLiteraturePlatformRep
 	return &Client{http: http, baseURL: baseURL, apiKey: apiKey}
 }
 
+func (c *Client) Count(ctx context.Context, query string) (int, error) {
+	_, total, err := c.search(ctx, httpentity.SemanticScholarSearchQuery{Query: query, MaxResults: 1, Offset: 0})
+	return total, err
+}
+
 func (c *Client) Search(ctx context.Context, q httpentity.SemanticScholarSearchQuery) ([]httpentity.SemanticScholarPaper, error) {
+	papers, _, err := c.search(ctx, q)
+	return papers, err
+}
+
+func (c *Client) search(ctx context.Context, q httpentity.SemanticScholarSearchQuery) ([]httpentity.SemanticScholarPaper, int, error) {
+	limit := q.MaxResults
+	if limit <= 0 {
+		limit = 1
+	}
 	params := map[string]string{
 		"query":  q.Query,
-		"limit":  strconv.Itoa(q.MaxResults),
+		"limit":  strconv.Itoa(limit),
 		"fields": "title,authors,abstract,year,externalIds,url,paperId",
+	}
+	if q.Offset > 0 {
+		params["offset"] = strconv.Itoa(q.Offset)
 	}
 	headers := map[string]string{
 		"Accept": "application/json",
@@ -48,24 +65,29 @@ func (c *Client) Search(ctx context.Context, q httpentity.SemanticScholarSearchQ
 	}
 	resp, err := c.http.Get(ctx, c.baseURL, params, headers)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	if resp.StatusCode() != http.StatusOK {
-		return nil, fmt.Errorf("semantic scholar http %d: %s", resp.StatusCode(), truncate(string(resp.Body()), 200))
+		return nil, 0, fmt.Errorf("semantic scholar http %d: %s", resp.StatusCode(), truncate(string(resp.Body()), 200))
 	}
 	var body searchResponse
 	if err := json.Unmarshal(resp.Body(), &body); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	out := make([]httpentity.SemanticScholarPaper, 0, len(body.Data))
 	for _, p := range body.Data {
 		out = append(out, paperToEntity(p))
 	}
-	return out, nil
+	total := body.Total
+	if total <= 0 && len(out) > 0 {
+		total = len(out)
+	}
+	return out, total, nil
 }
 
 type searchResponse struct {
-	Data []paperJSON `json:"data"`
+	Total int         `json:"total"`
+	Data  []paperJSON `json:"data"`
 }
 
 type paperJSON struct {

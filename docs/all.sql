@@ -19,7 +19,7 @@
 -- | model      | paper_llm_model_config, paper_llm_template_topic, |
 -- |            | paper_llm_description, paper_llm_constraint_gate, paper_exec_intensity_topic, paper_exec_intensity_write_paper |
 -- | llm        | paper_llm_call_logs |
--- 业务表均含 manuscript_id → paper_manuscript.id（逻辑外键，不设 DB FK）
+-- 多数 output 表含 manuscript_id → paper_manuscript.id（逻辑外键，不设 DB FK）；paper_user_literature 按 user_id
 
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
@@ -541,21 +541,21 @@ CREATE TABLE IF NOT EXISTS `paper_llm_call_logs` (
 CREATE TABLE IF NOT EXISTS `paper_user_literature` (
   `id`            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '上传记录 ID',
   `user_id`       BIGINT UNSIGNED NOT NULL COMMENT 'users.id',
-  `manuscript_id` BIGINT UNSIGNED NOT NULL COMMENT '本篇「上传文献」；选题 user_library 语料',
-  `file_kind`     VARCHAR(16)  NOT NULL COMMENT 'pdf|bib|txt|other',
-  `file_name`     VARCHAR(512) NOT NULL COMMENT '原始文件名',
-  `title`         VARCHAR(512) NOT NULL COMMENT '文献标题',
-  `note`          TEXT         DEFAULT NULL COMMENT '备注',
+  `from`          VARCHAR(64)  NOT NULL DEFAULT 'user_upload' COMMENT '来源：user_upload|arxiv|openalex|semantic_scholar|crossref|pubmed',
+  `file_ext`      VARCHAR(16)  NOT NULL COMMENT 'pdf|bib|txt|other',
+  `file_name`         VARCHAR(512) NOT NULL COMMENT '原始文件名',
+  `literature_title`  VARCHAR(512) NOT NULL COMMENT '文献标题',
+  `note`              TEXT         DEFAULT NULL COMMENT '备注',
   `size_bytes`    BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '文件大小字节',
-  `storage_uri`   VARCHAR(1024) DEFAULT NULL COMMENT '对象存储或工作区相对路径',
+  `storage_url`   VARCHAR(1024) DEFAULT NULL COMMENT '对象存储或工作区相对路径',
   `content_hash`  CHAR(64)     DEFAULT NULL COMMENT 'SHA-256',
   `status`        VARCHAR(16)  NOT NULL DEFAULT 'active' COMMENT 'active|deleted',
   `created_at`    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '上传时间',
   `updated_at`    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
-  KEY `idx_paper_user_lit_ms` (`manuscript_id`, `status`),
-  KEY `idx_paper_user_lit_user` (`user_id`, `created_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户上传文献（上传文献模块 / 参考文献门禁语料）';
+  KEY `idx_paper_user_lit_user` (`user_id`, `status`, `created_at`),
+  KEY `idx_paper_user_lit_from` (`user_id`, `from`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户文献语料（用户上传或第三方检索下载）';
 
 -- ---------------------------------------------------------------------------
 -- 9. 种子数据 — 平台（VIP、优惠券、Bot）

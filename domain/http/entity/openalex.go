@@ -5,6 +5,7 @@ package entity
 type OpenAlexSearchQuery struct {
 	Query      string
 	MaxResults int
+	Page       int // 1-based，0 或未设等价于第 1 页
 }
 
 // OpenAlexWork 单条 OpenAlex work

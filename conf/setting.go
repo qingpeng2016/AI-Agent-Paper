@@ -95,6 +95,8 @@ const (
 	DefaultLiteratureArxivBaseURL           = "https://export.arxiv.org/api/query"
 	DefaultLiteratureOpenAlexBaseURL        = "https://api.openalex.org/works"
 	DefaultLiteratureSemanticScholarBaseURL = "https://api.semanticscholar.org/graph/v1/paper/search"
+	DefaultLiteratureCrossrefBaseURL        = "https://api.crossref.org/works"
+	DefaultLiteraturePubMedEutilsBaseURL    = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 )
 
 var GlobalConf *Config

@@ -34,10 +34,27 @@ func NewClient(http *httpx.Client, sources repository.PaperLiteraturePlatformRep
 	return &Client{http: http, baseURL: baseURL, mailto: mailto}
 }
 
+func (c *Client) Count(ctx context.Context, query string) (int, error) {
+	_, total, err := c.search(ctx, httpentity.OpenAlexSearchQuery{Query: query, MaxResults: 1, Page: 1})
+	return total, err
+}
+
 func (c *Client) Search(ctx context.Context, q httpentity.OpenAlexSearchQuery) ([]httpentity.OpenAlexWork, error) {
+	works, _, err := c.search(ctx, q)
+	return works, err
+}
+
+func (c *Client) search(ctx context.Context, q httpentity.OpenAlexSearchQuery) ([]httpentity.OpenAlexWork, int, error) {
+	perPage := q.MaxResults
+	if perPage <= 0 {
+		perPage = 1
+	}
 	params := map[string]string{
 		"search":   q.Query,
-		"per-page": strconv.Itoa(q.MaxResults),
+		"per-page": strconv.Itoa(perPage),
+	}
+	if q.Page > 1 {
+		params["page"] = strconv.Itoa(q.Page)
 	}
 	headers := map[string]string{
 		"Accept": "application/json",
@@ -47,24 +64,29 @@ func (c *Client) Search(ctx context.Context, q httpentity.OpenAlexSearchQuery) (
 	}
 	resp, err := c.http.Get(ctx, c.baseURL, params, headers)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	if resp.StatusCode() != http.StatusOK {
-		return nil, fmt.Errorf("openalex http %d", resp.StatusCode())
+		return nil, 0, fmt.Errorf("openalex http %d", resp.StatusCode())
 	}
 	var body worksResponse
 	if err := json.Unmarshal(resp.Body(), &body); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	out := make([]httpentity.OpenAlexWork, 0, len(body.Results))
 	for _, w := range body.Results {
 		out = append(out, workToEntity(w))
 	}
-	return out, nil
+	return out, body.Meta.Count, nil
 }
 
 type worksResponse struct {
+	Meta    metaJSON   `json:"meta"`
 	Results []workJSON `json:"results"`
+}
+
+type metaJSON struct {
+	Count int `json:"count"`
 }
 
 type workJSON struct {

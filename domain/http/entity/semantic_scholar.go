@@ -5,6 +5,7 @@ package entity
 type SemanticScholarSearchQuery struct {
 	Query      string
 	MaxResults int
+	Offset     int
 }
 
 // SemanticScholarPaper 单条 Semantic Scholar paper

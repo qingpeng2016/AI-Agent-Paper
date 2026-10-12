@@ -81,4 +81,6 @@ const (
 	LiteratureSourceCodeArxiv           = "arxiv"
 	LiteratureSourceCodeOpenAlex        = "openalex"
 	LiteratureSourceCodeSemanticScholar = "semantic_scholar"
+	LiteratureSourceCodeCrossref        = "crossref"
+	LiteratureSourceCodePubMed          = "pubmed"
 )

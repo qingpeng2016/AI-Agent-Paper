@@ -8,5 +8,6 @@ import (
 
 // ArxivRepo arXiv API，由 infrastructure/http/arxiv 实现
 type ArxivRepo interface {
+	Count(ctx context.Context, query string) (int, error)
 	Search(ctx context.Context, q entity.ArxivSearchQuery) ([]entity.ArxivPaper, error)
 }

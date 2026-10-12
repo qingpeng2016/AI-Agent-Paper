@@ -116,8 +116,18 @@ export function findPaperModuleGroupId(moduleId: PaperModuleId): PaperModuleGrou
 export type UploadedReferenceKind = 'pdf' | 'bib' | 'other'
 
 /** 对齐 paper_user_literature（本地 id 暂为字符串，接 API 后为 BIGINT） */
+/** 与 paper_user_literature.from 一致 */
+export type UserLiteratureFrom =
+  | 'user_upload'
+  | 'arxiv'
+  | 'openalex'
+  | 'semantic_scholar'
+  | 'crossref'
+  | 'pubmed'
+
 export type UploadedReferenceItem = {
   id: string
+  from: UserLiteratureFrom
   fileName: string
   title: string
   uploadedAt: string
@@ -144,7 +154,11 @@ export function getUserReferenceUploads(manuscriptId: string): UploadedReference
     const raw = localStorage.getItem(REFERENCE_UPLOAD_STORAGE_KEY)
     if (!raw) return []
     const data = JSON.parse(raw) as { byManuscript?: Record<string, UploadedReferenceItem[]> }
-    return data.byManuscript?.[manuscriptId] ?? []
+    const list = data.byManuscript?.[manuscriptId] ?? []
+    return list.map((item) => ({
+      ...item,
+      from: item.from ?? 'user_upload',
+    }))
   } catch {
     return []
   }
@@ -166,6 +180,7 @@ export function createUploadedReferenceFromFile(file: File): UploadedReferenceIt
   const base = file.name.replace(/\.[^.]+$/, '')
   return {
     id: `ref-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    from: 'user_upload',
     fileName: file.name,
     title: base || file.name,
     uploadedAt: new Date().toISOString(),
@@ -333,6 +348,8 @@ export type TopicDiscoveryForm = {
   intensity: ExecutionIntensity
   auditLevel: AuditLevel
   humanCheckpoint: boolean
+  /** 勾选后每次 run 对第三方检索使用随机分页/偏移 */
+  randomReferences: boolean
 }
 
 /** 选题发现每步完成后的人工确认点（与 stage 一一对应） */
@@ -530,6 +547,7 @@ export const DEFAULT_TOPIC_DISCOVERY: TopicDiscoveryForm = {
   intensity: 'balanced',
   auditLevel: 'standard',
   humanCheckpoint: true,
+  randomReferences: false,
 }
 
 export type EnvironmentPreferenceForm = {

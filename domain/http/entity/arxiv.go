@@ -5,6 +5,7 @@ package entity
 type ArxivSearchQuery struct {
 	Query      string
 	MaxResults int
+	Start      int // API start offset，0 表示从第一条
 }
 
 // ArxivPaper 单条 arXiv 条目（Atom entry 映射）

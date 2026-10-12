@@ -77,6 +77,7 @@ export type TopicDiscoveryRunRequest = {
   intensity: string
   audit_level: string
   human_checkpoint: boolean
+  random_references?: boolean
   /** start | continue | run_all */
   action: string
 }
@@ -143,6 +144,7 @@ export function applyStoredTopicRunInputToForm(
     intensity: string
     auditLevel: string
     humanCheckpoint: boolean
+    randomReferences: boolean
   },
   run?: TopicDiscoveryRunResponse | null,
   venues: readonly VenueOption[] = [],
@@ -197,6 +199,9 @@ export function applyStoredTopicRunInputToForm(
   if (audit) form.auditLevel = audit
   if (typeof p.human_checkpoint === 'boolean') {
     form.humanCheckpoint = p.human_checkpoint
+  }
+  if (typeof p.random_references === 'boolean') {
+    form.randomReferences = p.random_references
   }
 }
 

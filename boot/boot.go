@@ -20,8 +20,10 @@ import (
 	"github.com/qingpeng2016/ai-agent-paper/infrastructure/http"
 	anthropicinfra "github.com/qingpeng2016/ai-agent-paper/infrastructure/http/anthropic"
 	arxivinfra "github.com/qingpeng2016/ai-agent-paper/infrastructure/http/arxiv"
+	crossrefinfra "github.com/qingpeng2016/ai-agent-paper/infrastructure/http/crossref"
 	googleinfra "github.com/qingpeng2016/ai-agent-paper/infrastructure/http/google"
 	openalexinfra "github.com/qingpeng2016/ai-agent-paper/infrastructure/http/openalex"
+	pubmedinfra "github.com/qingpeng2016/ai-agent-paper/infrastructure/http/pubmed"
 	openaichatinfra "github.com/qingpeng2016/ai-agent-paper/infrastructure/http/openaichat"
 	semanticscholarinfra "github.com/qingpeng2016/ai-agent-paper/infrastructure/http/semanticscholar"
 	"github.com/qingpeng2016/ai-agent-paper/infrastructure/mysql"
@@ -106,6 +108,8 @@ func BuildContainer() *dig.Container {
 	_ = c.Provide(arxivinfra.NewClient)
 	_ = c.Provide(openalexinfra.NewClient)
 	_ = c.Provide(semanticscholarinfra.NewClient)
+	_ = c.Provide(crossrefinfra.NewClient)
+	_ = c.Provide(pubmedinfra.NewClient)
 	_ = c.Provide(anthropicinfra.NewClient)
 	_ = c.Provide(googleinfra.NewClient)
 	_ = c.Provide(openaichatinfra.NewClient)

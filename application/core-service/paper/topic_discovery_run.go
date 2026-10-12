@@ -29,8 +29,9 @@ type topicRunInput struct {
 	SourceCodes     []string `json:"source_codes"`
 	Intensity       string   `json:"intensity"`
 	AuditLevel      string   `json:"audit_level"`
-	HumanCheckpoint bool     `json:"human_checkpoint"`
-	MaxPapers       int      `json:"max_papers"`
+	HumanCheckpoint  bool `json:"human_checkpoint"`
+	RandomReferences bool `json:"random_references"`
+	MaxPapers        int  `json:"max_papers"`
 	MaxIdeas        int      `json:"max_ideas"`
 	ExecRounds      int      `json:"exec_rounds"`
 }
@@ -331,8 +332,9 @@ func (s *TopicDiscoveryRunService) prepareRun(ctx context.Context, userID uint, 
 		SourceCodes:     req.SourceCodes,
 		Intensity:       intensityCode,
 		AuditLevel:      auditCode,
-		HumanCheckpoint: req.HumanCheckpoint,
-		MaxPapers:       int(intensity.MaxPapers),
+		HumanCheckpoint:  req.HumanCheckpoint,
+		RandomReferences: req.RandomReferences,
+		MaxPapers:        int(intensity.MaxPapers),
 		MaxIdeas:        int(intensity.MaxIdeas),
 		ExecRounds:      int(intensity.ExecRounds),
 	}
@@ -515,95 +517,12 @@ func (s *TopicDiscoveryRunService) orderSourceCodesByPriority(ctx context.Contex
 func (s *TopicDiscoveryRunService) stageRetrieve(ctx context.Context, step *entity.PaperOutputTopicStep, input topicRunInput) error {
 	query := literatureSearchQueryFromInput(input)
 
-	seen := map[string]struct{}{}
-	hits := make([]storedLiteratureHit, 0, input.MaxPapers)
 	extraMeta := LoadStepExtra(step)
-	for _, code := range s.orderSourceCodesByPriority(ctx, input.SourceCodes) {
-		if len(hits) >= input.MaxPapers {
-			break
-		}
-		code = strings.TrimSpace(code)
-		if code == "" {
-			continue
-		}
-		need := input.MaxPapers - len(hits)
-		if need <= 0 {
-			break
-		}
-		limit := need
-		if limit > 50 {
-			limit = 50
-		}
-		srcRow, _ := s.litSource.FindActiveByCode(ctx, code)
-		var searchResult *response.PaperLiteratureSearchResult
-		var searchErr error
-		reqInput := map[string]any{"query": query, "limit": limit}
-		switch code {
-		case sourceArxiv:
-			searchResult, searchErr = s.litSearch.SearchArxiv(ctx, query, limit)
-		case sourceOpenAlex:
-			searchResult, searchErr = s.litSearch.SearchOpenAlex(ctx, query, limit)
-		case sourceSemanticScholar:
-			searchResult, searchErr = s.litSearch.SearchSemanticScholar(ctx, query, limit)
-		default:
-			AppendLiteraturePlatformRequest(extraMeta, LiteraturePlatformRequestLog{
-				SourceCode: code,
-				Input:      reqInput,
-				Error:      "unsupported source for retrieve search",
-			})
-			continue
-		}
-		logEntry := LiteraturePlatformRequestLog{
-			SourceCode: code,
-			Input:      reqInput,
-		}
-		if searchErr != nil {
-			logEntry.Error = searchErr.Error()
-			AppendLiteraturePlatformRequest(extraMeta, logEntry)
-			continue
-		}
-		if searchResult == nil {
-			logEntry.Error = "empty search result"
-			AppendLiteraturePlatformRequest(extraMeta, logEntry)
-			continue
-		}
-		logEntry.Response = searchResult
-		AppendLiteraturePlatformRequest(extraMeta, logEntry)
-		var sourceID uint
-		if srcRow != nil {
-			sourceID = srcRow.ID
-		}
-		for _, h := range searchResult.Hits {
-			if len(hits) >= input.MaxPapers {
-				break
-			}
-			key := h.ExternalKey
-			if key == "" {
-				continue
-			}
-			if _, ok := seen[key]; ok {
-				continue
-			}
-			seen[key] = struct{}{}
-			linkURL := resolveLiteratureHitURL(code, key, h.URL, h.DOI)
-			hits = append(hits, storedLiteratureHit{
-				SourceID:      sourceID,
-				SourceCode:    code,
-				ExternalKey:   key,
-				Title:         h.Title,
-				Authors:       h.Authors,
-				URL:           linkURL,
-				DOI:           h.DOI,
-				PublishedYear: h.PublishedYear,
-				QueryText:     query,
-				Meta: map[string]any{
-					"abstract":       h.Abstract,
-					"doi":            h.DOI,
-					"url":            linkURL,
-					"published_year": h.PublishedYear,
-				},
-			})
-		}
+	var hits []storedLiteratureHit
+	if input.RandomReferences {
+		hits, extraMeta = s.retrieveLiteratureRandom(ctx, query, input, extraMeta)
+	} else {
+		hits, extraMeta = s.retrieveLiteratureSequential(ctx, query, input, extraMeta)
 	}
 
 	links := make([]storedLiteratureLink, 0, len(hits))

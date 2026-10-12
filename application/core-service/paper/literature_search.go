@@ -12,76 +12,40 @@ import (
 	"github.com/qingpeng2016/ai-agent-paper/domain/rest/response"
 )
 
-const (
-	sourceArxiv           = "arxiv"
-	sourceOpenAlex        = "openalex"
-	sourceSemanticScholar = "semantic_scholar"
-)
-
 type LiteratureSearchService struct {
 	arxiv           httprepo.ArxivRepo
 	openalex        httprepo.OpenAlexRepo
 	semanticScholar httprepo.SemanticScholarRepo
+	crossref        httprepo.CrossrefRepo
+	pubmed          httprepo.PubMedRepo
 }
 
 func NewLiteratureSearchService(
 	arxiv httprepo.ArxivRepo,
 	openalex httprepo.OpenAlexRepo,
 	semanticScholar httprepo.SemanticScholarRepo,
+	crossref httprepo.CrossrefRepo,
+	pubmed httprepo.PubMedRepo,
 ) *LiteratureSearchService {
 	return &LiteratureSearchService{
 		arxiv:           arxiv,
 		openalex:        openalex,
 		semanticScholar: semanticScholar,
+		crossref:        crossref,
+		pubmed:          pubmed,
 	}
 }
 
 func (s *LiteratureSearchService) SearchArxiv(ctx context.Context, query string, limit int) (*response.PaperLiteratureSearchResult, error) {
-	query, limit, err := normalizeLiteratureQuery(query, limit)
-	if err != nil {
-		return nil, err
-	}
-	papers, err := s.arxiv.Search(ctx, httpentity.ArxivSearchQuery{Query: query, MaxResults: limit})
-	if err != nil {
-		return nil, err
-	}
-	return &response.PaperLiteratureSearchResult{
-		Query:      query,
-		SourceCode: sourceArxiv,
-		Hits:       arxivPapersToHits(papers),
-	}, nil
+	return s.SearchPlatformPage(ctx, sourceArxiv, query, limit, 0)
 }
 
 func (s *LiteratureSearchService) SearchOpenAlex(ctx context.Context, query string, limit int) (*response.PaperLiteratureSearchResult, error) {
-	query, limit, err := normalizeLiteratureQuery(query, limit)
-	if err != nil {
-		return nil, err
-	}
-	works, err := s.openalex.Search(ctx, httpentity.OpenAlexSearchQuery{Query: query, MaxResults: limit})
-	if err != nil {
-		return nil, err
-	}
-	return &response.PaperLiteratureSearchResult{
-		Query:      query,
-		SourceCode: sourceOpenAlex,
-		Hits:       openAlexWorksToHits(works),
-	}, nil
+	return s.SearchPlatformPage(ctx, sourceOpenAlex, query, limit, 1)
 }
 
 func (s *LiteratureSearchService) SearchSemanticScholar(ctx context.Context, query string, limit int) (*response.PaperLiteratureSearchResult, error) {
-	query, limit, err := normalizeLiteratureQuery(query, limit)
-	if err != nil {
-		return nil, err
-	}
-	papers, err := s.semanticScholar.Search(ctx, httpentity.SemanticScholarSearchQuery{Query: query, MaxResults: limit})
-	if err != nil {
-		return nil, err
-	}
-	return &response.PaperLiteratureSearchResult{
-		Query:      query,
-		SourceCode: sourceSemanticScholar,
-		Hits:       semanticScholarPapersToHits(papers),
-	}, nil
+	return s.SearchPlatformPage(ctx, sourceSemanticScholar, query, limit, 0)
 }
 
 var literatureKeywordMarkers = []string{
@@ -241,6 +205,39 @@ func semanticScholarPapersToHits(papers []httpentity.SemanticScholarPaper) []res
 			PublishedYear: p.PublishedYear,
 			DOI:           p.DOI,
 			URL:           p.URL,
+		})
+	}
+	return hits
+}
+
+func crossrefWorksToHits(works []httpentity.CrossrefWork) []response.PaperLiteratureHit {
+	hits := make([]response.PaperLiteratureHit, 0, len(works))
+	for _, w := range works {
+		hits = append(hits, response.PaperLiteratureHit{
+			SourceCode:    sourceCrossref,
+			ExternalKey:   w.ExternalKey,
+			Title:         w.Title,
+			Authors:       w.Authors,
+			PublishedYear: w.PublishedYear,
+			DOI:           w.DOI,
+			URL:           w.URL,
+		})
+	}
+	return hits
+}
+
+func pubmedArticlesToHits(articles []httpentity.PubMedArticle) []response.PaperLiteratureHit {
+	hits := make([]response.PaperLiteratureHit, 0, len(articles))
+	for _, a := range articles {
+		hits = append(hits, response.PaperLiteratureHit{
+			SourceCode:    sourcePubMed,
+			ExternalKey:   a.ExternalKey,
+			Title:         a.Title,
+			Authors:       a.Authors,
+			Abstract:      a.Abstract,
+			PublishedYear: a.PublishedYear,
+			DOI:           a.DOI,
+			URL:           a.URL,
 		})
 	}
 	return hits

@@ -43,6 +43,18 @@ func resolveLiteratureHitURL(sourceCode, externalKey, rawURL, doi string) string
 		if id != "" {
 			return "https://www.semanticscholar.org/paper/" + id
 		}
+	case sourceCrossref:
+		if d := strings.TrimSpace(doi); d != "" {
+			if strings.HasPrefix(d, "http") {
+				return d
+			}
+			return "https://doi.org/" + strings.TrimPrefix(d, "doi:")
+		}
+	case sourcePubMed:
+		id := strings.TrimPrefix(ext, "pubmed:")
+		if id != "" {
+			return "https://pubmed.ncbi.nlm.nih.gov/" + id + "/"
+		}
 	}
 	return u
 }

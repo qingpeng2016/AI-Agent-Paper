@@ -24,7 +24,7 @@ import {
   setCurrentPaperManuscript,
   type PaperManuscriptListResponse,
 } from '@/api/manuscripts'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElTooltip } from 'element-plus'
 import { paperConfirm } from '@/utils/paperDialog'
 import {
   DEFAULT_ENV_PREFERENCE,
@@ -1213,6 +1213,7 @@ function buildTopicRunRequest(action: 'start' | 'continue') {
     intensity: topicForm.intensity,
     audit_level: topicForm.auditLevel,
     human_checkpoint: topicForm.humanCheckpoint,
+    random_references: topicForm.randomReferences,
     action,
   }
 }
@@ -2088,6 +2089,29 @@ watch(
             </label>
           </div>
           <span class="paper-hint">所有结果必须进入真实文献验证流程。</span>
+          <label class="paper-check paper-check--nested">
+            <input
+              v-model="topicForm.randomReferences"
+              type="checkbox"
+              :disabled="topicRunBusy || currentTopicRun.status === 'checkpoint'"
+            />
+            <span class="paper-check-row">
+              <span>随机参考文献（每次随机获取第三方不同的参考文献）</span>
+              <ElTooltip
+                content="勾选后，每次运行随机获取第三方论文，否则会顺序获取第三方论文多次可能是一样的"
+                placement="top"
+              >
+                <button
+                  type="button"
+                  class="paper-field-help"
+                  aria-label="随机参考文献说明"
+                  @click.prevent
+                >
+                  ?
+                </button>
+              </ElTooltip>
+            </span>
+          </label>
         </div>
 
         <label class="paper-check">
@@ -3225,6 +3249,38 @@ watch(
 
 .paper-check--inline {
   margin-top: 0;
+}
+
+.paper-check--nested {
+  margin-top: 12px;
+}
+
+.paper-check-row {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.paper-field-help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 50%;
+  background: #fff;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1;
+  cursor: help;
+}
+
+.paper-field-help:hover {
+  border-color: var(--atm-primary, #7c3aed);
+  color: var(--atm-primary, #7c3aed);
 }
 
 .paper-field--span2 {

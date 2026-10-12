@@ -24,11 +24,15 @@ const (
 )
 
 type TopicLiteratureDownloadJob struct {
-	steps repository.PaperOutputTopicStepRepo
+	steps    repository.PaperOutputTopicStepRepo
+	userLit  repository.PaperUserLiteratureRepo
 }
 
-func NewTopicLiteratureDownloadJob(steps repository.PaperOutputTopicStepRepo) *TopicLiteratureDownloadJob {
-	return &TopicLiteratureDownloadJob{steps: steps}
+func NewTopicLiteratureDownloadJob(
+	steps repository.PaperOutputTopicStepRepo,
+	userLit repository.PaperUserLiteratureRepo,
+) *TopicLiteratureDownloadJob {
+	return &TopicLiteratureDownloadJob{steps: steps, userLit: userLit}
 }
 
 // Run 扫描 status=running 且 stage_code=retrieve，下载 PDF；成功 completed，失败 failed。
@@ -74,6 +78,7 @@ func (j *TopicLiteratureDownloadJob) processOne(ctx context.Context, step *entit
 	}
 
 	if !papersvc.LiteratureDownloadsNeedWork(items) {
+		j.syncUserLiterature(ctx, step, items)
 		return j.finishSuccess(ctx, step, items)
 	}
 
@@ -101,6 +106,7 @@ func (j *TopicLiteratureDownloadJob) processOne(ctx context.Context, step *entit
 	}
 
 	_ = j.mergeExtra(ctx, step, items, "")
+	j.syncUserLiterature(ctx, step, items)
 
 	if papersvc.LiteratureDownloadsReady(items) {
 		return j.finishSuccess(ctx, step, items)
@@ -109,6 +115,7 @@ func (j *TopicLiteratureDownloadJob) processOne(ctx context.Context, step *entit
 	if reason == "" {
 		reason = fmt.Sprintf("PDF 下载失败（每项已重试 %d 次）", pdfDownloadMaxAttempts)
 	}
+	j.syncUserLiterature(ctx, step, items)
 	j.markFailed(ctx, step, items, reason)
 	return "failed"
 }
@@ -152,7 +159,18 @@ func (j *TopicLiteratureDownloadJob) mergeExtra(ctx context.Context, step *entit
 	return j.steps.SaveStep(ctx, step)
 }
 
+func (j *TopicLiteratureDownloadJob) syncUserLiterature(ctx context.Context, step *entity.PaperOutputTopicStep, items []papersvc.LiteratureDownloadItem) {
+	if j.userLit == nil || step == nil {
+		return
+	}
+	result := step.Result
+	for _, err := range papersvc.SyncDownloadedUserLiterature(ctx, j.userLit, step.UserID, result, items) {
+		logger.WarnZ(ctx, "topic-literature-user-lit-persist-failed", zap.Error(err))
+	}
+}
+
 func (j *TopicLiteratureDownloadJob) finishSuccess(ctx context.Context, step *entity.PaperOutputTopicStep, items []papersvc.LiteratureDownloadItem) string {
+	j.syncUserLiterature(ctx, step, items)
 	meta := papersvc.LoadStepExtra(step)
 	meta = papersvc.MergeStepExtra(meta, map[string]any{"literature_downloads": items})
 	delete(meta, "error")

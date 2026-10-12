@@ -7,6 +7,7 @@ import (
 )
 
 type PaperUserLiteratureRepo interface {
-	ListActiveByManuscript(ctx context.Context, manuscriptID uint64) ([]entity.PaperUserLiterature, error)
+	ListActiveByUser(ctx context.Context, userID uint64) ([]entity.PaperUserLiterature, error)
+	FindActiveByUserStorageURL(ctx context.Context, userID uint64, storageURL string) (*entity.PaperUserLiterature, error)
 	Create(ctx context.Context, row *entity.PaperUserLiterature) error
 }
