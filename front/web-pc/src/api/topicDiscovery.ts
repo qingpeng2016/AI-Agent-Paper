@@ -397,7 +397,10 @@ export async function fetchTopicDiscoveryFormOptions(): Promise<{
       sort: x.sort,
     }))
   return {
-    disciplineSelectOptions: d.disciplines.map((x) => ({ value: x.code, label: x.label })),
+    disciplineSelectOptions: d.disciplines
+      .slice()
+      .sort((a, b) => a.sort - b.sort || a.code.localeCompare(b.code))
+      .map((x) => ({ value: x.code, label: x.label })),
     venueOptions,
     venueSelectOptions: venueOptions.map((x) => ({ value: x.code, label: x.label })),
     intensityOptions: d.execution_intensities.map((x) => ({ value: x.code, label: x.label })),

@@ -49,7 +49,7 @@ func (r *PaperRefCatalogImpl) ListActiveDisciplines(ctx context.Context) ([]enti
 	var rows []entity.PaperRefDiscipline
 	err := r.db.WithContext(ctx).
 		Where("status = ?", "active").
-		Order("sort DESC, id ASC").
+		Order("sort ASC, id ASC").
 		Find(&rows).Error
 	return rows, err
 }
