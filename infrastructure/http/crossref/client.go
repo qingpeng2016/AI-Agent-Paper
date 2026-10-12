@@ -54,14 +54,14 @@ func (c *Client) search(ctx context.Context, query string, rows, offset int) ([]
 	}
 	resp, err := c.http.Get(ctx, c.baseURL, params, map[string]string{"Accept": "application/json"})
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, httpx.LogLiteratureTransportError(ctx, "crossref", "search", c.baseURL, err)
 	}
 	if resp.StatusCode() != http.StatusOK {
-		return nil, 0, fmt.Errorf("crossref http %d", resp.StatusCode())
+		return nil, 0, httpx.NewLiteratureHTTPError(ctx, "crossref", "search", c.baseURL, resp, fmt.Errorf("crossref http %d", resp.StatusCode()))
 	}
 	var body worksResponse
 	if err := json.Unmarshal(resp.Body(), &body); err != nil {
-		return nil, 0, err
+		return nil, 0, httpx.NewLiteratureHTTPError(ctx, "crossref", "search", c.baseURL, resp, err)
 	}
 	total := body.Message.TotalResults
 	out := make([]httpentity.CrossrefWork, 0, len(body.Message.Items))

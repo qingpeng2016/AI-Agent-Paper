@@ -2,6 +2,7 @@ package paper
 
 import (
 	"context"
+	"errors"
 	"math/rand/v2"
 	"strings"
 
@@ -10,6 +11,15 @@ import (
 
 // 选题发现 · 随机文献检索：固定 5 次第三方请求，均分目标篇数。
 const literatureRetrieveRandomRounds = 5
+
+// 随机检索统一按每页 10 条推算页码，再换算 offset / OpenAlex 页码。
+const literatureRandomPageSize = 10
+
+// arXiv 等对超大 start/offset 常返回 500；OpenAlex 深页也易失败。
+const (
+	literatureRandomMaxOffset       = 9800
+	literatureRandomMaxOpenAlexPage = 400
+)
 
 // 顺序检索：每页条数；返回少于此数即视为该平台在该关键词下已无更多结果。
 const literatureSequentialPageSize = 10
@@ -36,6 +46,23 @@ func literatureRoundLimits(maxPapers int) [literatureRetrieveRandomRounds]int {
 	}
 	limits[0] += rem
 	return limits
+}
+
+// literatureRandomRoundLimits：目标篇数较少时每轮最多 1 篇、多轮换源；否则均分 5 轮。
+func literatureRandomRoundLimits(maxPapers int) [literatureRetrieveRandomRounds]int {
+	if maxPapers <= 0 {
+		var limits [literatureRetrieveRandomRounds]int
+		limits[0] = 1
+		return limits
+	}
+	if maxPapers <= literatureRetrieveRandomRounds {
+		var limits [literatureRetrieveRandomRounds]int
+		for i := 0; i < maxPapers; i++ {
+			limits[i] = 1
+		}
+		return limits
+	}
+	return literatureRoundLimits(maxPapers)
 }
 
 func filterRetrieveSourceCodes(codes []string) []string {
@@ -72,47 +99,39 @@ func literaturePagingKindFor(code string) literaturePagingKind {
 	return literaturePagingOffset
 }
 
-// pickUnusedRandomSlot 在已知总数后随机分页位置；同一平台已用过的 slot 不再使用。
-func pickUnusedRandomSlot(total, pageSize int, kind literaturePagingKind, used map[int]struct{}) int {
+// literatureRandomPageCount 由 Count 得到的 total 推算总页数（每页 literatureRandomPageSize 条）。
+func literatureRandomPageCount(total int, kind literaturePagingKind) int {
+	if total <= 0 {
+		return 1
+	}
+	n := (total + literatureRandomPageSize - 1) / literatureRandomPageSize
+	if n < 1 {
+		return 1
+	}
+	if kind == literaturePagingOpenAlexPage && n > literatureRandomMaxOpenAlexPage {
+		return literatureRandomMaxOpenAlexPage
+	}
+	maxPageByOffset := literatureRandomMaxOffset/literatureRandomPageSize + 1
+	if kind != literaturePagingOpenAlexPage && n > maxPageByOffset {
+		return maxPageByOffset
+	}
+	return n
+}
+
+// pickUnusedRandomPageIndex 在 [minPage,maxPage] 内随机一页（offset 平台 0-based，OpenAlex 1-based）。
+func pickUnusedRandomPageIndex(minPage, maxPage int, used map[int]struct{}) int {
 	if used == nil {
 		used = map[int]struct{}{}
 	}
-	if pageSize <= 0 {
-		pageSize = 1
+	if maxPage < minPage {
+		maxPage = minPage
 	}
-
-	var minSlot, maxSlot int
-	switch kind {
-	case literaturePagingOpenAlexPage:
-		minSlot = 1
-		if total <= 0 {
-			maxSlot = 1
-		} else {
-			maxSlot = (total + pageSize - 1) / pageSize
-			if maxSlot < 1 {
-				maxSlot = 1
-			}
-		}
-	default:
-		minSlot = 0
-		if total <= 0 {
-			maxSlot = 0
-		} else {
-			maxSlot = total - pageSize
-			if maxSlot < 0 {
-				maxSlot = 0
-			}
-		}
-	}
-
 	tryPick := func() (int, bool) {
 		var candidate int
-		if maxSlot <= minSlot {
-			candidate = minSlot
-		} else if kind == literaturePagingOpenAlexPage {
-			candidate = minSlot + rand.IntN(maxSlot-minSlot+1)
+		if maxPage <= minPage {
+			candidate = minPage
 		} else {
-			candidate = minSlot + rand.IntN(maxSlot-minSlot+1)
+			candidate = minPage + rand.IntN(maxPage-minPage+1)
 		}
 		if _, ok := used[candidate]; ok {
 			return 0, false
@@ -120,27 +139,41 @@ func pickUnusedRandomSlot(total, pageSize int, kind literaturePagingKind, used m
 		used[candidate] = struct{}{}
 		return candidate, true
 	}
-
 	for i := 0; i < 48; i++ {
-		if slot, ok := tryPick(); ok {
-			return slot
+		if page, ok := tryPick(); ok {
+			return page
 		}
 	}
-	for slot := minSlot; slot <= maxSlot; slot++ {
-		if _, ok := used[slot]; ok {
+	for page := minPage; page <= maxPage; page++ {
+		if _, ok := used[page]; ok {
 			continue
 		}
-		used[slot] = struct{}{}
-		return slot
+		used[page] = struct{}{}
+		return page
 	}
-	slot := minSlot
-	if kind == literaturePagingOpenAlexPage && maxSlot > minSlot {
-		slot = minSlot + rand.IntN(maxSlot-minSlot+1)
-	} else if maxSlot > minSlot {
-		slot = minSlot + rand.IntN(maxSlot-minSlot+1)
+	page := minPage
+	if maxPage > minPage {
+		page = minPage + rand.IntN(maxPage-minPage+1)
 	}
-	used[slot] = struct{}{}
-	return slot
+	used[page] = struct{}{}
+	return page
+}
+
+// pickUnusedRandomSlot 先按 total 与每页 10 条得到页码范围，再随机一页并换算 API slot（offset 或 OpenAlex 页码）。
+func pickUnusedRandomSlot(total int, kind literaturePagingKind, used map[int]struct{}) (slot int, pageIndex int, pageCount int) {
+	pageCount = literatureRandomPageCount(total, kind)
+	switch kind {
+	case literaturePagingOpenAlexPage:
+		pageIndex = pickUnusedRandomPageIndex(1, pageCount, used)
+		return pageIndex, pageIndex, pageCount
+	default:
+		maxPageIdx := pageCount - 1
+		if maxPageIdx < 0 {
+			maxPageIdx = 0
+		}
+		pageIndex = pickUnusedRandomPageIndex(0, maxPageIdx, used)
+		return pageIndex * literatureRandomPageSize, pageIndex, pageCount
+	}
 }
 
 func (s *TopicDiscoveryRunService) retrieveLiteratureRandom(
@@ -148,6 +181,7 @@ func (s *TopicDiscoveryRunService) retrieveLiteratureRandom(
 	query string,
 	input topicRunInput,
 	extraMeta map[string]any,
+	scope LiteratureRetrieveLogScope,
 ) ([]storedLiteratureHit, map[string]any) {
 	enabled := filterRetrieveSourceCodes(input.SourceCodes)
 	seen := map[string]struct{}{}
@@ -156,7 +190,7 @@ func (s *TopicDiscoveryRunService) retrieveLiteratureRandom(
 		return hits, extraMeta
 	}
 
-	roundLimits := literatureRoundLimits(input.MaxPapers)
+	roundLimits := literatureRandomRoundLimits(input.MaxPapers)
 	usedSlots := map[string]map[int]struct{}{}
 
 	for round := 0; round < literatureRetrieveRandomRounds && len(hits) < input.MaxPapers; round++ {
@@ -175,13 +209,28 @@ func (s *TopicDiscoveryRunService) retrieveLiteratureRandom(
 		}
 
 		total, countErr := s.litSearch.CountPlatformTotal(ctx, code, query)
-		slot := pickUnusedRandomSlot(total, limit, literaturePagingKindFor(code), usedSlots[code])
+		if countErr != nil {
+			RecordLiteraturePlatformRequest(ctx, extraMeta, scope, LiteraturePlatformRequestLog{
+				SourceCode: code,
+				Op:         "count",
+				Input: map[string]any{
+					"query":       query,
+					"round":       round + 1,
+					"random_mode": true,
+				},
+			}, countErr)
+		}
+		kind := literaturePagingKindFor(code)
+		slot, pageIndex, pageCount := pickUnusedRandomSlot(total, kind, usedSlots[code])
 
 		reqInput := map[string]any{
 			"query":       query,
 			"limit":       limit,
 			"round":       round + 1,
 			"total":       total,
+			"page_size":   literatureRandomPageSize,
+			"page_count":  pageCount,
+			"page_index":  pageIndex,
 			"slot":        slot,
 			"random_mode": true,
 		}
@@ -192,20 +241,20 @@ func (s *TopicDiscoveryRunService) retrieveLiteratureRandom(
 		searchResult, searchErr := s.litSearch.SearchPlatformPage(ctx, code, query, limit, slot)
 		logEntry := LiteraturePlatformRequestLog{
 			SourceCode: code,
+			Op:         "search",
 			Input:      reqInput,
 		}
 		if searchErr != nil {
-			logEntry.Error = searchErr.Error()
-			AppendLiteraturePlatformRequest(extraMeta, logEntry)
+			RecordLiteraturePlatformRequest(ctx, extraMeta, scope, logEntry, searchErr)
 			continue
 		}
 		if searchResult == nil {
 			logEntry.Error = "empty search result"
-			AppendLiteraturePlatformRequest(extraMeta, logEntry)
+			RecordLiteraturePlatformRequest(ctx, extraMeta, scope, logEntry, errors.New("empty search result"))
 			continue
 		}
 		logEntry.Response = searchResult
-		AppendLiteraturePlatformRequest(extraMeta, logEntry)
+		RecordLiteraturePlatformRequest(ctx, extraMeta, scope, logEntry, nil)
 
 		srcRow, _ := s.litSource.FindActiveByCode(ctx, code)
 		var sourceID uint
@@ -236,6 +285,7 @@ func (s *TopicDiscoveryRunService) retrieveLiteratureSequential(
 	query string,
 	input topicRunInput,
 	extraMeta map[string]any,
+	scope LiteratureRetrieveLogScope,
 ) ([]storedLiteratureHit, map[string]any) {
 	seen := map[string]struct{}{}
 	hits := make([]storedLiteratureHit, 0, input.MaxPapers)
@@ -248,11 +298,12 @@ func (s *TopicDiscoveryRunService) retrieveLiteratureSequential(
 			continue
 		}
 		if _, ok := literatureRetrieveSupportedSources[code]; !ok {
-			AppendLiteraturePlatformRequest(extraMeta, LiteraturePlatformRequestLog{
+			RecordLiteraturePlatformRequest(ctx, extraMeta, scope, LiteraturePlatformRequestLog{
 				SourceCode: code,
+				Op:         "search",
 				Input:      map[string]any{"query": query},
 				Error:      "unsupported source for retrieve search",
-			})
+			}, errors.New("unsupported source for retrieve search"))
 			continue
 		}
 		srcRow, _ := s.litSource.FindActiveByCode(ctx, code)
@@ -274,20 +325,20 @@ func (s *TopicDiscoveryRunService) retrieveLiteratureSequential(
 			searchResult, searchErr := s.litSearch.SearchPlatformPage(ctx, code, query, limit, slot)
 			logEntry := LiteraturePlatformRequestLog{
 				SourceCode: code,
+				Op:         "search",
 				Input:      reqInput,
 			}
 			if searchErr != nil {
-				logEntry.Error = searchErr.Error()
-				AppendLiteraturePlatformRequest(extraMeta, logEntry)
+				RecordLiteraturePlatformRequest(ctx, extraMeta, scope, logEntry, searchErr)
 				break
 			}
 			if searchResult == nil {
 				logEntry.Error = "empty search result"
-				AppendLiteraturePlatformRequest(extraMeta, logEntry)
+				RecordLiteraturePlatformRequest(ctx, extraMeta, scope, logEntry, errors.New("empty search result"))
 				break
 			}
 			logEntry.Response = searchResult
-			AppendLiteraturePlatformRequest(extraMeta, logEntry)
+			RecordLiteraturePlatformRequest(ctx, extraMeta, scope, logEntry, nil)
 
 			before := len(hits)
 			hits = appendLiteratureSearchHits(hits, seen, searchResult, code, sourceID, query, input.MaxPapers)
@@ -342,6 +393,7 @@ func appendLiteratureSearchHits(
 				"doi":            h.DOI,
 				"url":            linkURL,
 				"published_year": h.PublishedYear,
+				"pmcid":          h.PMCID,
 			},
 		})
 	}

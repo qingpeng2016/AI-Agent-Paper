@@ -70,23 +70,53 @@ func (c *Client) esearch(ctx context.Context, query string, offset, limit int) (
 	url := c.baseURL + "/esearch.fcgi"
 	resp, err := c.http.Get(ctx, url, params, nil)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, httpx.LogLiteratureTransportError(ctx, "pubmed", "esearch", url, err)
 	}
 	if resp.StatusCode() != http.StatusOK {
-		return nil, 0, fmt.Errorf("pubmed esearch http %d", resp.StatusCode())
+		return nil, 0, httpx.NewLiteratureHTTPError(ctx, "pubmed", "esearch", url, resp, fmt.Errorf("pubmed esearch http %d", resp.StatusCode()))
 	}
 	var body esearchResponse
 	if err := json.Unmarshal(resp.Body(), &body); err != nil {
-		return nil, 0, err
+		return nil, 0, httpx.NewLiteratureHTTPError(ctx, "pubmed", "esearch", url, resp, err)
 	}
-	return body.ESearchResult.IdList, body.ESearchResult.Count, nil
+	return body.ESearchResult.IdList, int(body.ESearchResult.Count), nil
 }
 
 type esearchResponse struct {
 	ESearchResult struct {
-		Count  int      `json:"count"`
-		IdList []string `json:"idlist"`
+		Count  flexJSONInt `json:"count"`
+		IdList []string    `json:"idlist"`
 	} `json:"esearchresult"`
+}
+
+// flexJSONInt NCBI esearch 有时返回 "count":"123" 而非数字。
+type flexJSONInt int
+
+func (f *flexJSONInt) UnmarshalJSON(b []byte) error {
+	if len(b) == 0 || string(b) == "null" {
+		*f = 0
+		return nil
+	}
+	var n int
+	if err := json.Unmarshal(b, &n); err == nil {
+		*f = flexJSONInt(n)
+		return nil
+	}
+	var s string
+	if err := json.Unmarshal(b, &s); err != nil {
+		return err
+	}
+	s = strings.TrimSpace(s)
+	if s == "" {
+		*f = 0
+		return nil
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil {
+		return err
+	}
+	*f = flexJSONInt(n)
+	return nil
 }
 
 func (c *Client) esummary(ctx context.Context, ids []string) ([]httpentity.PubMedArticle, error) {
@@ -98,18 +128,18 @@ func (c *Client) esummary(ctx context.Context, ids []string) ([]httpentity.PubMe
 	url := c.baseURL + "/esummary.fcgi"
 	resp, err := c.http.Get(ctx, url, params, nil)
 	if err != nil {
-		return nil, err
+		return nil, httpx.LogLiteratureTransportError(ctx, "pubmed", "esummary", url, err)
 	}
 	if resp.StatusCode() != http.StatusOK {
-		return nil, fmt.Errorf("pubmed esummary http %d", resp.StatusCode())
+		return nil, httpx.NewLiteratureHTTPError(ctx, "pubmed", "esummary", url, resp, fmt.Errorf("pubmed esummary http %d", resp.StatusCode()))
 	}
-	var body esummaryResponse
-	if err := json.Unmarshal(resp.Body(), &body); err != nil {
-		return nil, err
+	docs, err := parseEsummaryDocs(resp.Body())
+	if err != nil {
+		return nil, httpx.NewLiteratureHTTPError(ctx, "pubmed", "esummary", url, resp, err)
 	}
 	out := make([]httpentity.PubMedArticle, 0, len(ids))
 	for _, id := range ids {
-		doc, ok := body.Result[id]
+		doc, ok := docs[id]
 		if !ok || doc.Uid == "" {
 			continue
 		}
@@ -122,36 +152,109 @@ func (c *Client) esummary(ctx context.Context, ids []string) ([]httpentity.PubMe
 			year, _ = strconv.Atoi(doc.PubDate[:4])
 		}
 		doi := ""
+		pmcid := ""
 		for _, idt := range doc.ArticleIds {
-			if strings.EqualFold(idt.IdType, "doi") {
-				doi = strings.TrimSpace(idt.Value)
-				break
+			switch strings.ToLower(strings.TrimSpace(idt.IdType)) {
+			case "doi":
+				if doi == "" {
+					doi = strings.TrimSpace(idt.Value)
+				}
+			case "pmc", "pmcid":
+				if pmcid == "" {
+					pmcid = normalizePubMedPMCID(idt.Value)
+				}
 			}
 		}
 		u := "https://pubmed.ncbi.nlm.nih.gov/" + id + "/"
 		out = append(out, httpentity.PubMedArticle{
 			ExternalKey:   "pubmed:" + id,
 			Title:         title,
-			Authors:       doc.Authors,
+			Authors:       doc.authorNames(),
 			PublishedYear: year,
 			DOI:           doi,
 			URL:           u,
+			PMCID:         pmcid,
 		})
 	}
 	return out, nil
 }
 
-type esummaryResponse struct {
-	Result map[string]summaryDocJSON `json:"result"`
+func parseEsummaryDocs(body []byte) (map[string]summaryDocJSON, error) {
+	var wrap struct {
+		Result map[string]json.RawMessage `json:"result"`
+	}
+	if err := json.Unmarshal(body, &wrap); err != nil {
+		return nil, err
+	}
+	out := make(map[string]summaryDocJSON, len(wrap.Result))
+	for key, raw := range wrap.Result {
+		if key == "uids" {
+			continue
+		}
+		var doc summaryDocJSON
+		if err := json.Unmarshal(raw, &doc); err != nil {
+			return nil, fmt.Errorf("pubmed esummary doc %s: %w", key, err)
+		}
+		out[key] = doc
+	}
+	return out, nil
 }
 
 type summaryDocJSON struct {
-	Uid        string   `json:"uid"`
-	Title      string   `json:"title"`
-	PubDate    string   `json:"pubdate"`
-	Authors    []string `json:"authors"`
+	Uid        string           `json:"uid"`
+	Title      string           `json:"title"`
+	PubDate    string           `json:"pubdate"`
+	Authors    pubmedAuthorList `json:"authors"`
 	ArticleIds []struct {
 		IdType string `json:"idtype"`
 		Value  string `json:"value"`
 	} `json:"articleids"`
+}
+
+func (d summaryDocJSON) authorNames() []string {
+	return []string(d.Authors)
+}
+
+func normalizePubMedPMCID(raw string) string {
+	s := strings.TrimSpace(raw)
+	s = strings.TrimPrefix(s, "pmc-id:")
+	s = strings.TrimSpace(s)
+	s = strings.TrimSuffix(s, ";")
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
+	}
+	if !strings.HasPrefix(strings.ToUpper(s), "PMC") {
+		s = "PMC" + s
+	}
+	return strings.ToUpper(s)
+}
+
+// pubmedAuthorList NCBI 返回 ["A","B"] 或 [{"name":"A"},…]。
+type pubmedAuthorList []string
+
+func (a *pubmedAuthorList) UnmarshalJSON(b []byte) error {
+	if len(b) == 0 || string(b) == "null" {
+		*a = nil
+		return nil
+	}
+	var names []string
+	if err := json.Unmarshal(b, &names); err == nil {
+		*a = names
+		return nil
+	}
+	var objs []struct {
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(b, &objs); err != nil {
+		return err
+	}
+	out := make([]string, 0, len(objs))
+	for _, o := range objs {
+		if n := strings.TrimSpace(o.Name); n != "" {
+			out = append(out, n)
+		}
+	}
+	*a = out
+	return nil
 }

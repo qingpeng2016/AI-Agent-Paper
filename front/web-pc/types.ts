@@ -367,7 +367,7 @@ export type TopicFlowStepDef = {
 export const TOPIC_DISCOVERY_FLOW_STEPS: TopicFlowStepDef[] = [
   {
     stageCode: 'retrieve',
-    label: '多源文献检索与校验入库',
+    label: '文献检索',
     checkpointKey: 'retrieve_ready',
   },
   {

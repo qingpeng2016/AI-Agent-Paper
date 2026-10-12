@@ -4,8 +4,17 @@ import "strings"
 
 // resolveLiteraturePDFURL 返回可下载的 PDF 地址（无则空字符串）。
 func resolveLiteraturePDFURL(sourceCode, externalKey, rawURL, doi string) string {
+	return resolveLiteraturePDFURLWithPMC(sourceCode, externalKey, rawURL, doi, "")
+}
+
+func resolveLiteraturePDFURLWithPMC(sourceCode, externalKey, rawURL, doi, pmcid string) string {
 	ext := strings.TrimSpace(externalKey)
 	switch strings.TrimSpace(sourceCode) {
+	case sourcePubMed:
+		if u := pubmedPMCPDFURL(pmcid); u != "" {
+			return u
+		}
+		return ""
 	case sourceArxiv:
 		id := strings.TrimPrefix(ext, "arxiv:")
 		if id == "" {
@@ -27,6 +36,26 @@ func resolveLiteraturePDFURL(sourceCode, externalKey, rawURL, doi string) string
 	default:
 		return ""
 	}
+}
+
+func pmcidFromHitMeta(meta any) string {
+	m, ok := meta.(map[string]any)
+	if !ok || m == nil {
+		return ""
+	}
+	s, _ := m["pmcid"].(string)
+	return strings.TrimSpace(s)
+}
+
+func pubmedPMCPDFURL(pmcid string) string {
+	pmcid = strings.TrimSpace(pmcid)
+	if pmcid == "" {
+		return ""
+	}
+	if !strings.HasPrefix(strings.ToUpper(pmcid), "PMC") {
+		pmcid = "PMC" + pmcid
+	}
+	return "https://pmc.ncbi.nlm.nih.gov/articles/" + strings.ToUpper(pmcid) + "/pdf/"
 }
 
 func literatureLocalPDFFileName(externalKey string) string {

@@ -63,8 +63,10 @@ func (j *TopicLiteratureDownloadJob) Run(ctx context.Context) {
 
 func (j *TopicLiteratureDownloadJob) processOne(ctx context.Context, step *entity.PaperOutputTopicStep) string {
 	if len(step.Result) == 0 {
-		j.markFailed(ctx, step, nil, "retrieve 无 result，无法执行 PDF 下载")
-		return "failed"
+		logger.WarnZ(ctx, "topic-literature-download-skip-no-result",
+			zap.Uint64("step_id", step.ID),
+			zap.Int("run_version", step.RunVersion))
+		return ""
 	}
 
 	items := papersvc.ParseLiteratureDownloads(step.Extra)
@@ -72,14 +74,19 @@ func (j *TopicLiteratureDownloadJob) processOne(ctx context.Context, step *entit
 		items = []papersvc.LiteratureDownloadItem{}
 	}
 	hitCount := hitCountFromExtra(step.Extra)
+	if hitCount == 0 {
+		j.markFailed(ctx, step, items, "未检索到文献")
+		return "failed"
+	}
 	if hitCount > 0 && len(items) == 0 {
 		j.markFailed(ctx, step, items, "缺少 literature_downloads，无法下载 PDF")
 		return "failed"
 	}
 
 	if !papersvc.LiteratureDownloadsNeedWork(items) {
-		j.syncUserLiterature(ctx, step, items)
-		return j.finishSuccess(ctx, step, items)
+		reason := fmt.Sprintf("检索到 %d 篇，但均无 PDF 下载链接（如 PubMed 元数据），未落盘", hitCount)
+		j.markFailed(ctx, step, items, reason)
+		return "failed"
 	}
 
 	for idx := range items {
@@ -108,12 +115,12 @@ func (j *TopicLiteratureDownloadJob) processOne(ctx context.Context, step *entit
 	_ = j.mergeExtra(ctx, step, items, "")
 	j.syncUserLiterature(ctx, step, items)
 
-	if papersvc.LiteratureDownloadsReady(items) {
+	if papersvc.LiteratureRetrieveCorpusReady(items) {
 		return j.finishSuccess(ctx, step, items)
 	}
 	reason := papersvc.LiteratureDownloadFailureReason(items)
 	if reason == "" {
-		reason = fmt.Sprintf("PDF 下载失败（每项已重试 %d 次）", pdfDownloadMaxAttempts)
+		reason = "PDF 未落盘"
 	}
 	j.syncUserLiterature(ctx, step, items)
 	j.markFailed(ctx, step, items, reason)
@@ -178,11 +185,27 @@ func (j *TopicLiteratureDownloadJob) finishSuccess(ctx context.Context, step *en
 	papersvc.SyncStepFilesAppend(step, items)
 
 	hitCount := hitCountFromMeta(meta)
+	if hitCount == 0 {
+		j.markFailed(ctx, step, items, "未检索到文献")
+		return "failed"
+	}
 	step.Status = "completed"
 	now := time.Now()
 	step.CompletedAt = &now
-	sum := fmt.Sprintf("检索完成，共 %d 篇文献（PDF 已落盘）", hitCount)
+	pdfN := papersvc.CountLiteraturePDFsOnDisk(items)
+	if pdfN == 0 {
+		j.markFailed(ctx, step, items, "PDF 未落盘")
+		return "failed"
+	}
+	sum := papersvc.FormatRetrievePDFSummary(hitCount, pdfN)
 	step.SummaryText = &sum
+	if pdfN < hitCount {
+		meta = papersvc.MergeStepExtra(meta, map[string]any{
+			"pdf_partial": true,
+			"pdf_on_disk": pdfN,
+		})
+		step.Extra = mustJSON(meta)
+	}
 	if err := j.steps.SaveStep(ctx, step); err != nil {
 		logger.ErrorZ(ctx, "topic-literature-download-save-failed", zap.Uint64("step_id", step.ID), zap.Error(err))
 		return ""
@@ -204,6 +227,15 @@ func (j *TopicLiteratureDownloadJob) markFailed(ctx context.Context, step *entit
 	now := time.Now()
 	step.CompletedAt = &now
 	sum := "文献 PDF 下载失败"
+	r := strings.TrimSpace(reason)
+	switch {
+	case strings.Contains(r, "未检索"):
+		sum = "检索未命中文献，未落盘 PDF"
+	case strings.Contains(r, "PDF 下载链接"), strings.Contains(r, "无可用 PDF"):
+		sum = "检索到文献，但无 PDF 未落盘"
+	case strings.Contains(r, "PDF 未落盘"):
+		sum = "检索到文献，PDF 未落盘"
+	}
 	step.SummaryText = &sum
 	if err := j.steps.SaveStep(ctx, step); err != nil {
 		logger.ErrorZ(ctx, "topic-literature-download-fail-save", zap.Uint64("step_id", step.ID), zap.Error(err))

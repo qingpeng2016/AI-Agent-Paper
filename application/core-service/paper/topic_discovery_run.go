@@ -9,11 +9,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/qingpeng2016/ai-agent-paper/common/dederi/logger"
 	"github.com/qingpeng2016/ai-agent-paper/common/errorx"
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/repository"
 	"github.com/qingpeng2016/ai-agent-paper/domain/rest/request"
 	"github.com/qingpeng2016/ai-agent-paper/domain/rest/response"
+	"go.uber.org/zap"
 	"gorm.io/datatypes"
 )
 
@@ -439,11 +441,14 @@ func (s *TopicDiscoveryRunService) executeStage(ctx context.Context, userID uint
 	if step.Status == "completed" {
 		return nil
 	}
-	now := time.Now()
-	step.Status = "running"
-	step.StartedAt = &now
-	if err := s.steps.SaveStep(ctx, step); err != nil {
-		return err
+	stageStarted := time.Now()
+	// retrieve 须在 stageRetrieve 写入 result/extra 后再落库 running，否则 PDF bot 会扫到「running 且无 result」误杀。
+	if stageCode != "retrieve" {
+		step.Status = "running"
+		step.StartedAt = &stageStarted
+		if err := s.steps.SaveStep(ctx, step); err != nil {
+			return err
+		}
 	}
 
 	var execErr error
@@ -460,6 +465,9 @@ func (s *TopicDiscoveryRunService) executeStage(ctx context.Context, userID uint
 
 	if execErr != nil {
 		done := time.Now()
+		if step.StartedAt == nil {
+			step.StartedAt = &stageStarted
+		}
 		step.CompletedAt = &done
 		step.Status = "failed"
 		stepMeta := LoadStepExtra(step)
@@ -471,10 +479,16 @@ func (s *TopicDiscoveryRunService) executeStage(ctx context.Context, userID uint
 		return execErr
 	}
 	if (stageCode == "retrieve" || stageCode == "generate_ideas" || stageCode == "audit") && strings.TrimSpace(step.Status) == "running" {
+		if step.StartedAt == nil {
+			step.StartedAt = &stageStarted
+		}
 		step.CompletedAt = nil
 		return s.steps.SaveStep(ctx, step)
 	}
 	done := time.Now()
+	if step.StartedAt == nil {
+		step.StartedAt = &stageStarted
+	}
 	step.CompletedAt = &done
 	step.Status = "completed"
 	return s.steps.SaveStep(ctx, step)
@@ -516,14 +530,27 @@ func (s *TopicDiscoveryRunService) orderSourceCodesBySort(ctx context.Context, s
 
 func (s *TopicDiscoveryRunService) stageRetrieve(ctx context.Context, step *entity.PaperOutputTopicStep, input topicRunInput) error {
 	query := literatureSearchQueryFromInput(input)
+	scope := retrieveLogScope(step)
+	logger.InfoZ(ctx, "topic-retrieve-start",
+		zap.Uint64("step_id", scope.StepID),
+		zap.Uint64("manuscript_id", scope.ManuscriptID),
+		zap.Int("run_version", scope.RunVersion),
+		zap.String("search_query", query),
+		zap.Bool("random_references", input.RandomReferences),
+		zap.Strings("source_codes", input.SourceCodes),
+		zap.Int("max_papers", input.MaxPapers))
 
 	extraMeta := LoadStepExtra(step)
 	var hits []storedLiteratureHit
 	if input.RandomReferences {
-		hits, extraMeta = s.retrieveLiteratureRandom(ctx, query, input, extraMeta)
+		hits, extraMeta = s.retrieveLiteratureRandom(ctx, query, input, extraMeta, scope)
 	} else {
-		hits, extraMeta = s.retrieveLiteratureSequential(ctx, query, input, extraMeta)
+		hits, extraMeta = s.retrieveLiteratureSequential(ctx, query, input, extraMeta, scope)
 	}
+	logger.InfoZ(ctx, "topic-retrieve-finished",
+		zap.Uint64("step_id", scope.StepID),
+		zap.Int("run_version", scope.RunVersion),
+		zap.Int("hit_count", len(hits)))
 
 	links := make([]storedLiteratureLink, 0, len(hits))
 	downloads := make([]LiteratureDownloadItem, 0, len(hits))
@@ -537,7 +564,7 @@ func (s *TopicDiscoveryRunService) stageRetrieve(ctx context.Context, step *enti
 			ExternalKey: h.ExternalKey,
 			SourceCode:  h.SourceCode,
 		})
-		pdfURL := resolveLiteraturePDFURL(h.SourceCode, h.ExternalKey, h.URL, h.DOI)
+		pdfURL := resolveLiteraturePDFURLWithPMC(h.SourceCode, h.ExternalKey, h.URL, h.DOI, pmcidFromHitMeta(h.Meta))
 		downloads = append(downloads, LiteratureDownloadItem{
 			ExternalKey: h.ExternalKey,
 			PdfURL:      pdfURL,
@@ -561,9 +588,18 @@ func (s *TopicDiscoveryRunService) stageRetrieve(ctx context.Context, step *enti
 	}
 	step.Extra = mustJSON(MergeStepExtra(extraMeta, extraPatch))
 	SyncStepFilesAppend(step, downloads)
+	if len(hits) == 0 {
+		step.SummaryText = ptrString("检索未命中文献，未落盘 PDF")
+		return fmt.Errorf("未检索到文献")
+	}
+	if LiteratureAllDownloadsLackPDFURL(downloads) {
+		step.SummaryText = ptrString(fmt.Sprintf("检索到 %d 篇，但来源无 PDF 下载链接，未落盘", len(hits)))
+		return fmt.Errorf("无可用 PDF 下载链接")
+	}
 	step.SummaryText = ptrString(fmt.Sprintf("检索完成，共 %d 篇文献，PDF 下载中…", len(hits)))
-	if LiteratureDownloadsReady(downloads) {
-		step.SummaryText = ptrString(fmt.Sprintf("检索完成，共 %d 篇文献（PDF 已落盘）", len(hits)))
+	if LiteratureRetrieveCorpusReady(downloads) {
+		n := CountLiteraturePDFsOnDisk(downloads)
+		step.SummaryText = ptrString(FormatRetrievePDFSummary(len(hits), n))
 		step.Status = "completed"
 	} else {
 		step.Status = "running"

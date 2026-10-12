@@ -1038,18 +1038,31 @@ function noveltyLinesFromResultObj(r: Record<string, unknown>): string[] {
   })
 }
 
+/** 与后端 FormatRetrievePDFSummary 一致；兼容旧 summary 里的 PDF 落盘括号 */
+function normalizeTopicStepSummaryLine(line: string, stageCode?: string): string {
+  if (stageCode !== 'retrieve') return line
+  const trimmed = line.trim()
+  const m = trimmed.match(/^检索完成，共 (\d+) 篇文献/)
+  if (m) return `检索完成，共 ${m[1]} 篇文献`
+  return trimmed.replace(/（PDF 已落盘[^）]*）/g, '').trim()
+}
+
 function linesFromApiStep(step?: TopicDiscoveryStepDTO): string[] {
   if (!step) return []
   const summary = step.summary_text?.trim()
   if (summary) {
     const fromSummary = summary
       .split(/\n+/)
-      .map((l) => l.trim())
+      .map((l) => normalizeTopicStepSummaryLine(l.trim(), step.stage_code))
       .filter(Boolean)
     if (fromSummary.length) return fromSummary.slice(0, 12)
   }
   const result = step.result as Record<string, unknown> | undefined
-  if (!result) return summary ? [summary] : []
+  if (!result) {
+    return summary
+      ? [normalizeTopicStepSummaryLine(summary, step.stage_code)]
+      : []
+  }
 
   if (step.stage_code === 'retrieve') {
     const hits = (result.literature_hits as Array<{ title?: string; external_key?: string }>) ?? []
@@ -2194,7 +2207,6 @@ watch(
             </span>
             <div class="paper-flow-step-body">
               <span class="paper-flow-step-label">{{ step.label }}</span>
-              <span class="paper-flow-step-code">{{ step.stageCode }}</span>
               <span v-if="step.checkpointKey && topicForm.humanCheckpoint" class="paper-flow-step-tag">
                 检查点 · {{ step.checkpointKey }}
               </span>
@@ -2233,9 +2245,6 @@ watch(
           <ul v-if="topicCheckpointPanel?.lines.length" class="paper-checkpoint-list">
             <li v-for="(line, i) in topicCheckpointPanel.lines" :key="i">{{ line }}</li>
           </ul>
-          <p class="paper-checkpoint-note">
-            确认后继续下一步；终止会取消本轮进度，刷新后不会再加载。
-          </p>
           <div class="paper-checkpoint-actions">
             <button
               type="button"
@@ -2268,9 +2277,6 @@ watch(
               <h3 class="paper-checkpoint-title">
                 步骤失败 · {{ topicFailedSummary?.stageLabel ?? '未知步骤' }}
               </h3>
-              <p v-if="topicFailedSummary?.stageCode" class="paper-checkpoint-sub">
-                {{ topicFailedSummary.stageCode }}
-              </p>
             </div>
           </div>
           <p class="paper-flow-failed-error" role="alert">
@@ -2891,12 +2897,6 @@ watch(
   color: var(--atm-text, #1e1b4b);
 }
 
-.paper-flow-step-code {
-  font-size: 11px;
-  font-family: ui-monospace, monospace;
-  color: #94a3b8;
-}
-
 .paper-flow-step-tag {
   font-size: 11px;
   font-weight: 600;
@@ -3263,10 +3263,26 @@ watch(
 
 .paper-check--inline {
   margin-top: 0;
+  align-items: center;
+}
+
+.paper-check--inline input[type='checkbox'] {
+  margin-top: 0;
+  flex-shrink: 0;
+}
+
+.paper-check--inline > span {
+  line-height: 16px;
 }
 
 .paper-check--nested {
   margin-top: 12px;
+  align-items: center;
+}
+
+.paper-check--nested input[type='checkbox'] {
+  margin-top: 0;
+  flex-shrink: 0;
 }
 
 .paper-check-row {
@@ -3274,6 +3290,13 @@ watch(
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
+  line-height: 1.4;
+}
+
+.paper-check-row :deep(.el-tooltip__trigger) {
+  display: inline-flex;
+  align-items: center;
+  line-height: 0;
 }
 
 .paper-field-help {

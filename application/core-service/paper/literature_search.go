@@ -238,6 +238,7 @@ func pubmedArticlesToHits(articles []httpentity.PubMedArticle) []response.PaperL
 			PublishedYear: a.PublishedYear,
 			DOI:           a.DOI,
 			URL:           a.URL,
+			PMCID:         a.PMCID,
 		})
 	}
 	return hits

@@ -15,4 +15,5 @@ type PubMedArticle struct {
 	PublishedYear int
 	DOI           string
 	URL           string
+	PMCID         string // 如 PMC5159433（无 PMC 则为空）
 }

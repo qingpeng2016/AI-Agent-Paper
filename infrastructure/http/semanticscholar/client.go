@@ -65,14 +65,14 @@ func (c *Client) search(ctx context.Context, q httpentity.SemanticScholarSearchQ
 	}
 	resp, err := c.http.Get(ctx, c.baseURL, params, headers)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, httpx.LogLiteratureTransportError(ctx, "semantic_scholar", "search", c.baseURL, err)
 	}
 	if resp.StatusCode() != http.StatusOK {
-		return nil, 0, fmt.Errorf("semantic scholar http %d: %s", resp.StatusCode(), truncate(string(resp.Body()), 200))
+		return nil, 0, httpx.NewLiteratureHTTPError(ctx, "semantic_scholar", "search", c.baseURL, resp, fmt.Errorf("semantic scholar http %d", resp.StatusCode()))
 	}
 	var body searchResponse
 	if err := json.Unmarshal(resp.Body(), &body); err != nil {
-		return nil, 0, err
+		return nil, 0, httpx.NewLiteratureHTTPError(ctx, "semantic_scholar", "search", c.baseURL, resp, err)
 	}
 	out := make([]httpentity.SemanticScholarPaper, 0, len(body.Data))
 	for _, p := range body.Data {

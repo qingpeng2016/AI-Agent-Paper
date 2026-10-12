@@ -9,6 +9,7 @@ type PaperLiteratureHit struct {
 	PublishedYear int      `json:"published_year,omitempty"`
 	DOI           string   `json:"doi,omitempty"`
 	URL           string   `json:"url,omitempty"`
+	PMCID         string   `json:"pmcid,omitempty"`
 }
 
 type PaperLiteratureSearchResult struct {

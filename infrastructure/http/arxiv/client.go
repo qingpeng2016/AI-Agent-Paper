@@ -58,14 +58,14 @@ func (c *Client) searchFeed(ctx context.Context, q httpentity.ArxivSearchQuery) 
 	apiURL := fmt.Sprintf("%s?search_query=%s&start=%d&max_results=%d", c.baseURL, searchQuery, start, maxResults)
 	resp, err := c.http.Get(ctx, apiURL, nil, nil)
 	if err != nil {
-		return nil, 0, err
+		return nil, 0, httpx.LogLiteratureTransportError(ctx, "arxiv", "search", apiURL, err)
 	}
 	if resp.StatusCode() != http.StatusOK {
-		return nil, 0, fmt.Errorf("arxiv http %d", resp.StatusCode())
+		return nil, 0, httpx.NewLiteratureHTTPError(ctx, "arxiv", "search", apiURL, resp, fmt.Errorf("arxiv http %d", resp.StatusCode()))
 	}
 	var feed feedXML
 	if err := xml.Unmarshal(resp.Body(), &feed); err != nil {
-		return nil, 0, err
+		return nil, 0, httpx.NewLiteratureHTTPError(ctx, "arxiv", "search", apiURL, resp, err)
 	}
 	total := feed.TotalResults
 	out := make([]httpentity.ArxivPaper, 0, len(feed.Entries))

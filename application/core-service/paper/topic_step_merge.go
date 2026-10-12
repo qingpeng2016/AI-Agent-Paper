@@ -2,6 +2,7 @@ package paper
 
 import (
 	"encoding/json"
+	"os"
 	"strings"
 	"time"
 
@@ -19,11 +20,15 @@ var extraAppendOnlyKeys = map[string]struct{}{
 
 // LiteraturePlatformRequestLog 文献平台一次检索的请求/响应（extra 数组，只追加）。
 type LiteraturePlatformRequestLog struct {
-	At         string `json:"at"`
-	SourceCode string `json:"source_code"`
-	Input      any    `json:"input"`
-	Response   any    `json:"response,omitempty"`
-	Error      string `json:"error,omitempty"`
+	At              string `json:"at"`
+	SourceCode      string `json:"source_code"`
+	Op              string `json:"op,omitempty"` // count | search
+	Input           any    `json:"input"`
+	RequestURL      string `json:"request_url,omitempty"`
+	HTTPStatus      int    `json:"http_status,omitempty"`
+	ResponsePreview string `json:"response_preview,omitempty"`
+	Response        any    `json:"response,omitempty"`
+	Error           string `json:"error,omitempty"`
 }
 
 // StepFileEntry 步骤关联文件（PDF 等），files 列 JSON 数组，只追加。
@@ -135,6 +140,10 @@ func stepFilesFromDownloads(downloads []LiteratureDownloadItem) []StepFileEntry 
 	for _, d := range downloads {
 		path := strings.TrimSpace(d.LocalPath)
 		if path == "" {
+			continue
+		}
+		st, err := os.Stat(LiteratureLocalAbsPath(path))
+		if err != nil || st.Size() == 0 {
 			continue
 		}
 		out = append(out, StepFileEntry{

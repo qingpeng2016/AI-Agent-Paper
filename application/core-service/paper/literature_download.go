@@ -10,6 +10,9 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/qingpeng2016/ai-agent-paper/common/dederi/logger"
+	"go.uber.org/zap"
 )
 
 // DownloadLiteraturePDF 下载 PDF 到绝对路径（已存在且非空则跳过）。
@@ -41,6 +44,9 @@ func DownloadLiteraturePDF(ctx context.Context, pdfURL, absPath string) error {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		logger.WarnZ(ctx, "literature-pdf-download-http",
+			zap.String("pdf_url", pdfURL),
+			zap.Int("http_status", resp.StatusCode))
 		return fmt.Errorf("download http %d", resp.StatusCode)
 	}
 	tmp := absPath + ".part"
@@ -150,4 +156,44 @@ func LiteratureDownloadsNeedWork(items []LiteratureDownloadItem) bool {
 		}
 	}
 	return false
+}
+
+// LiteratureAllDownloadsLackPDFURL 有下载项但全部无 pdf_url（如 PubMed/Crossref 元数据）。
+func LiteratureAllDownloadsLackPDFURL(items []LiteratureDownloadItem) bool {
+	if len(items) == 0 {
+		return false
+	}
+	return !LiteratureDownloadsNeedWork(items)
+}
+
+// CountLiteraturePDFsOnDisk 已落盘且非空的 PDF 数量。
+func CountLiteraturePDFsOnDisk(items []LiteratureDownloadItem) int {
+	n := 0
+	for _, it := range items {
+		rel := strings.TrimSpace(it.LocalPath)
+		if rel == "" {
+			continue
+		}
+		st, err := os.Stat(LiteratureLocalAbsPath(rel))
+		if err == nil && st.Size() > 0 {
+			n++
+		}
+	}
+	return n
+}
+
+// LiteratureRetrieveCorpusReady 至少有一个 PDF 已落盘即可进入后续流程（允许部分下载失败）。
+func LiteratureRetrieveCorpusReady(items []LiteratureDownloadItem) bool {
+	return CountLiteraturePDFsOnDisk(items) > 0
+}
+
+// LiteraturePDFDownloadAllFailed 凡有 pdf_url 的项均未落盘（或无任何 pdf_url）。
+func LiteraturePDFDownloadAllFailed(items []LiteratureDownloadItem) bool {
+	return CountLiteraturePDFsOnDisk(items) == 0
+}
+
+// FormatRetrievePDFSummary 检索步成功摘要（PDF 数量见 extra.pdf_on_disk，不写进 summary_text）。
+func FormatRetrievePDFSummary(hitCount, pdfOnDisk int) string {
+	_ = pdfOnDisk
+	return fmt.Sprintf("检索完成，共 %d 篇文献", hitCount)
 }
