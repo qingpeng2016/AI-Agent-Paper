@@ -15,6 +15,8 @@ export type PaperLiteratureReviewItem = {
   status: string
   from?: LiteratureReviewFrom | string
   experiment_plan_id?: string
+  /** 综述关联的论文稿件 paper_manuscript.id；0 或未设表示尚未生成 */
+  paper_manuscript_id?: string
   title?: string
   content_medium?: string
   pdf_uri?: string
@@ -209,6 +211,15 @@ export async function generateExperimentPlanFromLiteratureReview(
 
 export function literatureReviewHasAttachmentUri(uri?: string): boolean {
   return Boolean(uri?.trim())
+}
+
+export function literatureReviewHasPaperManuscript(
+  item: Pick<PaperLiteratureReviewItem, 'paper_manuscript_id'>,
+): boolean {
+  const raw = item.paper_manuscript_id?.trim()
+  if (!raw || raw === '0') return false
+  const n = Number(raw)
+  return Number.isFinite(n) && n > 0
 }
 
 /** 文献综述 tab：PDF、Word 路径均存在时才显示「下载」 */

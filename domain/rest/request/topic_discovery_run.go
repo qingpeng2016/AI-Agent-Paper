@@ -13,7 +13,8 @@ type TopicDiscoveryRunRequest struct {
 	Intensity       string   `json:"intensity"`
 	AuditLevel      string   `json:"audit_level"`
 	HumanCheckpoint   bool `json:"human_checkpoint"`
-	RandomReferences  bool `json:"random_references"`
+	RandomReferences   bool     `json:"random_references"`
+	UserLiteratureIDs  []string `json:"user_literature_ids"`
 	// start：新开 run 并执行第一步；continue：执行下一个 pending 步；run_all：连续执行直到完成或需人工检查点
 	Action string `json:"action"`
 }

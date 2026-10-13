@@ -54,6 +54,7 @@ import PaperEnvironmentPanel from './PaperEnvironmentPanel.vue'
 import PaperSelect from './PaperSelect.vue'
 import PaperMultiSelect from './PaperMultiSelect.vue'
 import PaperWorkflowPanels from './PaperWorkflowPanels.vue'
+import PaperTopicUserLiteraturePickDialog from './PaperTopicUserLiteraturePickDialog.vue'
 
 type TopicFlowStepRuntime = {
   stageCode: string
@@ -238,6 +239,9 @@ const paperMainRef = ref<HTMLElement | null>(null)
 const topicFlowPanelRef = ref<HTMLElement | null>(null)
 
 const topicForm = reactive<TopicDiscoveryForm>({ ...DEFAULT_TOPIC_DISCOVERY })
+
+const topicUserLitPickerOpen = ref(false)
+
 const envPreference = reactive<EnvironmentPreferenceForm>({ ...DEFAULT_ENV_PREFERENCE })
 
 const {
@@ -1277,6 +1281,8 @@ function buildTopicRunRequest(action: 'start' | 'continue') {
     audit_level: topicForm.auditLevel,
     human_checkpoint: topicForm.humanCheckpoint,
     random_references: topicForm.randomReferences,
+    user_literature_ids:
+      topicForm.userLiteratureIds.length > 0 ? [...topicForm.userLiteratureIds] : undefined,
     action,
   }
 }
@@ -1745,6 +1751,19 @@ function toggleTopicSource(code: string, checked: boolean) {
 
 function isTopicSourceChecked(code: string) {
   return topicForm.sourceCodes.includes(code)
+}
+
+function openTopicUserLiteraturePicker() {
+  if (topicRunBusy.value || currentTopicRun.value.status === 'checkpoint') return
+  topicUserLitPickerOpen.value = true
+}
+
+function closeTopicUserLiteraturePicker() {
+  topicUserLitPickerOpen.value = false
+}
+
+function onTopicUserLiteraturePicked(ids: string[]) {
+  topicForm.userLiteratureIds = [...ids]
 }
 
 function onUploadExperimentPlanPrimary() {
@@ -2265,10 +2284,38 @@ watch(
               </ElTooltip>
             </span>
           </label>
+
+          <div class="paper-my-literature-block">
+            <span class="paper-label">我的文献</span>
+            <div class="paper-my-literature-row">
+              <button
+                type="button"
+                class="paper-my-literature-btn"
+                :disabled="topicRunBusy || currentTopicRun.status === 'checkpoint'"
+                @click="openTopicUserLiteraturePicker"
+              >
+                选择文献
+              </button>
+              <span
+                v-if="topicForm.userLiteratureIds.length"
+                class="paper-hint paper-my-literature-summary"
+              >
+                已选 {{ topicForm.userLiteratureIds.length }} 篇文献
+              </span>
+            </div>
+          </div>
         </div>
 
-        <div class="paper-field paper-field--block paper-field--gap-below-sources">
-          <span class="paper-label">关键位置确认</span>
+        <PaperTopicUserLiteraturePickDialog
+          :open="topicUserLitPickerOpen"
+          :initial-selected-ids="topicForm.userLiteratureIds"
+          :disabled="topicRunBusy || currentTopicRun.status === 'checkpoint'"
+          @close="closeTopicUserLiteraturePicker"
+          @confirm="onTopicUserLiteraturePicked"
+        />
+
+        <div class="paper-field paper-field--block paper-field--after-sources">
+          <span class="paper-label">人工检查</span>
           <div class="paper-check-group">
             <label class="paper-check paper-check--inline">
               <input
@@ -3206,12 +3253,9 @@ watch(
   margin-top: 16px;
 }
 
-.paper-field--section-gap {
+.paper-field--section-gap,
+.paper-field--after-sources {
   margin-top: 28px;
-}
-
-.paper-field--gap-below-sources {
-  margin-top: 16px;
 }
 
 .paper-label {
@@ -3375,6 +3419,50 @@ watch(
 .paper-check--nested input[type='checkbox'] {
   margin-top: 0;
   flex-shrink: 0;
+}
+
+.paper-my-literature-block {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 16px;
+}
+
+.paper-my-literature-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: center;
+}
+
+.paper-my-literature-btn {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: #6366f1;
+  cursor: pointer;
+  background: #fff;
+  border: 1px solid #c7d2fe;
+  border-radius: 7px;
+}
+
+.paper-my-literature-btn:hover:not(:disabled) {
+  color: #4f46e5;
+  background: #eef2ff;
+  border-color: #a5b4fc;
+}
+
+.paper-my-literature-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.paper-my-literature-summary {
+  margin: 0;
+  flex: 1;
+  min-width: 200px;
 }
 
 .paper-check-row {

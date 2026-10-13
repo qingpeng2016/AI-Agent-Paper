@@ -350,6 +350,8 @@ export type TopicDiscoveryForm = {
   humanCheckpoint: boolean
   /** 勾选后每次 run 对第三方检索使用随机分页/偏移 */
   randomReferences: boolean
+  /** 选题发现纳入的 paper_user_literature.id */
+  userLiteratureIds: string[]
 }
 
 /** 选题发现每步完成后的人工确认点（与 stage 一一对应） */
@@ -541,6 +543,7 @@ export const DEFAULT_TOPIC_DISCOVERY: TopicDiscoveryForm = {
   auditLevel: 'standard',
   humanCheckpoint: true,
   randomReferences: true,
+  userLiteratureIds: [],
 }
 
 export type EnvironmentPreferenceForm = {

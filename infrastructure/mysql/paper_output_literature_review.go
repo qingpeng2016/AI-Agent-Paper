@@ -16,6 +16,18 @@ func NewPaperOutputLiteratureReviewImpl(db *gorm.DB) repository.PaperOutputLiter
 	return &PaperOutputLiteratureReviewImpl{db: db}
 }
 
+// 列表：当前论文 + 尚未绑定论文（manuscript_id=0）的同用户综述。
+func literatureReviewListScope(manuscriptID uint64, userID uint) (string, []any) {
+	return "(manuscript_id = ? OR manuscript_id = 0) AND user_id = ? AND status <> ?",
+		[]any{manuscriptID, userID, "deleted"}
+}
+
+// 按 id 操作：行 manuscript_id 为当前论文或 0。
+func literatureReviewRowScope(id, manuscriptID uint64, userID uint) (string, []any) {
+	return "id = ? AND user_id = ? AND (manuscript_id = ? OR manuscript_id = 0)",
+		[]any{id, userID, manuscriptID}
+}
+
 func (r *PaperOutputLiteratureReviewImpl) Create(ctx context.Context, row *entity.PaperOutputLiteratureReview) error {
 	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var maxVer *int
@@ -58,8 +70,9 @@ func (r *PaperOutputLiteratureReviewImpl) ListByManuscriptForUserPaged(
 	offset, limit int,
 ) ([]entity.PaperOutputLiteratureReview, error) {
 	var rows []entity.PaperOutputLiteratureReview
+	where, args := literatureReviewListScope(manuscriptID, userID)
 	q := r.db.WithContext(ctx).
-		Where("manuscript_id = ? AND user_id = ? AND status <> ?", manuscriptID, userID, "deleted").
+		Where(where, args...).
 		Order("created_at DESC, id DESC")
 	if limit > 0 {
 		q = q.Offset(offset).Limit(limit)
@@ -74,9 +87,10 @@ func (r *PaperOutputLiteratureReviewImpl) CountByManuscriptForUser(
 	manuscriptID uint64,
 ) (int64, error) {
 	var n int64
+	where, args := literatureReviewListScope(manuscriptID, userID)
 	err := r.db.WithContext(ctx).
 		Model(&entity.PaperOutputLiteratureReview{}).
-		Where("manuscript_id = ? AND user_id = ? AND status <> ?", manuscriptID, userID, "deleted").
+		Where(where, args...).
 		Count(&n).Error
 	return n, err
 }
@@ -87,7 +101,7 @@ func (r *PaperOutputLiteratureReviewImpl) ListByManuscript(
 ) ([]entity.PaperOutputLiteratureReview, error) {
 	var rows []entity.PaperOutputLiteratureReview
 	err := r.db.WithContext(ctx).
-		Where("manuscript_id = ? AND status <> ?", manuscriptID, "deleted").
+		Where("(manuscript_id = ? OR manuscript_id = 0) AND status <> ?", manuscriptID, "deleted").
 		Order("created_at DESC, id DESC").
 		Find(&rows).Error
 	return rows, err
@@ -99,9 +113,10 @@ func (r *PaperOutputLiteratureReviewImpl) UpdateStatusForManuscript(
 	userID uint,
 	status string,
 ) (bool, error) {
+	where, args := literatureReviewRowScope(id, manuscriptID, userID)
 	res := r.db.WithContext(ctx).
 		Model(&entity.PaperOutputLiteratureReview{}).
-		Where("id = ? AND manuscript_id = ? AND user_id = ?", id, manuscriptID, userID).
+		Where(where, args...).
 		Update("status", status)
 	if res.Error != nil {
 		return false, res.Error
@@ -114,12 +129,11 @@ func (r *PaperOutputLiteratureReviewImpl) TryBeginExperimentPlanGeneration(
 	reviewID, manuscriptID uint64,
 	userID uint,
 ) (bool, error) {
+	where, args := literatureReviewRowScope(reviewID, manuscriptID, userID)
 	res := r.db.WithContext(ctx).
 		Model(&entity.PaperOutputLiteratureReview{}).
-		Where(
-			"id = ? AND manuscript_id = ? AND user_id = ? AND status IN ?",
-			reviewID, manuscriptID, userID, []string{"completed", "gen_exp_fail"},
-		).
+		Where(where, args...).
+		Where("status IN ?", []string{"completed", "gen_exp_fail"}).
 		Updates(map[string]any{
 			"status":                        "gen_exp_plan",
 			"experiment_plan_llm_request":   nil,
@@ -137,8 +151,9 @@ func (r *PaperOutputLiteratureReviewImpl) GetByIDForUser(
 	userID uint,
 ) (*entity.PaperOutputLiteratureReview, error) {
 	var row entity.PaperOutputLiteratureReview
+	where, args := literatureReviewRowScope(id, manuscriptID, userID)
 	err := r.db.WithContext(ctx).
-		Where("id = ? AND manuscript_id = ? AND user_id = ?", id, manuscriptID, userID).
+		Where(where, args...).
 		First(&row).Error
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -179,12 +194,11 @@ func (r *PaperOutputLiteratureReviewImpl) SaveExperimentPlanLLMRequest(
 	if len(updates) == 0 {
 		return false, nil
 	}
+	where, args := literatureReviewRowScope(reviewID, manuscriptID, userID)
 	res := r.db.WithContext(ctx).
 		Model(&entity.PaperOutputLiteratureReview{}).
-		Where(
-			"id = ? AND manuscript_id = ? AND user_id = ? AND status = ?",
-			reviewID, manuscriptID, userID, "gen_exp_plan",
-		).
+		Where(where, args...).
+		Where("status = ?", "gen_exp_plan").
 		Updates(updates)
 	if res.Error != nil {
 		return false, res.Error
@@ -206,12 +220,11 @@ func (r *PaperOutputLiteratureReviewImpl) CompleteExperimentPlanLink(
 	if len(llmResponseJSON) > 0 {
 		updates["experiment_plan_llm_response"] = llmResponseJSON
 	}
+	where, args := literatureReviewRowScope(reviewID, manuscriptID, userID)
 	res := r.db.WithContext(ctx).
 		Model(&entity.PaperOutputLiteratureReview{}).
-		Where(
-			"id = ? AND manuscript_id = ? AND user_id = ? AND status = ?",
-			reviewID, manuscriptID, userID, "gen_exp_plan",
-		).
+		Where(where, args...).
+		Where("status = ?", "gen_exp_plan").
 		Updates(updates)
 	if res.Error != nil {
 		return false, res.Error
@@ -229,12 +242,11 @@ func (r *PaperOutputLiteratureReviewImpl) FailExperimentPlanGeneration(
 	if len(llmResponseJSON) > 0 {
 		updates["experiment_plan_llm_response"] = llmResponseJSON
 	}
+	where, args := literatureReviewRowScope(reviewID, manuscriptID, userID)
 	res := r.db.WithContext(ctx).
 		Model(&entity.PaperOutputLiteratureReview{}).
-		Where(
-			"id = ? AND manuscript_id = ? AND user_id = ? AND status = ?",
-			reviewID, manuscriptID, userID, "gen_exp_plan",
-		).
+		Where(where, args...).
+		Where("status = ?", "gen_exp_plan").
 		Updates(updates)
 	if res.Error != nil {
 		return false, res.Error
@@ -271,7 +283,7 @@ func (r *PaperOutputLiteratureReviewImpl) MapLiteratureReviewIDsByExperimentPlan
 		Model(&entity.PaperOutputLiteratureReview{}).
 		Select("id", "experiment_plan_id").
 		Where(
-			"manuscript_id = ? AND status <> ? AND experiment_plan_id IN ?",
+			"(manuscript_id = ? OR manuscript_id = 0) AND status <> ? AND experiment_plan_id IN ?",
 			manuscriptID, "deleted", planIDs,
 		).
 		Scan(&rows).Error
@@ -290,8 +302,9 @@ func (r *PaperOutputLiteratureReviewImpl) LinkExperimentPlan(
 	ctx context.Context,
 	reviewID, planID, userID, manuscriptID uint64,
 ) error {
+	where, args := literatureReviewRowScope(reviewID, manuscriptID, uint(userID))
 	return r.db.WithContext(ctx).
 		Model(&entity.PaperOutputLiteratureReview{}).
-		Where("id = ? AND user_id = ? AND manuscript_id = ?", reviewID, userID, manuscriptID).
+		Where(where, args...).
 		Update("experiment_plan_id", planID).Error
 }

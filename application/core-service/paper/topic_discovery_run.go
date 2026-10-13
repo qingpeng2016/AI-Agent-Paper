@@ -32,8 +32,9 @@ type topicRunInput struct {
 	Intensity       string   `json:"intensity"`
 	AuditLevel      string   `json:"audit_level"`
 	HumanCheckpoint  bool `json:"human_checkpoint"`
-	RandomReferences bool `json:"random_references"`
-	MaxPapers        int  `json:"max_papers"`
+	RandomReferences  bool     `json:"random_references"`
+	UserLiteratureIDs []uint64 `json:"user_literature_ids,omitempty"`
+	MaxPapers         int      `json:"max_papers"`
 	MaxIdeas        int      `json:"max_ideas"`
 	ExecRounds      int      `json:"exec_rounds"`
 }
@@ -327,21 +328,26 @@ func (s *TopicDiscoveryRunService) prepareRun(ctx context.Context, userID uint, 
 		return topicRunInput{}, errorx.ErrParamsError.WithDetail("请至少选择一个目标会议/期刊")
 	}
 
+	userLitIDs, err := parseUserLiteratureIDList(req.UserLiteratureIDs)
+	if err != nil {
+		return topicRunInput{}, errorx.ErrParamsError
+	}
 	input := topicRunInput{
-		DisciplineCode:  strings.TrimSpace(req.DisciplineCode),
-		Keywords:        keywords,
-		Description:     description,
-		Direction:       direction,
-		Venue:           venue,
-		VenueCodes:      venueCodes,
-		SourceCodes:     req.SourceCodes,
-		Intensity:       intensityCode,
-		AuditLevel:      auditCode,
-		HumanCheckpoint:  req.HumanCheckpoint,
-		RandomReferences: req.RandomReferences,
-		MaxPapers:        int(intensity.MaxPapers),
-		MaxIdeas:        int(intensity.MaxIdeas),
-		ExecRounds:      int(intensity.ExecRounds),
+		DisciplineCode:    strings.TrimSpace(req.DisciplineCode),
+		Keywords:          keywords,
+		Description:       description,
+		Direction:         direction,
+		Venue:             venue,
+		VenueCodes:        venueCodes,
+		SourceCodes:       req.SourceCodes,
+		Intensity:         intensityCode,
+		AuditLevel:        auditCode,
+		HumanCheckpoint:   req.HumanCheckpoint,
+		RandomReferences:  req.RandomReferences,
+		UserLiteratureIDs: userLitIDs,
+		MaxPapers:         int(intensity.MaxPapers),
+		MaxIdeas:          int(intensity.MaxIdeas),
+		ExecRounds:        int(intensity.ExecRounds),
 	}
 	return input, nil
 }

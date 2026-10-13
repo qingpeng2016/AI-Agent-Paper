@@ -18,6 +18,7 @@ import {
   literatureReviewStatusTone,
   literatureReviewWordFileName,
   isLiteratureReviewGeneratingExperimentPlan,
+  literatureReviewHasPaperManuscript,
   softDeleteLiteratureReview,
   type LitReviewAttachmentKind,
   type LiteratureReviewBibliographyEntry,
@@ -340,6 +341,69 @@ function aiGenerateLitReviewBundleDocuments() {
   ElMessage.info('AI 生成综述功能即将接入')
 }
 
+function downloadLitReviewBundleExperimentPlan() {
+  const ctx = litReviewBundleView.value
+  if (!ctx?.expPlan) return
+  const name = experimentPlanRowTitle(ctx.expPlan)
+  ElMessage.info(`下载「${name}」功能即将接入`)
+}
+
+function aiGenerateLitReviewBundleExperimentPlan() {
+  ElMessage.info('生成实验方案功能即将接入')
+}
+
+function litReviewBundleCanDownloadExperimentPlan(
+  ctx: NonNullable<(typeof litReviewBundleView)['value']>,
+): boolean {
+  if (!literatureReviewHasExperimentPlan(ctx.item) || !ctx.expPlan) return false
+  return Boolean(ctx.expPlan.content_medium?.trim() || ctx.expPlan.summary?.trim())
+}
+
+function litReviewBundleShowExperimentPlanPrimary(
+  ctx: NonNullable<(typeof litReviewBundleView)['value']>,
+): boolean {
+  if (ctx.expPlanLoading) return false
+  if (isLiteratureReviewGeneratingExperimentPlan(ctx.item.status)) return false
+  return true
+}
+
+function onLitReviewBundleExperimentPlanPrimary() {
+  const ctx = litReviewBundleView.value
+  if (!ctx) return
+  if (litReviewBundleCanDownloadExperimentPlan(ctx)) {
+    downloadLitReviewBundleExperimentPlan()
+  } else {
+    aiGenerateLitReviewBundleExperimentPlan()
+  }
+}
+
+function downloadLitReviewBundlePaper() {
+  const ctx = litReviewBundleView.value
+  if (!ctx) return
+  const title = litReviewRowTitle(ctx.item)
+  ElMessage.info(`下载论文稿件「${title}」功能即将接入`)
+}
+
+function aiGenerateLitReviewBundlePaper() {
+  ElMessage.info('生成论文功能即将接入')
+}
+
+function litReviewBundleCanDownloadPaper(
+  ctx: NonNullable<(typeof litReviewBundleView)['value']>,
+): boolean {
+  return literatureReviewHasPaperManuscript(ctx.item)
+}
+
+function onLitReviewBundlePaperPrimary() {
+  const ctx = litReviewBundleView.value
+  if (!ctx) return
+  if (litReviewBundleCanDownloadPaper(ctx)) {
+    downloadLitReviewBundlePaper()
+  } else {
+    aiGenerateLitReviewBundlePaper()
+  }
+}
+
 function onLitReviewBundleLiteratureReviewPrimary() {
   const ctx = litReviewBundleView.value
   if (!ctx) return
@@ -361,7 +425,16 @@ function onLitReviewBundlePptPrimary() {
 }
 
 function litReviewBundleHasDownloadAction(tab: LitReviewBundleTabId): boolean {
-  return tab === 'literature-review' || tab === 'ppt'
+  if (tab === 'literature-review' || tab === 'ppt') return true
+  if (tab === 'experiment-plan') {
+    const ctx = litReviewBundleView.value
+    return ctx ? litReviewBundleCanDownloadExperimentPlan(ctx) : false
+  }
+  if (tab === 'paper') {
+    const ctx = litReviewBundleView.value
+    return ctx ? litReviewBundleCanDownloadPaper(ctx) : false
+  }
+  return false
 }
 
 const litReviewUploadExpPlanOptions = computed(() =>
@@ -614,7 +687,7 @@ function litReviewViewDownloadLabel(
   kind: 'pdf' | 'docx',
 ): string {
   const uri = kind === 'pdf' ? item.pdf_uri : item.word_uri
-  if (!literatureReviewHasAttachmentUri(uri)) return 'AI生成综述'
+  if (!literatureReviewHasAttachmentUri(uri)) return '生成综述'
   return kind === 'pdf' ? '下载 PDF' : '下载 Word'
 }
 
@@ -1657,30 +1730,40 @@ defineExpose({
           </template>
 
           <template v-else-if="litReviewBundleView.tab === 'paper'">
-            <p class="wf-kv wf-lit-bundle-paper-title">
-              <span>标题</span>{{ DEMO_MANUSCRIPT.title }}
+            <p
+              v-if="!literatureReviewHasPaperManuscript(litReviewBundleView.item)"
+              class="wf-artifact-empty"
+            >
+              暂无论文稿件
             </p>
-            <table class="wf-table wf-table--compact wf-lit-bundle-paper-table">
-              <thead>
-                <tr>
-                  <th>章节</th>
-                  <th>字数</th>
-                  <th>状态</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="s in DEMO_MANUSCRIPT.sections" :key="s.name">
-                  <td>{{ s.name }}</td>
-                  <td>{{ s.words }}</td>
-                  <td>{{ s.status === 'done' ? '已完成' : '草稿' }}</td>
-                </tr>
-              </tbody>
-            </table>
-            <p class="wf-meta">
-              引用 {{ DEMO_MANUSCRIPT.cites }} · 已验证 {{ DEMO_MANUSCRIPT.verifiedCites }}
-            </p>
-            <pre class="wf-pre wf-pre--lit">{{ DEMO_MANUSCRIPT.excerpt }}</pre>
-            <p class="wf-artifact-empty wf-lit-bundle-paper-hint">论文正文接入后将展示当前论文稿件</p>
+            <template v-else>
+              <p class="wf-kv wf-lit-bundle-paper-title">
+                <span>标题</span>{{ DEMO_MANUSCRIPT.title }}
+              </p>
+              <table class="wf-table wf-table--compact wf-lit-bundle-paper-table">
+                <thead>
+                  <tr>
+                    <th>章节</th>
+                    <th>字数</th>
+                    <th>状态</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="s in DEMO_MANUSCRIPT.sections" :key="s.name">
+                    <td>{{ s.name }}</td>
+                    <td>{{ s.words }}</td>
+                    <td>{{ s.status === 'done' ? '已完成' : '草稿' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <p class="wf-meta">
+                引用 {{ DEMO_MANUSCRIPT.cites }} · 已验证 {{ DEMO_MANUSCRIPT.verifiedCites }}
+              </p>
+              <pre class="wf-pre wf-pre--lit">{{ DEMO_MANUSCRIPT.excerpt }}</pre>
+              <p class="wf-artifact-empty wf-lit-bundle-paper-hint">
+                论文正文接入后将展示当前论文稿件
+              </p>
+            </template>
           </template>
 
           <template v-else-if="litReviewBundleView.tab === 'references'">
@@ -1740,7 +1823,7 @@ defineExpose({
             {{
               literatureReviewCanDownloadDocuments(litReviewBundleView.item)
                 ? '下载'
-                : 'AI生成综述'
+                : '生成综述'
             }}
           </button>
           <button
@@ -1752,7 +1835,32 @@ defineExpose({
             {{
               literatureReviewCanDownloadPpt(litReviewBundleView.item)
                 ? '下载 PPT'
-                : 'AI生成汇报 PPT'
+                : '生成 PPT'
+            }}
+          </button>
+          <button
+            v-if="
+              litReviewBundleView.tab === 'experiment-plan' &&
+              litReviewBundleShowExperimentPlanPrimary(litReviewBundleView)
+            "
+            type="button"
+            class="paper-btn-primary"
+            @click="onLitReviewBundleExperimentPlanPrimary"
+          >
+            {{
+              litReviewBundleCanDownloadExperimentPlan(litReviewBundleView)
+                ? '下载'
+                : '生成实验方案'
+            }}
+          </button>
+          <button
+            v-if="litReviewBundleView.tab === 'paper'"
+            type="button"
+            class="paper-btn-primary"
+            @click="onLitReviewBundlePaperPrimary"
+          >
+            {{
+              litReviewBundleCanDownloadPaper(litReviewBundleView) ? '下载' : '生成论文'
             }}
           </button>
           <button
@@ -1938,7 +2046,7 @@ defineExpose({
             {{
               literatureReviewCanDownloadPpt(litReviewAttachmentPreview.item)
                 ? '下载 PPT'
-                : 'AI生成汇报 PPT'
+                : '生成 PPT'
             }}
           </button>
           <button type="button" class="paper-btn-secondary" @click="closeLitReviewAttachmentPreview">

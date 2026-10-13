@@ -80,6 +80,7 @@ export type TopicDiscoveryRunRequest = {
   audit_level: string
   human_checkpoint: boolean
   random_references?: boolean
+  user_literature_ids?: string[]
   /** start | continue | run_all */
   action: string
 }
@@ -147,6 +148,7 @@ export function applyStoredTopicRunInputToForm(
     auditLevel: string
     humanCheckpoint: boolean
     randomReferences: boolean
+    userLiteratureIds: string[]
   },
   run?: TopicDiscoveryRunResponse | null,
   venues: readonly VenueOption[] = [],
@@ -204,6 +206,11 @@ export function applyStoredTopicRunInputToForm(
   }
   if (typeof p.random_references === 'boolean') {
     form.randomReferences = p.random_references
+  }
+  if (Array.isArray(p.user_literature_ids)) {
+    form.userLiteratureIds = (p.user_literature_ids as unknown[])
+      .map((id) => String(id).trim())
+      .filter(Boolean)
   }
 }
 
