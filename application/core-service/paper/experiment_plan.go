@@ -67,7 +67,7 @@ func (s *ExperimentPlanService) RunExperimentPlanLLM(ctx context.Context, review
 	if review == nil || s.plans == nil || s.llmRunner == nil {
 		return fmt.Errorf("experiment plan 服务未配置")
 	}
-	direction, venue := directionVenueFromReview(review)
+	direction, venue := "", ""
 	step := &entity.PaperOutputTopicStep{
 		ManuscriptID: review.ManuscriptID,
 		UserID:       uint64(review.UserID),
@@ -128,14 +128,8 @@ func (s *ExperimentPlanService) RunExperimentPlanLLM(ctx context.Context, review
 		respJSON, _ = json.Marshal(respBase)
 		return s.markExperimentPlanFailed(ctx, review, err.Error(), respJSON, reqSnap)
 	}
-	meta := mergeReviewMeta(review, map[string]any{
-		"experiment_plan_id":      planRow.ID,
-		"experiment_plan_error":   nil,
-		"experiment_plan_done_at": planRow.CreatedAt.UTC().Format("2006-01-02T15:04:05Z07:00"),
-	})
-	metaJSON, _ := json.Marshal(meta)
 	ok, err := s.reviews.CompleteExperimentPlanLink(
-		ctx, review.ID, review.ManuscriptID, uint(review.UserID), planRow.ID, metaJSON, respJSON,
+		ctx, review.ID, review.ManuscriptID, uint(review.UserID), planRow.ID, respJSON,
 	)
 	if err != nil {
 		return err
@@ -158,31 +152,13 @@ func (s *ExperimentPlanService) markExperimentPlanFailed(
 			ctx, review.ID, review.ManuscriptID, uint(review.UserID), llmRequestJSON,
 		)
 	}
-	meta := mergeReviewMeta(review, map[string]any{
-		"experiment_plan_error": strings.TrimSpace(reason),
-	})
-	metaJSON, _ := json.Marshal(meta)
 	_, err := s.reviews.FailExperimentPlanGeneration(
-		ctx, review.ID, review.ManuscriptID, uint(review.UserID), metaJSON, llmResponseJSON,
+		ctx, review.ID, review.ManuscriptID, uint(review.UserID), llmResponseJSON,
 	)
 	if err != nil {
 		return err
 	}
 	return fmt.Errorf("%s", strings.TrimSpace(reason))
-}
-
-func directionVenueFromReview(review *entity.PaperOutputLiteratureReview) (direction, venue string) {
-	if review == nil || len(review.InputParams) == 0 {
-		return "", ""
-	}
-	var snap map[string]any
-	_ = json.Unmarshal(review.InputParams, &snap)
-	if snap == nil {
-		return "", ""
-	}
-	direction = strFromAny(snap["direction"])
-	venue = strFromAny(snap["venue"])
-	return direction, venue
 }
 
 func buildExperimentPlanUserMessage(review *entity.PaperOutputLiteratureReview, direction, venue, locale string) string {
@@ -191,14 +167,7 @@ func buildExperimentPlanUserMessage(review *entity.PaperOutputLiteratureReview, 
 		"id":             review.ID,
 		"version":        review.Version,
 		"title":          ptrStr(review.Title),
-		"summary":        ptrStr(review.Summary),
 		"content_medium": ptrStr(review.ContentMedium),
-		"structure":      ptrStr(review.Structure),
-	}
-	if len(review.Citations) > 0 {
-		var cites any
-		_ = json.Unmarshal(review.Citations, &cites)
-		lit["citations"] = cites
 	}
 	b, _ := json.Marshal(map[string]any{
 		"manuscript_id":    review.ManuscriptID,
@@ -318,16 +287,35 @@ func (s *ExperimentPlanService) ListByManuscript(
 	if err != nil {
 		return nil, err
 	}
+	planIDs := make([]uint64, 0, len(rows))
+	for _, row := range rows {
+		planIDs = append(planIDs, row.ID)
+	}
+	lrByPlan, err := s.reviews.MapLiteratureReviewIDsByExperimentPlanIDs(ctx, manuscriptID, planIDs)
+	if err != nil {
+		return nil, err
+	}
 	out := &response.PaperExperimentPlanListView{
 		ManuscriptID: manuscriptID,
 		Items:        make([]response.PaperExperimentPlanItemView, 0, len(rows)),
 	}
 	for _, row := range rows {
-		item := experimentPlanItemView(row)
-		item = s.enrichExperimentPlanLiteratureReviewID(ctx, manuscriptID, row.ID, item)
+		item := experimentPlanListItemView(row)
+		item = enrichExperimentPlanLiteratureReviewID(item, lrByPlan[row.ID])
 		out.Items = append(out.Items, item)
 	}
 	return out, nil
+}
+
+func enrichExperimentPlanLiteratureReviewID(
+	item response.PaperExperimentPlanItemView,
+	lrID uint64,
+) response.PaperExperimentPlanItemView {
+	if strings.TrimSpace(item.LiteratureReviewID) != "" || lrID == 0 {
+		return item
+	}
+	item.LiteratureReviewID = strconv.FormatUint(lrID, 10)
+	return item
 }
 
 func (s *ExperimentPlanService) enrichExperimentPlanLiteratureReviewID(
@@ -342,8 +330,7 @@ func (s *ExperimentPlanService) enrichExperimentPlanLiteratureReviewID(
 	if err != nil || lrID == 0 {
 		return item
 	}
-	item.LiteratureReviewID = strconv.FormatUint(lrID, 10)
-	return item
+	return enrichExperimentPlanLiteratureReviewID(item, lrID)
 }
 
 func (s *ExperimentPlanService) GetDetail(
@@ -376,6 +363,12 @@ func (s *ExperimentPlanService) GetDetail(
 	return &item, nil
 }
 
+func experimentPlanListItemView(row entity.PaperOutputExperimentPlan) response.PaperExperimentPlanItemView {
+	item := experimentPlanItemView(row)
+	item.ContentMedium = ""
+	return item
+}
+
 func experimentPlanItemView(row entity.PaperOutputExperimentPlan) response.PaperExperimentPlanItemView {
 	item := response.PaperExperimentPlanItemView{
 		ID:        strconv.FormatUint(row.ID, 10),
@@ -404,20 +397,6 @@ func experimentPlanItemView(row entity.PaperOutputExperimentPlan) response.Paper
 		}
 	}
 	return item
-}
-
-func mergeReviewMeta(review *entity.PaperOutputLiteratureReview, patch map[string]any) map[string]any {
-	out := map[string]any{}
-	if review != nil && len(review.Meta) > 0 {
-		_ = json.Unmarshal(review.Meta, &out)
-	}
-	if out == nil {
-		out = map[string]any{}
-	}
-	for k, v := range patch {
-		out[k] = v
-	}
-	return out
 }
 
 func ptrStr(p *string) string {

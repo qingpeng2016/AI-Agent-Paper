@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
-	"gorm.io/datatypes"
 )
 
 func parseAuditLiteratureReviewLLMResponse(text string) (auditRound map[string]any, literatureReview map[string]any) {
@@ -86,52 +85,23 @@ func (s *TopicDiscoveryRunService) persistLiteratureReviewFromLLM(
 	}
 	auditStep.ManuscriptID = msID
 	title := strFromAny(lit["title"])
-	summary := strFromAny(lit["summary"])
 	content := strFromAny(lit["content_medium"])
 	if content == "" {
 		content = strFromAny(lit["content"])
 	}
-	structure := strFromAny(lit["structure"])
-	if structure == "" {
-		structure = "thematic"
-	}
-	var citations datatypes.JSON
-	if raw, ok := lit["citations"]; ok && raw != nil {
-		b, _ := json.Marshal(raw)
-		citations = b
-	}
-	inputSnap, _ := json.Marshal(map[string]any{
-		"run_version":  runVersion,
-		"direction":    input.Direction,
-		"venue":        input.Venue,
-		"audit_level":  input.AuditLevel,
-		"source_codes": input.SourceCodes,
-	})
-	metaSnap, _ := json.Marshal(map[string]any{
-		"topic_step_id": auditStep.ID,
-		"stage_code":    "topic_discovery",
-	})
 
 	row := &entity.PaperOutputLiteratureReview{
 		ManuscriptID: msID,
 		UserID:       uint64(userID),
 		Status:       "completed",
+		From:         "generated",
 		Format:       "md",
-		Citations:    citations,
-		InputParams:  inputSnap,
-		Meta:         metaSnap,
 	}
 	if title != "" {
 		row.Title = &title
 	}
-	if summary != "" {
-		row.Summary = &summary
-	}
 	if content != "" {
 		row.ContentMedium = &content
-	}
-	if structure != "" {
-		row.Structure = &structure
 	}
 	if err := s.litReviews.Create(ctx, row); err != nil {
 		return 0, err

@@ -36,6 +36,9 @@ func (r *PaperOutputLiteratureReviewImpl) Create(ctx context.Context, row *entit
 		if row.Format == "" {
 			row.Format = "md"
 		}
+		if row.From == "" {
+			row.From = "generated"
+		}
 		return tx.Create(row).Error
 	})
 }
@@ -169,15 +172,11 @@ func (r *PaperOutputLiteratureReviewImpl) CompleteExperimentPlanLink(
 	reviewID, manuscriptID uint64,
 	userID uint,
 	planID uint64,
-	metaJSON []byte,
 	llmResponseJSON []byte,
 ) (bool, error) {
 	updates := map[string]any{
-		"status":                           "completed",
+		"status":             "completed",
 		"experiment_plan_id": planID,
-	}
-	if len(metaJSON) > 0 {
-		updates["meta"] = metaJSON
 	}
 	if len(llmResponseJSON) > 0 {
 		updates["experiment_plan_llm_response"] = llmResponseJSON
@@ -199,13 +198,9 @@ func (r *PaperOutputLiteratureReviewImpl) FailExperimentPlanGeneration(
 	ctx context.Context,
 	reviewID, manuscriptID uint64,
 	userID uint,
-	metaJSON []byte,
 	llmResponseJSON []byte,
 ) (bool, error) {
 	updates := map[string]any{"status": "gen_exp_fail"}
-	if len(metaJSON) > 0 {
-		updates["meta"] = metaJSON
-	}
 	if len(llmResponseJSON) > 0 {
 		updates["experiment_plan_llm_response"] = llmResponseJSON
 	}
@@ -226,20 +221,44 @@ func (r *PaperOutputLiteratureReviewImpl) GetIDByExperimentPlanID(
 	ctx context.Context,
 	planID, manuscriptID uint64,
 ) (uint64, error) {
-	var id uint64
-	err := r.db.WithContext(ctx).
-		Model(&entity.PaperOutputLiteratureReview{}).
-		Select("id").
-		Where(
-			"experiment_plan_id = ? AND manuscript_id = ? AND status <> ?",
-			planID, manuscriptID, "deleted",
-		).
-		Limit(1).
-		Scan(&id).Error
+	m, err := r.MapLiteratureReviewIDsByExperimentPlanIDs(ctx, manuscriptID, []uint64{planID})
 	if err != nil {
 		return 0, err
 	}
-	return id, nil
+	return m[planID], nil
+}
+
+func (r *PaperOutputLiteratureReviewImpl) MapLiteratureReviewIDsByExperimentPlanIDs(
+	ctx context.Context,
+	manuscriptID uint64,
+	planIDs []uint64,
+) (map[uint64]uint64, error) {
+	out := make(map[uint64]uint64)
+	if len(planIDs) == 0 {
+		return out, nil
+	}
+	type pair struct {
+		ID               uint64 `gorm:"column:id"`
+		ExperimentPlanID uint64 `gorm:"column:experiment_plan_id"`
+	}
+	var rows []pair
+	err := r.db.WithContext(ctx).
+		Model(&entity.PaperOutputLiteratureReview{}).
+		Select("id", "experiment_plan_id").
+		Where(
+			"manuscript_id = ? AND status <> ? AND experiment_plan_id IN ?",
+			manuscriptID, "deleted", planIDs,
+		).
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		if row.ExperimentPlanID > 0 {
+			out[row.ExperimentPlanID] = row.ID
+		}
+	}
+	return out, nil
 }
 
 func (r *PaperOutputLiteratureReviewImpl) LinkExperimentPlan(

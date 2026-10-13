@@ -28,14 +28,12 @@ type PaperOutputLiteratureReviewRepo interface {
 		reviewID, manuscriptID uint64,
 		userID uint,
 		planID uint64,
-		metaJSON []byte,
 		llmResponseJSON []byte,
 	) (bool, error)
 	FailExperimentPlanGeneration(
 		ctx context.Context,
 		reviewID, manuscriptID uint64,
 		userID uint,
-		metaJSON []byte,
 		llmResponseJSON []byte,
 	) (bool, error)
 	SaveExperimentPlanLLMRequest(
@@ -51,5 +49,11 @@ type PaperOutputLiteratureReviewRepo interface {
 	) (bool, error)
 	// GetIDByExperimentPlanID 由 experiment_plan_id 反查文献综述（input_params 缺失时的兜底）。
 	GetIDByExperimentPlanID(ctx context.Context, planID, manuscriptID uint64) (uint64, error)
+	// MapLiteratureReviewIDsByExperimentPlanIDs 批量反查 experiment_plan_id → literature_review id。
+	MapLiteratureReviewIDsByExperimentPlanIDs(
+		ctx context.Context,
+		manuscriptID uint64,
+		planIDs []uint64,
+	) (map[uint64]uint64, error)
 	LinkExperimentPlan(ctx context.Context, reviewID, planID, userID, manuscriptID uint64) error
 }

@@ -107,27 +107,35 @@ func (s *LiteratureReviewService) GetDetail(
 }
 
 func literatureReviewItemView(row entity.PaperOutputLiteratureReview) response.PaperLiteratureReviewItemView {
+	from := row.From
+	if from == "" {
+		from = "generated"
+	}
 	item := response.PaperLiteratureReviewItemView{
 		ID:        strconv.FormatUint(row.ID, 10),
 		Version:   row.Version,
 		Status:    row.Status,
+		From:      from,
 		Format:    row.Format,
 		CreatedAt: row.CreatedAt.UTC().Format(time.RFC3339),
 	}
 	if row.ExperimentPlanID != nil && *row.ExperimentPlanID > 0 {
 		item.ExperimentPlanID = strconv.FormatUint(*row.ExperimentPlanID, 10)
 	}
-	if row.Structure != nil {
-		item.Structure = *row.Structure
-	}
 	if row.Title != nil {
 		item.Title = *row.Title
 	}
-	if row.Summary != nil {
-		item.Summary = *row.Summary
-	}
 	if row.ContentMedium != nil {
 		item.ContentMedium = *row.ContentMedium
+	}
+	if row.PdfURI != nil {
+		item.PdfURI = *row.PdfURI
+	}
+	if row.WordURI != nil {
+		item.WordURI = *row.WordURI
+	}
+	if row.PptURI != nil {
+		item.PptURI = *row.PptURI
 	}
 	return item
 }

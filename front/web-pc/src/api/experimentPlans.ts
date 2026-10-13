@@ -133,6 +133,15 @@ export function formatExperimentPlanStatus(status: string): string {
   return map[status] ?? status
 }
 
+export type ExperimentPlanStatusTone = 'success' | 'draft' | 'muted' | 'default'
+
+export function experimentPlanStatusTone(status: string): ExperimentPlanStatusTone {
+  if (status === 'completed') return 'success'
+  if (status === 'draft') return 'draft'
+  if (status === 'deleted') return 'muted'
+  return 'default'
+}
+
 export function experimentPlanRowTitle(item: PaperExperimentPlanItem): string {
   const t = item.title?.trim()
   if (t) return t

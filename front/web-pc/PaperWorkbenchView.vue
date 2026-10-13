@@ -1720,6 +1720,10 @@ function isTopicSourceChecked(code: string) {
   return topicForm.sourceCodes.includes(code)
 }
 
+function onUploadExperimentPlanPrimary() {
+  workflowPanelsRef.value?.openLitReviewUploadExpPlanDialog()
+}
+
 async function onPrimaryAction() {
   if (activeModule.value === 'topic-discovery') {
     if (parseTopicKeywords(topicForm.keywords).length === 0) {
@@ -2017,6 +2021,28 @@ watch(
         >
           <span class="paper-run-icon" aria-hidden="true">▶</span>
           {{ primaryActionLabel }}
+        </button>
+        <button
+          v-else-if="isLiteratureReviewModule"
+          type="button"
+          class="paper-run-btn"
+          @click="onUploadExperimentPlanPrimary"
+        >
+          <span class="paper-run-icon paper-run-icon--upload" aria-hidden="true">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M12 3v12" />
+              <path d="m7 8 5-5 5 5" />
+              <path d="M5 21h14" />
+            </svg>
+          </span>
+          上传文献综述
         </button>
       </header>
 
@@ -2726,6 +2752,12 @@ watch(
 
 .paper-run-icon {
   font-size: 12px;
+}
+
+.paper-run-icon--upload svg {
+  display: block;
+  width: 16px;
+  height: 16px;
 }
 
 .paper-gate {

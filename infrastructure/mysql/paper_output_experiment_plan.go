@@ -52,6 +52,11 @@ func (r *PaperOutputExperimentPlanImpl) ListByManuscript(
 ) ([]entity.PaperOutputExperimentPlan, error) {
 	var rows []entity.PaperOutputExperimentPlan
 	err := r.db.WithContext(ctx).
+		Select(
+			"id", "manuscript_id", "user_id", "version", "is_current", "status",
+			"title", "summary", "format", "input_params", "experiment_data_uri",
+			"created_at", "updated_at",
+		).
 		Where("manuscript_id = ? AND status <> ?", manuscriptID, "deleted").
 		Order("created_at DESC, id DESC").
 		Find(&rows).Error
