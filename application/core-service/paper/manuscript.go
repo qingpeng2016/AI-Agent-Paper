@@ -84,6 +84,7 @@ func (s *ManuscriptService) manuscriptItemView(ctx context.Context, row entity.P
 		IsCurrent:       row.IsCurrent,
 		ContentLanguage: NormalizeContentLanguage(row.ContentLanguage),
 		CreatedAt:       row.CreatedAt.UTC().Format(time.RFC3339),
+		DraftVersion:    row.DraftVersion,
 	}
 	if row.DisciplineID != nil && *row.DisciplineID > 0 {
 		disc, err := s.catalog.FindDisciplineByID(ctx, *row.DisciplineID)

@@ -345,6 +345,7 @@ CREATE TABLE IF NOT EXISTS `paper_manuscript` (
   `draft_bibtex_uri`  VARCHAR(1024) DEFAULT NULL COMMENT 'BibTeX 文件路径',
   `draft_word_count`  INT UNSIGNED DEFAULT NULL COMMENT '当前稿字数',
   `draft_updated_at`  DATETIME     DEFAULT NULL COMMENT '最近一次写作/保存',
+  `draft_version`     INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '论文写作稿版本（每次成功生成整稿 +1；0=尚未生成）',
   `status`            VARCHAR(16)  NOT NULL DEFAULT 'active' COMMENT 'active|archived',
   `is_current`        TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '是否工作台当前论文（每用户 active 至多一条为 1）',
   `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',

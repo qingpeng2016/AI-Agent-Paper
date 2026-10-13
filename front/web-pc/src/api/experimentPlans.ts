@@ -151,8 +151,16 @@ export function experimentPlanStatusTone(status: string): ExperimentPlanStatusTo
   return 'default'
 }
 
+export function formatExperimentPlanVersion(
+  item: Pick<PaperExperimentPlanItem, 'version'>,
+): string {
+  const v = item.version
+  if (!Number.isFinite(v) || v < 1) return '—'
+  return `v${v}`
+}
+
 export function experimentPlanRowTitle(item: PaperExperimentPlanItem): string {
   const t = item.title?.trim()
   if (t) return t
-  return `实验方案 v${item.version}`
+  return '实验方案'
 }

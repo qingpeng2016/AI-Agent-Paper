@@ -485,6 +485,7 @@ function applyManuscriptListFromApi(data: PaperManuscriptListResponse, preferId?
     isCurrent: m.is_current,
     disciplineCode: m.discipline_code,
     disciplineLabel: m.discipline_label,
+    draftVersion: m.draft_version,
   }))
 
   if (!manuscripts.value.length) {
@@ -2526,6 +2527,7 @@ watch(
         :module-id="activeModule"
         :manuscript-id="activeManuscriptId"
         :manuscript-title="currentManuscript?.title ?? '未命名'"
+        :manuscript-draft-version="currentManuscript?.draftVersion"
         :pending-open-experiment-plan-id="pendingOpenExperimentPlanId"
         @navigate-module="onNavigateModule"
         @consumed-pending-experiment-plan="onConsumedPendingExperimentPlan"

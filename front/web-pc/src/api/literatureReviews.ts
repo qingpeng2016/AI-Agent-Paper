@@ -254,6 +254,14 @@ export function literatureReviewCanDownloadPpt(
   return literatureReviewHasAttachmentUri(item.ppt_uri)
 }
 
+export function formatLiteratureReviewVersion(
+  item: Pick<PaperLiteratureReviewItem, 'version'>,
+): string {
+  const v = item.version
+  if (!Number.isFinite(v) || v < 1) return '—'
+  return `v${v}`
+}
+
 export function formatLiteratureReviewFrom(from?: string): string {
   if (from === 'upload') return '上传'
   return '生成'

@@ -9,6 +9,7 @@ type PaperManuscriptItemView struct {
 	DisciplineCode  string `json:"discipline_code,omitempty"`
 	DisciplineLabel string `json:"discipline_label,omitempty"`
 	CreatedAt       string `json:"created_at,omitempty"`
+	DraftVersion    uint   `json:"draft_version,omitempty"`
 }
 
 type PaperManuscriptListView struct {

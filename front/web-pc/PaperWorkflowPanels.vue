@@ -12,6 +12,7 @@ import {
   literatureReviewFromTone,
   literatureReviewHasAttachmentUri,
   formatLiteratureReviewStatus,
+  formatLiteratureReviewVersion,
   literatureReviewAttachmentFileName,
   literatureReviewPdfFileName,
   literatureReviewPptFileName,
@@ -24,8 +25,10 @@ import {
   type LiteratureReviewBibliographyEntry,
   type PaperLiteratureReviewItem,
 } from '@/api/literatureReviews'
+import { formatManuscriptDraftVersion } from '@/api/manuscripts'
 import {
   experimentPlanRowTitle,
+  formatExperimentPlanVersion,
   fetchExperimentPlanDetail,
   fetchExperimentPlans,
   EXPERIMENT_PLAN_LIST_PAGE_SIZE,
@@ -61,15 +64,17 @@ const props = withDefaults(
     moduleId: PaperModuleId
     manuscriptId?: string
     manuscriptTitle?: string
+    manuscriptDraftVersion?: number
     pendingOpenExperimentPlanId?: string | null
   }>(),
   {
     manuscriptId: '',
     manuscriptTitle: '未命名',
+    manuscriptDraftVersion: undefined,
     pendingOpenExperimentPlanId: null,
   },
 )
-const { moduleId, manuscriptId, manuscriptTitle } = toRefs(props)
+const { moduleId, manuscriptId, manuscriptTitle, manuscriptDraftVersion } = toRefs(props)
 
 const figureForm = reactive<FigureGenerationForm>({
   ...DEFAULT_FIGURE_GENERATION,
@@ -195,6 +200,14 @@ const paperWriteCompileAnonymous = ref(true)
 const paperWriteDepsLoading = ref(false)
 
 const paperWriteVenueLabel = computed(() => 'NeurIPS / ICLR / ICML')
+
+const paperWriteManuscriptVersionLabel = computed(() => {
+  const fromManuscript = manuscriptDraftVersion.value
+  if (fromManuscript != null && fromManuscript >= 1) {
+    return formatManuscriptDraftVersion(fromManuscript)
+  }
+  return formatManuscriptDraftVersion(undefined)
+})
 
 const paperWriteLitGateOk = computed(() =>
   litReviewItems.value.some((it) => literatureReviewCanDownloadDocuments(it)),
@@ -771,7 +784,7 @@ function isChartChecked(value: string) {
 function litReviewRowTitle(item: PaperLiteratureReviewItem): string {
   const t = item.title?.trim()
   if (t) return t
-  return `文献综述 v${item.version}`
+  return '文献综述'
 }
 
 function formatLitReviewCreatedAt(iso: string): string {
@@ -1159,6 +1172,7 @@ defineExpose({
           <col class="wf-lit-col-created-pct" />
           <col class="wf-lit-col-from-pct" />
           <col class="wf-lit-col-status-pct" />
+          <col class="wf-lit-col-version-pct" />
           <col class="wf-lit-col-actions-pct" />
         </colgroup>
         <thead>
@@ -1167,6 +1181,7 @@ defineExpose({
             <th class="wf-lit-col-meta wf-lit-col-created">创建时间</th>
             <th class="wf-lit-col-meta wf-lit-col-from-head">来源</th>
             <th class="wf-lit-col-meta wf-lit-col-status">状态</th>
+            <th class="wf-lit-col-meta wf-lit-col-version">版本</th>
             <th class="wf-lit-col-actions">
               <div class="wf-lit-actions">
                 <span class="wf-lit-head-slot">
@@ -1213,6 +1228,9 @@ defineExpose({
               >
                 {{ formatLiteratureReviewStatus(item.status) }}
               </span>
+            </td>
+            <td class="wf-lit-col-meta wf-lit-col-version">
+              <span class="wf-output-version">{{ formatLiteratureReviewVersion(item) }}</span>
             </td>
             <td class="wf-lit-col-actions">
               <div class="wf-lit-actions">
@@ -1550,12 +1568,20 @@ defineExpose({
     </section>
 
     <section v-else class="wf-panel wf-lit-list-panel">
-      <table class="wf-table wf-lit-table">
+      <table class="wf-table wf-lit-table wf-lit-table--exp-plan">
+        <colgroup>
+          <col class="wf-exp-col-title-pct" />
+          <col class="wf-exp-col-created-pct" />
+          <col class="wf-exp-col-status-pct" />
+          <col class="wf-exp-col-version-pct" />
+          <col class="wf-exp-col-actions-pct" />
+        </colgroup>
         <thead>
           <tr>
-            <th>标题</th>
-            <th>创建时间</th>
-            <th>状态</th>
+            <th class="wf-lit-col-title wf-exp-col-title">标题</th>
+            <th class="wf-exp-col-created">创建时间</th>
+            <th class="wf-exp-col-status">状态</th>
+            <th class="wf-exp-col-version wf-lit-col-version">版本</th>
             <th class="wf-lit-col-actions">
               <div class="wf-lit-actions">
                 <span class="wf-lit-head-slot">
@@ -1583,15 +1609,20 @@ defineExpose({
         </thead>
         <tbody>
           <tr v-for="item in expPlanItems" :key="item.id">
-            <td class="wf-lit-col-title">{{ experimentPlanRowTitle(item) }}</td>
-            <td class="wf-lit-created-at">{{ formatLitReviewCreatedAt(item.created_at) }}</td>
-            <td>
+            <td class="wf-lit-col-title wf-exp-col-title">{{ experimentPlanRowTitle(item) }}</td>
+            <td class="wf-lit-created-at wf-exp-col-created">
+              {{ formatLitReviewCreatedAt(item.created_at) }}
+            </td>
+            <td class="wf-exp-col-status">
               <span
                 class="wf-status-pill"
                 :class="`wf-status-pill--${experimentPlanStatusTone(item.status)}`"
               >
                 {{ formatExperimentPlanStatus(item.status) }}
               </span>
+            </td>
+            <td class="wf-exp-col-version wf-lit-col-version">
+              <span class="wf-output-version">{{ formatExperimentPlanVersion(item) }}</span>
             </td>
             <td class="wf-lit-col-actions">
               <div class="wf-lit-actions">
@@ -1768,7 +1799,12 @@ defineExpose({
     <section class="wf-panel wf-paper-write-head">
       <div class="wf-paper-write-head-row">
         <div class="wf-paper-write-head-main">
-          <h2 class="wf-title wf-title--module-head">当前论文 · {{ manuscriptTitle }}</h2>
+          <h2 class="wf-title wf-title--module-head wf-paper-write-ms-headline">
+            <span>当前论文 · {{ manuscriptTitle }}</span>
+            <span class="wf-paper-write-ms-version">
+              版本号 {{ paperWriteManuscriptVersionLabel }}
+            </span>
+          </h2>
           <p class="wf-meta wf-paper-write-sub">
             {{ DEMO_MANUSCRIPT.title }} · 引用 {{ DEMO_MANUSCRIPT.cites }} 条（已验证
             {{ DEMO_MANUSCRIPT.verifiedCites }}）
@@ -2217,6 +2253,9 @@ defineExpose({
           <div class="wf-lit-view-heading">
             <h2 id="wf-lit-bundle-title" class="paper-modal-title wf-lit-view-title">
               {{ litReviewRowTitle(litReviewBundleView.item) }}
+              <span class="wf-output-version wf-output-version--title">{{
+                formatLiteratureReviewVersion(litReviewBundleView.item)
+              }}</span>
             </h2>
           </div>
           <button type="button" class="paper-modal-close" aria-label="关闭" @click="closeLitReviewBundleView">
@@ -2240,6 +2279,10 @@ defineExpose({
         <div class="paper-modal-body wf-lit-view-body wf-lit-bundle-body">
           <template v-if="litReviewBundleView.tab === 'literature-review'">
             <p class="wf-meta wf-lit-meta">
+              <span class="wf-output-version">{{
+                formatLiteratureReviewVersion(litReviewBundleView.item)
+              }}</span>
+              <span>·</span>
               <span>{{ formatLitReviewCreatedAt(litReviewBundleView.item.created_at) }}</span>
               <span>·</span>
               <span
@@ -2556,6 +2599,9 @@ defineExpose({
           <div class="wf-lit-view-heading">
             <h2 id="wf-exp-plan-bundle-title" class="paper-modal-title wf-lit-view-title">
               {{ experimentPlanRowTitle(expPlanBundleView.item) }}
+              <span class="wf-output-version wf-output-version--title">{{
+                formatExperimentPlanVersion(expPlanBundleView.item)
+              }}</span>
             </h2>
           </div>
           <button
@@ -2587,6 +2633,10 @@ defineExpose({
             <p v-if="expPlanBundleView.loading" class="wf-meta">正在加载方案…</p>
             <template v-else>
               <p class="wf-meta wf-lit-meta">
+                <span class="wf-output-version">{{
+                  formatExperimentPlanVersion(expPlanBundleView.item)
+                }}</span>
+                <span>·</span>
                 <span>{{ formatLitReviewCreatedAt(expPlanBundleView.item.created_at) }}</span>
                 <span>·</span>
                 <span
@@ -2865,11 +2915,15 @@ defineExpose({
 }
 
 .wf-lit-table--lit-review col.wf-lit-col-title-pct {
-  width: 40%;
+  width: 34%;
+}
+
+.wf-lit-table--lit-review col.wf-lit-col-version-pct {
+  width: 8%;
 }
 
 .wf-lit-table--lit-review col.wf-lit-col-created-pct {
-  width: 18%;
+  width: 16%;
 }
 
 .wf-lit-table--lit-review col.wf-lit-col-from-pct {
@@ -2891,8 +2945,13 @@ defineExpose({
   text-overflow: ellipsis;
 }
 
+.wf-lit-table--lit-review .wf-lit-col-version {
+  width: 8%;
+  font-variant-numeric: tabular-nums;
+}
+
 .wf-lit-table--lit-review .wf-lit-col-created {
-  width: 18%;
+  width: 16%;
 }
 
 .wf-lit-table--lit-review .wf-lit-col-from-head {
@@ -2918,6 +2977,88 @@ defineExpose({
   overflow: hidden;
   text-overflow: ellipsis;
   vertical-align: middle;
+}
+
+.wf-lit-table--exp-plan {
+  table-layout: fixed;
+  width: 100%;
+}
+
+.wf-lit-table--exp-plan col.wf-exp-col-title-pct {
+  width: 44%;
+}
+
+.wf-lit-table--exp-plan col.wf-exp-col-created-pct {
+  width: 16%;
+}
+
+.wf-lit-table--exp-plan col.wf-exp-col-status-pct {
+  width: 11%;
+}
+
+.wf-lit-table--exp-plan col.wf-exp-col-version-pct {
+  width: 9%;
+}
+
+.wf-lit-table--exp-plan col.wf-exp-col-actions-pct {
+  width: 20%;
+}
+
+.wf-lit-table--exp-plan .wf-exp-col-title {
+  max-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wf-lit-table--exp-plan .wf-exp-col-created {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wf-lit-table--exp-plan .wf-exp-col-status {
+  white-space: nowrap;
+}
+
+.wf-lit-table--exp-plan .wf-exp-col-status .wf-status-pill {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wf-lit-table--exp-plan .wf-exp-col-version {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.wf-lit-table--exp-plan .wf-exp-col-version .wf-output-version {
+  padding: 3px 8px;
+  font-size: 13px;
+}
+
+.wf-lit-table--lit-review .wf-lit-col-version .wf-output-version,
+.wf-lit-table--exp-plan .wf-exp-col-version .wf-output-version {
+  font-size: 13px;
+}
+
+.wf-output-version {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.35;
+  color: #4338ca;
+  background: #eef2ff;
+  border-radius: 6px;
+}
+
+.wf-output-version--title {
+  margin-left: 8px;
+  vertical-align: middle;
+  font-size: 13px;
 }
 
 .wf-lit-from-tag {
@@ -4132,6 +4273,19 @@ defineExpose({
 
 .wf-paper-write-sub {
   margin-top: 6px;
+}
+
+.wf-paper-write-ms-headline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.wf-paper-write-ms-version {
+  font-size: 14px;
+  font-weight: 600;
+  color: #4338ca;
 }
 
 .wf-paper-write-gates {

@@ -12,6 +12,7 @@ type PaperManuscript struct {
 	ContentLanguage  string  `gorm:"column:content_language;size:8;not null;default:en"`
 	Status           string  `gorm:"column:status;size:16;not null;default:active"`
 	IsCurrent    bool      `gorm:"column:is_current;not null;default:0"`
+	DraftVersion uint      `gorm:"column:draft_version;not null;default:0"`
 	CreatedAt time.Time `gorm:"column:created_at"`
 	UpdatedAt time.Time `gorm:"column:updated_at"`
 }

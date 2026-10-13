@@ -17,6 +17,13 @@ export type PaperManuscriptApiItem = {
   discipline_code?: string
   discipline_label?: string
   created_at?: string
+  draft_version?: number
+}
+
+export function formatManuscriptDraftVersion(draftVersion?: number): string {
+  const v = draftVersion ?? 0
+  if (!Number.isFinite(v) || v < 1) return '—'
+  return `v${v}`
 }
 
 export type PaperManuscriptListResponse = {

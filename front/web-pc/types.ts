@@ -314,6 +314,8 @@ export type PaperManuscriptItem = {
   /** 创建论文时绑定的学科（选题发现只读展示） */
   disciplineCode?: string
   disciplineLabel?: string
+  /** 论文写作稿版本（paper_manuscript.draft_version） */
+  draftVersion?: number
 }
 
 export const DEMO_PAPER_MANUSCRIPTS: PaperManuscriptItem[] = [
