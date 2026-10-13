@@ -50,6 +50,7 @@ import PaperMyManuscriptsPanel from './PaperMyManuscriptsPanel.vue'
 import PaperUserLiteraturePanel from './PaperUserLiteraturePanel.vue'
 import PaperInviteRebatePanel from './PaperInviteRebatePanel.vue'
 import PaperPersonalCenterPanel from './PaperPersonalCenterPanel.vue'
+import PaperEnvironmentPanel from './PaperEnvironmentPanel.vue'
 import PaperSelect from './PaperSelect.vue'
 import PaperMultiSelect from './PaperMultiSelect.vue'
 import PaperWorkflowPanels from './PaperWorkflowPanels.vue'
@@ -115,7 +116,7 @@ const ACTIVE_MODULE_STORAGE_KEY = 'atm:paper:active-module:v1'
 function loadStoredActiveModule(): PaperModuleId {
   try {
     const raw = localStorage.getItem(ACTIVE_MODULE_STORAGE_KEY)?.trim()
-    if (raw && PAPER_MODULES.some((m) => m.id === raw && m.id !== 'environment')) {
+    if (raw && PAPER_MODULES.some((m) => m.id === raw)) {
       return raw as PaperModuleId
     }
   } catch {
@@ -125,7 +126,6 @@ function loadStoredActiveModule(): PaperModuleId {
 }
 
 function persistActiveModule(id: PaperModuleId) {
-  if (id === 'environment') return
   try {
     localStorage.setItem(ACTIVE_MODULE_STORAGE_KEY, id)
   } catch {
@@ -149,7 +149,8 @@ const showGenericModuleLoading = computed(
     moduleContentLoading.value &&
     activeModule.value !== 'topic-discovery' &&
     activeModule.value !== 'literature-review' &&
-    activeModule.value !== 'experiment-planning',
+    activeModule.value !== 'experiment-planning' &&
+    activeModule.value !== 'paper-writing',
 )
 
 const topicDiscoveryPageLoading = computed(
@@ -231,6 +232,7 @@ const topicRunsByManuscript = ref<Record<string, TopicRunDemo>>({})
 const litReviewDoneByManuscript = ref<Record<string, boolean>>({})
 const experimentPlanDoneByManuscript = ref<Record<string, boolean>>({})
 const workflowPanelsRef = ref<InstanceType<typeof PaperWorkflowPanels> | null>(null)
+const userLiteraturePanelRef = ref<InstanceType<typeof PaperUserLiteraturePanel> | null>(null)
 const figureManagementTab = ref<'upload' | 'generate'>('upload')
 const paperMainRef = ref<HTMLElement | null>(null)
 const topicFlowPanelRef = ref<HTMLElement | null>(null)
@@ -623,16 +625,38 @@ const isMyManuscriptsModule = computed(() => activeModule.value === 'my-manuscri
 const isUserLiteratureModule = computed(() => activeModule.value === 'user-literature')
 const isInviteRebateModule = computed(() => activeModule.value === 'invite-rebate')
 const isPersonalCenterModule = computed(() => activeModule.value === 'personal-center')
+const isEnvironmentModule = computed(() => activeModule.value === 'environment')
 const isUtilityModule = computed(
   () =>
     isMyManuscriptsModule.value ||
     isUserLiteratureModule.value ||
+    isEnvironmentModule.value ||
     isInviteRebateModule.value ||
     isPersonalCenterModule.value,
 )
 const isTopicDiscoveryModule = computed(() => activeModule.value === 'topic-discovery')
 
 const isLiteratureReviewModule = computed(() => activeModule.value === 'literature-review')
+const isExperimentPlanningModule = computed(() => activeModule.value === 'experiment-planning')
+
+/** 仅本篇工作流模块展示顶栏「当前论文」切换（全局模块如我的论文/文献管理不展示） */
+const MANUSCRIPT_CONTEXT_MODULE_IDS = [
+  'topic-discovery',
+  'literature-review',
+  'experiment-planning',
+  'paper-writing',
+] as const satisfies readonly PaperModuleId[]
+
+const showManuscriptContextInHeader = computed(() =>
+  (MANUSCRIPT_CONTEXT_MODULE_IDS as readonly PaperModuleId[]).includes(activeModule.value),
+)
+
+const manuscriptSelectOptions = computed(() =>
+  activeManuscripts.value.map((m) => ({
+    value: m.id,
+    label: `${m.title}${m.venueHint ? ` · ${m.venueHint}` : ''}`,
+  })),
+)
 
 const personalCenterPanelRef = ref<InstanceType<typeof PaperPersonalCenterPanel> | null>(null)
 
@@ -677,6 +701,7 @@ function onEnvironmentSaved() {
 const SECONDARY_WORKFLOW_MODULES = [
   'literature-review',
   'experiment-planning',
+  'paper-writing',
   'figure-generation',
 ] as const
 
@@ -861,6 +886,7 @@ const litReviewReadyForExperimentPlan = computed(
 const showPrimaryAction = computed(() => {
   if (isUtilityModule.value) return false
   if (isLiteratureReviewModule.value) return false
+  if (isExperimentPlanningModule.value) return false
   if (activeModule.value === 'figure-generation' && figureManagementTab.value === 'upload') return false
   return true
 })
@@ -1725,6 +1751,14 @@ function onUploadExperimentPlanPrimary() {
   workflowPanelsRef.value?.openLitReviewUploadExpPlanDialog()
 }
 
+function onUserLiteratureUploadPrimary() {
+  userLiteraturePanelRef.value?.openUploadDialog()
+}
+
+function onExpPlanUploadPlanPrimary() {
+  void workflowPanelsRef.value?.openExpPlanUploadPlanDialog()
+}
+
 async function onPrimaryAction() {
   if (activeModule.value === 'topic-discovery') {
     if (parseTopicKeywords(topicForm.keywords).length === 0) {
@@ -1952,35 +1986,6 @@ watch(
         </div>
       </div>
 
-      <div class="paper-manuscript-switcher">
-        <label class="paper-manuscript-label" for="paper-manuscript-select">当前论文</label>
-        <div
-          class="paper-manuscript-select-wrap"
-          :class="{ 'paper-manuscript-select-wrap--busy': manuscriptSwitching }"
-        >
-          <select
-            id="paper-manuscript-select"
-            class="paper-manuscript-select"
-            :class="{ 'paper-manuscript-select--empty': !activeManuscripts.length }"
-            :value="activeManuscriptId"
-            :disabled="!activeManuscripts.length || manuscriptSwitching"
-            @change="onManuscriptChange(($event.target as HTMLSelectElement).value)"
-          >
-            <option v-for="m in activeManuscripts" :key="m.id" :value="m.id">
-              {{ m.title }}{{ m.venueHint ? ` · ${m.venueHint}` : '' }}
-            </option>
-          </select>
-          <span
-            v-if="manuscriptSwitching"
-            class="paper-manuscript-select-loading"
-            aria-label="切换中"
-          />
-        </div>
-        <button type="button" class="paper-manuscript-new" @click="onAddManuscriptClick">
-          添加论文
-        </button>
-      </div>
-
       <nav class="paper-nav" aria-label="科研工作流">
         <div v-for="group in PAPER_MODULE_GROUPS" :key="group.id" class="paper-nav-group">
           <div class="paper-nav-group-head">
@@ -2008,9 +2013,28 @@ watch(
       <header class="paper-main-head">
         <div>
           <h1 class="paper-main-title">{{ currentMeta.label }}</h1>
-          <p class="paper-main-manuscript">
-            当前论文：<strong>{{ currentManuscript?.title ?? '' }}</strong>
-            <span v-if="currentManuscript?.venueHint"> · {{ currentManuscript.venueHint }}</span>
+          <p v-if="showManuscriptContextInHeader" class="paper-main-manuscript">
+            <span class="paper-main-manuscript-label">当前论文：</span>
+            <span
+              class="paper-main-manuscript-picker"
+              :class="{ 'paper-main-manuscript-picker--busy': manuscriptSwitching }"
+            >
+              <PaperSelect
+                :model-value="activeManuscriptId"
+                :options="manuscriptSelectOptions"
+                variant="inline"
+                placeholder="请选择论文"
+                filterable
+                filter-placeholder="搜索论文标题"
+                :disabled="!activeManuscripts.length || manuscriptSwitching"
+                @update:model-value="onManuscriptChange"
+              />
+              <span
+                v-if="manuscriptSwitching"
+                class="paper-main-manuscript-picker-loading"
+                aria-label="切换中"
+              />
+            </span>
           </p>
           <p class="paper-main-desc">{{ currentMeta.description }}</p>
         </div>
@@ -2023,6 +2047,28 @@ watch(
         >
           <span class="paper-run-icon" aria-hidden="true">▶</span>
           {{ primaryActionLabel }}
+        </button>
+        <button
+          v-else-if="isExperimentPlanningModule"
+          type="button"
+          class="paper-run-btn"
+          @click="onExpPlanUploadPlanPrimary"
+        >
+          <span class="paper-run-icon paper-run-icon--upload" aria-hidden="true">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M12 3v12" />
+              <path d="m7 8 5-5 5 5" />
+              <path d="M5 21h14" />
+            </svg>
+          </span>
+          上传实验方案
         </button>
         <button
           v-else-if="isLiteratureReviewModule"
@@ -2045,6 +2091,49 @@ watch(
             </svg>
           </span>
           上传文献综述
+        </button>
+        <button
+          v-else-if="isUserLiteratureModule"
+          type="button"
+          class="paper-run-btn"
+          @click="onUserLiteratureUploadPrimary"
+        >
+          <span class="paper-run-icon paper-run-icon--upload" aria-hidden="true">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M12 3v12" />
+              <path d="m7 8 5-5 5 5" />
+              <path d="M5 21h14" />
+            </svg>
+          </span>
+          上传文献
+        </button>
+        <button
+          v-else-if="isMyManuscriptsModule"
+          type="button"
+          class="paper-run-btn"
+          @click="onAddManuscriptClick"
+        >
+          <span class="paper-run-icon paper-run-icon--add" aria-hidden="true">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M12 5v14" />
+              <path d="M5 12h14" />
+            </svg>
+          </span>
+          添加论文
         </button>
       </header>
 
@@ -2358,7 +2447,15 @@ watch(
 
       <PaperUserLiteraturePanel
         v-else-if="activeModule === 'user-literature'"
+        ref="userLiteraturePanelRef"
         :key="`user-literature-${moduleContentKey}`"
+      />
+
+      <PaperEnvironmentPanel
+        v-else-if="activeModule === 'environment'"
+        :key="`environment-${moduleContentKey}`"
+        :env-preference="envPreference"
+        @environment-saved="onEnvironmentSaved"
       />
 
       <PaperInviteRebatePanel
@@ -2372,8 +2469,6 @@ watch(
         ref="personalCenterPanelRef"
         :manuscript-id="activeManuscriptId"
         :manuscript-title="currentManuscript?.title ?? '未命名'"
-        :env-preference="envPreference"
-        @environment-saved="onEnvironmentSaved"
       />
 
       <PaperWorkflowPanels
@@ -2439,104 +2534,13 @@ watch(
   opacity: 0.75;
 }
 
-.paper-manuscript-switcher {
-  margin-top: 20px;
-  padding: 14px 12px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 12px;
-}
-
-.paper-manuscript-label {
-  display: block;
-  margin-bottom: 8px;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: rgba(255, 255, 255, 0.65);
-}
-
-.paper-manuscript-select-wrap {
-  position: relative;
-}
-
-.paper-manuscript-select-wrap--busy .paper-manuscript-select {
-  opacity: 0.88;
-}
-
-.paper-manuscript-select-loading {
-  position: absolute;
-  top: 50%;
-  right: 34px;
-  width: 16px;
-  height: 16px;
-  border: 2px solid rgba(100, 116, 139, 0.35);
-  border-top-color: #6366f1;
-  border-radius: 50%;
-  pointer-events: none;
-  animation: paper-manuscript-select-spin 0.65s linear infinite;
-}
-
-@keyframes paper-manuscript-select-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.paper-manuscript-select {
-  width: 100%;
-  padding: 9px 32px 9px 10px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #1e1b4b;
-  background-color: #fff;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  border: none;
-  border-radius: 8px;
-  appearance: none;
-  -webkit-appearance: none;
-  cursor: pointer;
-}
-
-.paper-manuscript-select:disabled {
-  cursor: default;
-  opacity: 0.92;
-}
-
-.paper-manuscript-select--empty:disabled {
-  min-height: 36px;
-  color: transparent;
-  background-color: rgba(255, 255, 255, 0.92);
-}
-
-.paper-manuscript-new {
-  width: 100%;
-  margin-top: 8px;
-  padding: 8px 10px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #fff;
-  background: transparent;
-  border: 1px dashed rgba(255, 255, 255, 0.35);
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-.paper-manuscript-new:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: rgba(255, 255, 255, 0.5);
-}
-
 .paper-nav {
   display: flex;
   flex: 1;
   flex-direction: column;
   gap: 8px;
   min-height: 0;
-  margin-top: 16px;
+  margin-top: 20px;
   overflow-x: hidden;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
@@ -2710,14 +2714,48 @@ watch(
 }
 
 .paper-main-manuscript {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  align-items: center;
   margin: 6px 0 0;
   font-size: 13px;
   color: var(--atm-text-muted, #64748b);
 }
 
-.paper-main-manuscript strong {
-  color: var(--atm-text, #1e1b4b);
-  font-weight: 700;
+.paper-main-manuscript-label {
+  flex-shrink: 0;
+  font-weight: 500;
+}
+
+.paper-main-manuscript-picker {
+  position: relative;
+  display: inline-flex;
+  max-width: min(100%, 560px);
+}
+
+.paper-main-manuscript-picker--busy :deep(.paper-select-trigger) {
+  opacity: 0.88;
+}
+
+.paper-main-manuscript-picker-loading {
+  position: absolute;
+  top: 50%;
+  right: -22px;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(100, 116, 139, 0.35);
+  border-top-color: #6366f1;
+  border-radius: 50%;
+  pointer-events: none;
+  transform: translateY(-50%);
+  animation: paper-main-manuscript-picker-spin 0.65s linear infinite;
+}
+
+@keyframes paper-main-manuscript-picker-spin {
+  to {
+    transform: translateY(-50%) rotate(360deg);
+  }
 }
 
 .paper-main-desc {
@@ -2759,7 +2797,8 @@ watch(
   font-size: 12px;
 }
 
-.paper-run-icon--upload svg {
+.paper-run-icon--upload svg,
+.paper-run-icon--add svg {
   display: block;
   width: 16px;
   height: 16px;

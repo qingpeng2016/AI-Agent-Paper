@@ -2,12 +2,12 @@ export type PaperModuleId =
   | 'topic-discovery'
   | 'literature-review'
   | 'experiment-planning'
+  | 'paper-writing'
   | 'figure-generation'
   | 'user-literature'
   | 'my-manuscripts'
   | 'invite-rebate'
   | 'personal-center'
-  /** 操作日志等；侧栏无独立入口（环境配置在个人中心 Tab） */
   | 'environment'
 
 export type PaperModuleMeta = {
@@ -33,6 +33,11 @@ export const PAPER_MODULES: PaperModuleMeta[] = [
     description: '设计假设、基线、指标与可执行实验步骤',
   },
   {
+    id: 'paper-writing',
+    label: '论文撰写',
+    description: '基于综述、实验方案与图表生成稿件正文（LaTeX/Markdown），对接写作与审计流程',
+  },
+  {
     id: 'user-literature',
     label: '文献管理',
     description: '查看与管理已入库的用户文献（paper_user_literature，含本地上传与各平台同步）',
@@ -44,7 +49,7 @@ export const PAPER_MODULES: PaperModuleMeta[] = [
   },
   {
     id: 'my-manuscripts',
-    label: '论文管理',
+    label: '我的论文',
     description: '查看与管理 active 论文列表，切换工作台当前论文（paper_manuscript）',
   },
   {
@@ -55,12 +60,12 @@ export const PAPER_MODULES: PaperModuleMeta[] = [
   {
     id: 'personal-center',
     label: '个人中心',
-    description: '我的信息、环境配置、资金记录与操作日志',
+    description: '我的信息、资金记录与操作日志',
   },
   {
     id: 'environment',
     label: '环境配置',
-    description: '默认科研偏好（入口在个人中心 · 环境配置 Tab）',
+    description: '默认科研偏好与文献策略；保存后对「选题发现」等工作流预填生效',
   },
 ]
 
@@ -76,22 +81,23 @@ export type PaperModuleGroup = {
 export const PAPER_MODULE_GROUPS: PaperModuleGroup[] = [
   {
     id: 'topic-experiment',
-    label: '选题与实验',
+    label: 'AI论文全链路',
     moduleIds: [
       'topic-discovery',
       'literature-review',
       'experiment-planning',
+      'paper-writing',
     ],
   },
   {
     id: 'writing',
-    label: '稿件与图表',
+    label: '论文与数据',
     moduleIds: ['my-manuscripts', 'user-literature', 'figure-generation'],
   },
   {
     id: 'resources',
     label: '账户与返利',
-    moduleIds: ['invite-rebate', 'personal-center'],
+    moduleIds: ['environment', 'invite-rebate', 'personal-center'],
   },
 ]
 

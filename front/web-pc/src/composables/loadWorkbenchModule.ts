@@ -14,6 +14,7 @@ export async function loadWorkbenchModuleContent(
   switch (moduleId) {
     case 'topic-discovery':
     case 'personal-center':
+    case 'environment':
       await reloadTopicDiscoveryFormOptions()
       return
     case 'invite-rebate':

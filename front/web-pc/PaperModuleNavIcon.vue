@@ -31,6 +31,11 @@ defineProps<{
       <path d="M10 3v6l-5 9a2 2 0 0 0 1.7 3h10.6a2 2 0 0 0 1.7-3l-5-9V3" />
       <path d="M8 3h8" />
     </template>
+    <!-- 论文撰写：笔 + 线 -->
+    <template v-else-if="moduleId === 'paper-writing'">
+      <path d="M12 20h9" />
+      <path d="M14.5 6.5 17.5 3.5a2.1 2.1 0 0 1 3 3L8 19l-4 1 1-4 9.5-9.5z" />
+    </template>
     <!-- 文献管理：书页 -->
     <template v-else-if="moduleId === 'user-literature'">
       <path d="M6 4h8a2 2 0 0 1 2 2v14a1 1 0 0 0-1-1H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" />
@@ -42,7 +47,7 @@ defineProps<{
       <circle cx="9" cy="11" r="1.5" fill="currentColor" stroke="none" />
       <path d="M4 16l4-4 3 3 5-6 4 5" />
     </template>
-    <!-- 论文管理：叠层 -->
+    <!-- 我的论文：叠层 -->
     <template v-else-if="moduleId === 'my-manuscripts'">
       <path d="M8 6h8l4 4v10a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z" />
       <path d="M16 6v4h4M12 11h4M12 15h4" opacity="0.5" />

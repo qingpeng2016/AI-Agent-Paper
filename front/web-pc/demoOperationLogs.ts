@@ -7,6 +7,7 @@ export const DEMO_MODULE_TOKEN_ESTIMATES: Partial<
   'topic-discovery': { prompt: 18_400, completion: 6_200 },
   'literature-review': { prompt: 9_800, completion: 4_100 },
   'experiment-planning': { prompt: 5_200, completion: 2_400 },
+  'paper-writing': { prompt: 12_600, completion: 8_400 },
   'figure-generation': { prompt: 3_400, completion: 1_200 },
   environment: { prompt: 120, completion: 80 },
 }

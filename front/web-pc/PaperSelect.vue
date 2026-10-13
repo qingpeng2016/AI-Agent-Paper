@@ -14,11 +14,16 @@ const props = withDefaults(
     /** 下拉内搜索框，按 label / value 过滤选项 */
     filterable?: boolean
     filterPlaceholder?: string
+    /** default=表单；inline=顶栏「当前论文」等行内切换 */
+    variant?: 'default' | 'inline'
+    disabled?: boolean
   }>(),
   {
     placeholder: '请选择',
     filterable: false,
     filterPlaceholder: '输入关键词筛选',
+    variant: 'default',
+    disabled: false,
   },
 )
 
@@ -80,6 +85,7 @@ function openMenu() {
 }
 
 function toggle() {
+  if (props.disabled) return
   if (ignoreNextToggle.value) {
     ignoreNextToggle.value = false
     return
@@ -121,12 +127,51 @@ onUnmounted(() => document.removeEventListener('pointerdown', onDocumentPointerD
 </script>
 
 <template>
-  <div ref="root" class="paper-select" :class="{ 'paper-select--open': open }">
-    <button type="button" class="paper-select-trigger" @click.stop="toggle">
+  <div
+    ref="root"
+    class="paper-select"
+    :class="{
+      'paper-select--open': open,
+      'paper-select--inline': variant === 'inline',
+      'paper-select--disabled': disabled,
+    }"
+  >
+    <button
+      type="button"
+      class="paper-select-trigger"
+      :disabled="disabled"
+      :aria-expanded="open"
+      aria-haspopup="listbox"
+      @click.stop="toggle"
+    >
       <span class="paper-select-value" :class="{ 'paper-select-value--muted': showPlaceholderStyle }">
         {{ currentLabel }}
       </span>
-      <span class="paper-select-chevron" aria-hidden="true">▾</span>
+      <span
+        class="paper-select-chevron"
+        :class="
+          variant === 'inline' ? 'paper-select-chevron--badge' : 'paper-select-chevron--plain'
+        "
+        aria-hidden="true"
+      >
+        <svg
+          v-if="variant === 'inline'"
+          viewBox="0 0 20 20"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path class="paper-select-chevron-fill" d="M5.5 8.25 10 13.75 14.5 8.25Z" />
+        </svg>
+        <svg v-else viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path
+            d="M4 6.5 8 10.5 12 6.5"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          />
+        </svg>
+      </span>
     </button>
 
     <div
@@ -235,9 +280,101 @@ onUnmounted(() => document.removeEventListener('pointerdown', onDocumentPointerD
 }
 
 .paper-select-chevron {
+  display: flex;
   flex-shrink: 0;
-  font-size: 12px;
+  align-items: center;
+  justify-content: center;
+}
+
+.paper-select-chevron svg {
+  display: block;
+}
+
+/* 表单内下拉：灰色描边 chevron，无紫底 */
+.paper-select-chevron--plain {
   color: #64748b;
+}
+
+.paper-select-chevron--plain svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* 顶栏「当前论文」：紫底实心三角 */
+.paper-select-chevron--badge {
+  width: 18px;
+  height: 18px;
+  color: #fff;
+  background: var(--atm-gradient, linear-gradient(135deg, #7c3aed, #6366f1));
+  border-radius: 5px;
+  box-shadow: 0 1px 5px rgba(99, 102, 241, 0.32);
+  transition: box-shadow 0.15s ease;
+}
+
+.paper-select-trigger:hover:not(:disabled) .paper-select-chevron--badge {
+  box-shadow: 0 2px 7px rgba(99, 102, 241, 0.42);
+}
+
+.paper-select-chevron--badge svg {
+  width: 14px;
+  height: 14px;
+}
+
+.paper-select-chevron-fill {
+  fill: currentColor;
+}
+
+.paper-select--disabled .paper-select-chevron--badge {
+  box-shadow: none;
+  opacity: 0.55;
+}
+
+.paper-select--inline {
+  width: auto;
+  max-width: min(100%, 560px);
+}
+
+.paper-select--inline .paper-select-trigger {
+  gap: 6px;
+  width: auto;
+  max-width: 100%;
+  padding: 2px 0 2px 0;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+.paper-select--inline .paper-select-trigger:hover:not(:disabled) {
+  background: #f1f5f9;
+}
+
+.paper-select--inline.paper-select--open .paper-select-trigger {
+  background: #f1f5f9;
+  border: none;
+  box-shadow: none;
+}
+
+.paper-select--inline .paper-select-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e1b4b;
+}
+
+.paper-select--inline .paper-select-menu {
+  right: auto;
+  left: 0;
+  width: max(100%, min(360px, 92vw));
+  min-width: 280px;
+}
+
+.paper-select--disabled .paper-select-trigger {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.paper-select-trigger:disabled {
+  cursor: not-allowed;
 }
 
 .paper-select-menu {

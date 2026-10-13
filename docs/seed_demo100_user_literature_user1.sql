@@ -1,7 +1,7 @@
 -- Demo: 100 x paper_user_literature for user_id=1 (status=active)
 DELETE FROM paper_user_literature WHERE user_id=1 AND id BETWEEN 1 AND 100;
 INSERT INTO `paper_user_literature`
-(`id`, `user_id`, `from`, `file_ext`, `file_name`, `literature_title`, `note`, `size_bytes`, `storage_url`, `content_hash`, `status`, `created_at`, `updated_at`)
+(`id`, `user_id`, `from`, `file_ext`, `file_name`, `literature_title`, `note`, `size_bytes`, `storage_uri`, `content_hash`, `status`, `created_at`, `updated_at`)
 VALUES
 (1, 1, 'user_upload', 'pdf', 'demo_lit_001.pdf', 'Demo 文献 #001：Attention Is All You Need', NULL, 119808, 'workspace/user1/literature/1/demo_lit_001.pdf', '0000000000000000000000000000000000000000000000000000000000000001', 'active', '2026-08-01 11:01:00', '2026-08-01 11:01:00'),
 (2, 1, 'arxiv', 'bib', 'demo_lit_002.bib', 'Demo 文献 #002：BERT: Pre-training of Deep Bidirectional Transformers', NULL, 137216, 'workspace/user1/literature/2/demo_lit_002.bib', '0000000000000000000000000000000000000000000000000000000000000002', 'active', '2026-08-01 14:02:00', '2026-08-01 14:02:00'),

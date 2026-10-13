@@ -69,7 +69,7 @@ func sha256FileHex(absPath string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-// PersistDownloadedUserLiterature 将已落盘的 retrieve PDF 写入 paper_user_literature（按 user+storage_url 去重）。
+// PersistDownloadedUserLiterature 将已落盘的 retrieve PDF 写入 paper_user_literature（按 user+storage_uri 去重）。
 func PersistDownloadedUserLiterature(
 	ctx context.Context,
 	repo repository.PaperUserLiteratureRepo,
@@ -90,7 +90,7 @@ func PersistDownloadedUserLiterature(
 		return nil
 	}
 
-	existing, err := repo.FindActiveByUserStorageURL(ctx, userID, rel)
+	existing, err := repo.FindActiveByUserStorageURI(ctx, userID, rel)
 	if err != nil {
 		return err
 	}
@@ -116,7 +116,7 @@ func PersistDownloadedUserLiterature(
 	if sum, err := sha256FileHex(abs); err == nil && sum != "" {
 		hashPtr = &sum
 	}
-	storageURL := rel
+	storageURI := rel
 	size := uint64(st.Size())
 
 	row := &entity.PaperUserLiterature{
@@ -126,7 +126,7 @@ func PersistDownloadedUserLiterature(
 		FileName:        fileName,
 		LiteratureTitle: title,
 		SizeBytes:       size,
-		StorageURL:      &storageURL,
+		StorageURI:      &storageURI,
 		ContentHash:     hashPtr,
 		Status:          "active",
 	}

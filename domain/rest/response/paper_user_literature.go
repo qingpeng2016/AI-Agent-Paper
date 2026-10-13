@@ -8,7 +8,7 @@ type PaperUserLiteratureItemView struct {
 	LiteratureTitle string `json:"literature_title"`
 	Note            string `json:"note,omitempty"`
 	SizeBytes       uint64 `json:"size_bytes"`
-	StorageURL      string `json:"storage_url,omitempty"`
+	StorageURI      string `json:"storage_uri,omitempty"`
 	CreatedAt       string `json:"created_at,omitempty"`
 }
 

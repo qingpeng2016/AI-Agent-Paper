@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { REFERENCE_UPLOAD_ACCEPT } from '@paper/types'
 import {
   fetchUserLiterature,
   formatFileSizeBytes,
@@ -17,6 +18,13 @@ const page = ref(1)
 const loading = ref(false)
 const detailOpen = ref(false)
 const detailItem = ref<PaperUserLiteratureItem | null>(null)
+
+const uploadOpen = ref(false)
+const uploadFile = ref<File | null>(null)
+const uploadInputRef = ref<HTMLInputElement | null>(null)
+const uploadSubmitting = ref(false)
+const uploadTitle = ref('')
+const uploadNote = ref('')
 
 function formatCreatedAt(iso?: string): string {
   if (!iso?.trim()) return '—'
@@ -64,6 +72,66 @@ function closeDetail() {
   detailOpen.value = false
   detailItem.value = null
 }
+
+function resetUploadInput() {
+  uploadFile.value = null
+  uploadTitle.value = ''
+  uploadNote.value = ''
+  if (uploadInputRef.value) uploadInputRef.value.value = ''
+}
+
+function openUploadDialog() {
+  resetUploadInput()
+  uploadOpen.value = true
+}
+
+function closeUploadDialog() {
+  if (uploadSubmitting.value) return
+  uploadOpen.value = false
+  resetUploadInput()
+}
+
+function openUploadPicker() {
+  if (uploadSubmitting.value) return
+  uploadInputRef.value?.click()
+}
+
+function onUploadFileChange(ev: Event) {
+  const input = ev.target as HTMLInputElement
+  const file = input.files?.[0] ?? null
+  uploadFile.value = file
+  if (file && !uploadTitle.value.trim()) {
+    uploadTitle.value = file.name.replace(/\.[^.]+$/, '')
+  }
+}
+
+function onUploadDrop(ev: DragEvent) {
+  if (uploadSubmitting.value) return
+  const file = ev.dataTransfer?.files?.[0]
+  if (file) {
+    uploadFile.value = file
+    if (!uploadTitle.value.trim()) {
+      uploadTitle.value = file.name.replace(/\.[^.]+$/, '')
+    }
+  }
+}
+
+async function submitUpload() {
+  const file = uploadFile.value
+  if (!file) {
+    ElMessage.warning('请选择要上传的文献文件')
+    return
+  }
+  uploadSubmitting.value = true
+  try {
+    ElMessage.info(`上传文献「${file.name}」功能即将接入`)
+    closeUploadDialog()
+  } finally {
+    uploadSubmitting.value = false
+  }
+}
+
+defineExpose({ openUploadDialog })
 
 void loadPage(1)
 </script>
@@ -119,6 +187,107 @@ void loadPage(1)
       />
     </template>
 
+    <Teleport to="body">
+      <div
+        v-if="uploadOpen"
+        class="paper-modal-overlay wf-lit-generate-overlay"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="ul-upload-title"
+        @click.self="closeUploadDialog"
+        @keydown.escape="closeUploadDialog"
+      >
+        <div
+          class="paper-message-box paper-message-box--default paper-modal-panel wf-lit-generate-panel"
+          @click.stop
+        >
+          <header class="paper-modal-header">
+            <h2 id="ul-upload-title" class="paper-modal-title">上传文献</h2>
+            <button
+              type="button"
+              class="paper-modal-close"
+              aria-label="关闭"
+              :disabled="uploadSubmitting"
+              @click="closeUploadDialog"
+            >
+              ×
+            </button>
+          </header>
+          <div class="paper-modal-body">
+            <p class="ul-upload-lead">
+              支持 PDF、BibTeX、纯文本等；上传后将写入「文献管理」语料库（本地上传）。
+            </p>
+            <label class="ul-upload-field">
+              <span class="ul-upload-field-label">文献标题</span>
+              <input
+                v-model="uploadTitle"
+                type="text"
+                class="ul-upload-input"
+                placeholder="默认可取自文件名"
+                maxlength="512"
+                :disabled="uploadSubmitting"
+              />
+            </label>
+            <label class="ul-upload-field">
+              <span class="ul-upload-field-label">备注（可选）</span>
+              <textarea
+                v-model="uploadNote"
+                class="ul-upload-textarea"
+                rows="2"
+                placeholder="研究笔记、阅读进度等"
+                :disabled="uploadSubmitting"
+              />
+            </label>
+            <div
+              class="ul-upload-drop"
+              :class="{
+                'ul-upload-drop--has-file': !!uploadFile,
+                'ul-upload-drop--disabled': uploadSubmitting,
+              }"
+              role="button"
+              tabindex="0"
+              @click="openUploadPicker"
+              @keydown.enter.prevent="openUploadPicker"
+              @keydown.space.prevent="openUploadPicker"
+              @dragover.prevent
+              @drop.prevent="onUploadDrop"
+            >
+              <input
+                ref="uploadInputRef"
+                type="file"
+                class="ul-upload-file-input"
+                :accept="REFERENCE_UPLOAD_ACCEPT"
+                :disabled="uploadSubmitting"
+                @change="onUploadFileChange"
+              />
+              <p v-if="!uploadFile" class="ul-upload-drop-hint">
+                点击或拖拽文献文件（PDF / Bib / TXT / Markdown / JSON）
+              </p>
+              <p v-else class="ul-upload-drop-name">{{ uploadFile.name }}</p>
+            </div>
+          </div>
+          <footer class="paper-message-box__btns">
+            <button
+              type="button"
+              class="paper-btn-primary wf-lit-delete-dialog-btn"
+              :disabled="uploadSubmitting || !uploadFile"
+              @click="submitUpload"
+            >
+              {{ uploadSubmitting ? '上传中…' : '上传' }}
+            </button>
+            <button
+              type="button"
+              class="paper-btn-primary wf-lit-delete-dialog-btn"
+              :disabled="uploadSubmitting"
+              @click="closeUploadDialog"
+            >
+              取消
+            </button>
+          </footer>
+        </div>
+      </div>
+    </Teleport>
+
     <div v-if="detailOpen && detailItem" class="ul-modal-backdrop" @click.self="closeDetail">
       <div class="ul-modal" role="dialog" aria-labelledby="ul-detail-title">
         <header class="ul-modal-head">
@@ -142,8 +311,8 @@ void loadPage(1)
           <dd>{{ formatCreatedAt(detailItem.created_at) }}</dd>
           <dt v-if="detailItem.note">备注</dt>
           <dd v-if="detailItem.note">{{ detailItem.note }}</dd>
-          <dt v-if="detailItem.storage_url">存储路径</dt>
-          <dd v-if="detailItem.storage_url" class="ul-mono">{{ detailItem.storage_url }}</dd>
+          <dt v-if="detailItem.storage_uri">存储路径</dt>
+          <dd v-if="detailItem.storage_uri" class="ul-mono">{{ detailItem.storage_uri }}</dd>
         </dl>
       </div>
     </div>
@@ -348,5 +517,102 @@ void loadPage(1)
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   font-size: 12px;
   color: #475569;
+}
+
+.ul-upload-lead {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #64748b;
+}
+
+.ul-upload-field {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.ul-upload-field-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.ul-upload-input,
+.ul-upload-textarea {
+  width: 100%;
+  padding: 9px 12px;
+  font-size: 14px;
+  color: #1e293b;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-sizing: border-box;
+}
+
+.ul-upload-input:focus,
+.ul-upload-textarea:focus {
+  outline: none;
+  border-color: #818cf8;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.ul-upload-textarea {
+  resize: vertical;
+  min-height: 56px;
+}
+
+.ul-upload-file-input {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ul-upload-drop {
+  position: relative;
+  padding: 22px 16px;
+  text-align: center;
+  cursor: pointer;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.ul-upload-drop:hover:not(.ul-upload-drop--disabled) {
+  background: #f5f3ff;
+  border-color: #818cf8;
+}
+
+.ul-upload-drop--has-file {
+  background: #fff;
+  border-color: #a5b4fc;
+  border-style: solid;
+}
+
+.ul-upload-drop--disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+.ul-upload-drop-hint {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #64748b;
+}
+
+.ul-upload-drop-name {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  color: var(--atm-text, #1e1b4b);
+  word-break: break-all;
 }
 </style>

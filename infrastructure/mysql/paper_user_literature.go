@@ -47,14 +47,14 @@ func (r *PaperUserLiteratureImpl) CountActiveByUser(ctx context.Context, userID 
 	return n, err
 }
 
-func (r *PaperUserLiteratureImpl) FindActiveByUserStorageURL(ctx context.Context, userID uint64, storageURL string) (*entity.PaperUserLiterature, error) {
-	storageURL = strings.TrimSpace(storageURL)
-	if userID == 0 || storageURL == "" {
+func (r *PaperUserLiteratureImpl) FindActiveByUserStorageURI(ctx context.Context, userID uint64, storageURI string) (*entity.PaperUserLiterature, error) {
+	storageURI = strings.TrimSpace(storageURI)
+	if userID == 0 || storageURI == "" {
 		return nil, nil
 	}
 	var row entity.PaperUserLiterature
 	err := r.db.WithContext(ctx).
-		Where("user_id = ? AND status = ? AND storage_url = ?", userID, "active", storageURL).
+		Where("user_id = ? AND status = ? AND storage_uri = ?", userID, "active", storageURI).
 		First(&row).Error
 	if err == gorm.ErrRecordNotFound {
 		return nil, nil

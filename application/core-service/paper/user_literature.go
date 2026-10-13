@@ -50,8 +50,8 @@ func (s *UserLiteratureService) ListMinePaged(
 		if row.Note != nil {
 			item.Note = *row.Note
 		}
-		if row.StorageURL != nil {
-			item.StorageURL = *row.StorageURL
+		if row.StorageURI != nil {
+			item.StorageURI = *row.StorageURI
 		}
 		if !row.CreatedAt.IsZero() {
 			item.CreatedAt = row.CreatedAt.UTC().Format(time.RFC3339)

@@ -548,7 +548,7 @@ CREATE TABLE IF NOT EXISTS `paper_user_literature` (
   `literature_title`  VARCHAR(512) NOT NULL COMMENT '文献标题',
   `note`              TEXT         DEFAULT NULL COMMENT '备注',
   `size_bytes`    BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '文件大小字节',
-  `storage_url`   VARCHAR(1024) DEFAULT NULL COMMENT '对象存储或工作区相对路径',
+  `storage_uri`   VARCHAR(1024) DEFAULT NULL COMMENT '对象存储或工作区相对路径',
   `content_hash`  CHAR(64)     DEFAULT NULL COMMENT 'SHA-256',
   `status`        VARCHAR(16)  NOT NULL DEFAULT 'active' COMMENT 'active|deleted',
   `created_at`    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '上传时间',

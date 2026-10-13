@@ -16,7 +16,7 @@ export type PaperUserLiteratureItem = {
   literature_title: string
   note?: string
   size_bytes: number
-  storage_url?: string
+  storage_uri?: string
   created_at?: string
 }
 

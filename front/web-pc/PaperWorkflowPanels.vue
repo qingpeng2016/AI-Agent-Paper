@@ -104,6 +104,11 @@ const expPlanUploadPending = ref<PaperExperimentPlanItem | null>(null)
 const expPlanUploadFile = ref<File | null>(null)
 const expPlanUploadInputRef = ref<HTMLInputElement | null>(null)
 const expPlanUploadSubmitting = ref(false)
+const expPlanUploadPlanOpen = ref(false)
+const expPlanUploadPlanId = ref('')
+const expPlanUploadPlanFile = ref<File | null>(null)
+const expPlanUploadPlanInputRef = ref<HTMLInputElement | null>(null)
+const expPlanUploadPlanSubmitting = ref(false)
 let expPlanReloadSeq = 0
 
 let litReviewReloadSeq = 0
@@ -663,6 +668,69 @@ function resetExpPlanUploadInput() {
   if (expPlanUploadInputRef.value) expPlanUploadInputRef.value.value = ''
 }
 
+const expPlanUploadPlanOptions = computed(() =>
+  expPlanItems.value.map((item) => ({
+    value: item.id,
+    label: experimentPlanRowTitle(item),
+  })),
+)
+
+function resetExpPlanUploadPlanInput() {
+  expPlanUploadPlanFile.value = null
+  if (expPlanUploadPlanInputRef.value) expPlanUploadPlanInputRef.value.value = ''
+}
+
+async function openExpPlanUploadPlanDialog() {
+  await reloadExperimentPlans({ page: expPlanListPage.value })
+  if (!expPlanItems.value.length) {
+    ElMessage.warning('暂无实验方案，请先在「文献综述」等待生成完成后点击「查看实验方案」')
+    return
+  }
+  expPlanUploadPlanId.value = expPlanItems.value[0]?.id ?? ''
+  resetExpPlanUploadPlanInput()
+  expPlanUploadPlanOpen.value = true
+}
+
+function closeExpPlanUploadPlanDialog() {
+  if (expPlanUploadPlanSubmitting.value) return
+  expPlanUploadPlanOpen.value = false
+  resetExpPlanUploadPlanInput()
+}
+
+function openExpPlanUploadPlanPicker() {
+  if (expPlanUploadPlanSubmitting.value) return
+  expPlanUploadPlanInputRef.value?.click()
+}
+
+function onExpPlanUploadPlanFileChange(ev: Event) {
+  const input = ev.target as HTMLInputElement
+  expPlanUploadPlanFile.value = input.files?.[0] ?? null
+}
+
+function onExpPlanUploadPlanDrop(ev: DragEvent) {
+  if (expPlanUploadPlanSubmitting.value) return
+  const file = ev.dataTransfer?.files?.[0]
+  if (file) expPlanUploadPlanFile.value = file
+}
+
+async function submitExpPlanUploadPlan() {
+  const planId = expPlanUploadPlanId.value.trim()
+  const file = expPlanUploadPlanFile.value
+  const ms = manuscriptId.value
+  if (!planId || !file || !ms) {
+    ElMessage.warning('请选择关联实验方案与文件')
+    return
+  }
+  expPlanUploadPlanSubmitting.value = true
+  try {
+    await new Promise((r) => setTimeout(r, 400))
+    ElMessage.info(`上传实验方案「${file.name}」功能即将接入`)
+    closeExpPlanUploadPlanDialog()
+  } finally {
+    expPlanUploadPlanSubmitting.value = false
+  }
+}
+
 function openExpPlanUploadDialog(item: PaperExperimentPlanItem) {
   expPlanUploadPending.value = item
   resetExpPlanUploadInput()
@@ -791,6 +859,9 @@ async function runModule(id: PaperModuleId): Promise<boolean> {
     }
     return true
   }
+  if (id === 'paper-writing') {
+    return true
+  }
   if (id === 'figure-generation' && figureForm.chartTypes.length === 0) {
     ElMessage.warning('请至少选择一种图表类型')
     return false
@@ -806,6 +877,7 @@ defineExpose({
   reloadLiteratureReviews,
   reloadExperimentPlans,
   openLitReviewUploadExpPlanDialog,
+  openExpPlanUploadPlanDialog,
 })
 </script>
 
@@ -1161,6 +1233,93 @@ defineExpose({
 
     <Teleport to="body">
       <div
+        v-if="expPlanUploadPlanOpen"
+        class="paper-modal-overlay wf-lit-generate-overlay"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="wf-exp-plan-upload-plan-title"
+        @click.self="closeExpPlanUploadPlanDialog"
+        @keydown.escape="closeExpPlanUploadPlanDialog"
+      >
+        <div
+          class="paper-message-box paper-message-box--default paper-modal-panel wf-lit-generate-panel"
+          @click.stop
+        >
+          <header class="paper-modal-header">
+            <h2 id="wf-exp-plan-upload-plan-title" class="paper-modal-title">上传实验方案</h2>
+            <button
+              type="button"
+              class="paper-modal-close"
+              aria-label="关闭"
+              :disabled="expPlanUploadPlanSubmitting"
+              @click="closeExpPlanUploadPlanDialog"
+            >
+              ×
+            </button>
+          </header>
+          <div class="paper-modal-body">
+            <label v-if="expPlanUploadPlanOptions.length > 1" class="wf-lit-upload-field">
+              <span class="wf-lit-upload-field-label">关联实验方案</span>
+              <PaperSelect
+                v-model="expPlanUploadPlanId"
+                :options="expPlanUploadPlanOptions"
+              />
+            </label>
+            <p v-else-if="expPlanUploadPlanOptions.length === 1" class="wf-meta wf-lit-upload-meta">
+              关联：{{ expPlanUploadPlanOptions[0]?.label }}
+            </p>
+            <div
+              class="wf-exp-data-drop"
+              :class="{
+                'wf-exp-data-drop--has-file': !!expPlanUploadPlanFile,
+                'wf-exp-data-drop--disabled': expPlanUploadPlanSubmitting,
+              }"
+              role="button"
+              tabindex="0"
+              @click="openExpPlanUploadPlanPicker"
+              @keydown.enter.prevent="openExpPlanUploadPlanPicker"
+              @keydown.space.prevent="openExpPlanUploadPlanPicker"
+              @dragover.prevent
+              @drop.prevent="onExpPlanUploadPlanDrop"
+            >
+              <input
+                ref="expPlanUploadPlanInputRef"
+                type="file"
+                class="wf-exp-data-file-input"
+                accept=".md,.markdown,.pdf,.doc,.docx,.zip"
+                :disabled="expPlanUploadPlanSubmitting"
+                @change="onExpPlanUploadPlanFileChange"
+              />
+              <p v-if="!expPlanUploadPlanFile" class="wf-exp-data-drop-hint">
+                点击或拖拽实验方案文件（Markdown / PDF / Word / ZIP）
+              </p>
+              <p v-else class="wf-exp-data-drop-name">{{ expPlanUploadPlanFile.name }}</p>
+            </div>
+          </div>
+          <footer class="paper-message-box__btns">
+            <button
+              type="button"
+              class="paper-btn-primary wf-lit-delete-dialog-btn"
+              :disabled="expPlanUploadPlanSubmitting || !expPlanUploadPlanFile"
+              @click="submitExpPlanUploadPlan"
+            >
+              {{ expPlanUploadPlanSubmitting ? '上传中…' : '上传' }}
+            </button>
+            <button
+              type="button"
+              class="paper-btn-primary wf-lit-delete-dialog-btn"
+              :disabled="expPlanUploadPlanSubmitting"
+              @click="closeExpPlanUploadPlanDialog"
+            >
+              取消
+            </button>
+          </footer>
+        </div>
+      </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div
         v-if="expPlanUploadPending"
         class="paper-modal-overlay wf-lit-generate-overlay"
         role="dialog"
@@ -1238,6 +1397,59 @@ defineExpose({
         </div>
       </div>
     </Teleport>
+  </div>
+
+  <!-- 论文撰写：draft / paper-writing 工作流 -->
+  <div v-else-if="moduleId === 'paper-writing'" class="wf-stack">
+    <section class="wf-panel">
+      <h2 class="wf-title wf-title--module-head">论文撰写</h2>
+      <p class="wf-lead">
+        在当前论文「{{ manuscriptTitle }}」下，基于文献综述、实验方案与图表资产生成稿件正文；完整流程将对接
+        ARIS <code class="wf-inline-code">/paper-writing</code>（plan → write → compile → audit）。
+      </p>
+      <ul class="wf-paper-write-checklist">
+        <li>综述与引用：参考文献门禁通过后再写入正文</li>
+        <li>实验：方案与实验数据/图表已就绪</li>
+        <li>输出：LaTeX / PDF（演示阶段为本地预览）</li>
+      </ul>
+      <p v-if="!resultVisible['paper-writing']" class="wf-meta">
+        点击顶栏「运行」开始演示撰写（占位，接入 Agent 后替换为真实流水线）。
+      </p>
+    </section>
+
+    <section v-if="resultVisible['paper-writing']" class="wf-panel">
+      <h2 class="wf-title">稿件预览（演示）</h2>
+      <p class="wf-lead wf-paper-write-demo-title">{{ DEMO_MANUSCRIPT.title }}</p>
+      <p class="wf-meta">
+        引用 {{ DEMO_MANUSCRIPT.cites }} 条 · 已验证 {{ DEMO_MANUSCRIPT.verifiedCites }} 条
+      </p>
+      <table class="wf-table wf-table--compact wf-paper-write-sections">
+        <thead>
+          <tr>
+            <th>章节</th>
+            <th>字数</th>
+            <th>状态</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="sec in DEMO_MANUSCRIPT.sections" :key="sec.name">
+            <td>{{ sec.name }}</td>
+            <td>{{ sec.words }}</td>
+            <td>
+              <span
+                class="wf-status-pill"
+                :class="
+                  sec.status === 'done' ? 'wf-status-pill--success' : 'wf-status-pill--draft'
+                "
+              >
+                {{ sec.status === 'done' ? '已完成' : '草稿' }}
+              </span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <pre class="wf-paper-write-excerpt">{{ DEMO_MANUSCRIPT.excerpt }}</pre>
+    </section>
   </div>
 
   <!-- 图表管理 -->
@@ -2979,5 +3191,45 @@ defineExpose({
 .wf-dim strong {
   font-size: 18px;
   color: #1e1b4b;
+}
+
+.wf-inline-code {
+  padding: 1px 6px;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: #4338ca;
+  background: #eef2ff;
+  border-radius: 4px;
+}
+
+.wf-paper-write-checklist {
+  margin: 12px 0 0;
+  padding-left: 20px;
+  font-size: 14px;
+  line-height: 1.65;
+  color: #475569;
+}
+
+.wf-paper-write-demo-title {
+  margin-bottom: 4px;
+  font-weight: 700;
+  color: #1e1b4b;
+}
+
+.wf-paper-write-sections {
+  margin-top: 16px;
+}
+
+.wf-paper-write-excerpt {
+  margin: 16px 0 0;
+  padding: 14px 16px;
+  overflow: auto;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #334155;
+  white-space: pre-wrap;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
 }
 </style>

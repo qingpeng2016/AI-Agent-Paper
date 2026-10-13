@@ -21,7 +21,7 @@ type PaperUserLiterature struct {
 	LiteratureTitle string    `gorm:"column:literature_title;size:512;not null"`
 	Note        *string   `gorm:"column:note"`
 	SizeBytes   uint64    `gorm:"column:size_bytes;not null;default:0"`
-	StorageURL  *string   `gorm:"column:storage_url;size:1024"`
+	StorageURI  *string   `gorm:"column:storage_uri;size:1024"`
 	ContentHash *string   `gorm:"column:content_hash;size:64"`
 	Status      string    `gorm:"column:status;size:16;not null;default:active"`
 	CreatedAt   time.Time `gorm:"column:created_at"`
