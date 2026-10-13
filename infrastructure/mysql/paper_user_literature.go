@@ -26,11 +26,43 @@ func (r *PaperUserLiteratureImpl) ListActiveByUser(ctx context.Context, userID u
 	return rows, err
 }
 
-func (r *PaperUserLiteratureImpl) ListActiveByUserPaged(ctx context.Context, userID uint64, offset, limit int) ([]entity.PaperUserLiterature, error) {
-	var rows []entity.PaperUserLiterature
+func (r *PaperUserLiteratureImpl) userLiteratureListBase(ctx context.Context, userID uint64, filter repository.UserLiteratureListFilter) *gorm.DB {
 	q := r.db.WithContext(ctx).
-		Where("user_id = ? AND status = ?", userID, "active").
-		Order("created_at DESC, id DESC")
+		Table("paper_user_literature AS l").
+		Where("l.user_id = ? AND l.status = ?", userID, "active")
+	kw := strings.TrimSpace(filter.Keyword)
+	if kw != "" {
+	 like := "%" + kw + "%"
+		q = q.Where("(l.literature_title LIKE ? OR l.file_name LIKE ? OR IFNULL(l.note, '') LIKE ?)", like, like, like)
+	}
+	if filter.CategoryID != nil {
+		if *filter.CategoryID == 0 {
+			q = q.Where(`NOT EXISTS (
+				SELECT 1 FROM paper_user_literature_category_rel r
+				INNER JOIN paper_user_literature_category c ON c.id = r.category_id AND c.status = 'active'
+				WHERE r.user_literature_id = l.id
+			)`)
+		} else {
+			q = q.Where(`EXISTS (
+				SELECT 1 FROM paper_user_literature_category_rel r
+				INNER JOIN paper_user_literature_category c ON c.id = r.category_id AND c.status = 'active'
+				WHERE r.user_literature_id = l.id AND r.category_id = ?
+			)`, *filter.CategoryID)
+		}
+	}
+	return q
+}
+
+func (r *PaperUserLiteratureImpl) ListActiveByUserPaged(
+	ctx context.Context,
+	userID uint64,
+	filter repository.UserLiteratureListFilter,
+	offset, limit int,
+) ([]repository.UserLiteratureListRow, error) {
+	var rows []repository.UserLiteratureListRow
+	q := r.userLiteratureListBase(ctx, userID, filter).
+		Select("l.*").
+		Order("l.created_at DESC, l.id DESC")
 	if limit > 0 {
 		q = q.Offset(offset).Limit(limit)
 	}
@@ -38,11 +70,10 @@ func (r *PaperUserLiteratureImpl) ListActiveByUserPaged(ctx context.Context, use
 	return rows, err
 }
 
-func (r *PaperUserLiteratureImpl) CountActiveByUser(ctx context.Context, userID uint64) (int64, error) {
+func (r *PaperUserLiteratureImpl) CountActiveByUser(ctx context.Context, userID uint64, filter repository.UserLiteratureListFilter) (int64, error) {
 	var n int64
-	err := r.db.WithContext(ctx).
-		Model(&entity.PaperUserLiterature{}).
-		Where("user_id = ? AND status = ?", userID, "active").
+	err := r.userLiteratureListBase(ctx, userID, filter).
+		Table("paper_user_literature AS l").
 		Count(&n).Error
 	return n, err
 }
@@ -70,4 +101,24 @@ func (r *PaperUserLiteratureImpl) Create(ctx context.Context, row *entity.PaperU
 		return nil
 	}
 	return r.db.WithContext(ctx).Create(row).Error
+}
+
+func (r *PaperUserLiteratureImpl) ListActiveCategoryBindingsByLiteratureIDs(
+	ctx context.Context,
+	userID uint64,
+	literatureIDs []uint64,
+) ([]repository.UserLiteratureCategoryBinding, error) {
+	if userID == 0 || len(literatureIDs) == 0 {
+		return nil, nil
+	}
+	var rows []repository.UserLiteratureCategoryBinding
+	err := r.db.WithContext(ctx).
+		Table("paper_user_literature_category_rel AS r").
+		Select("r.user_literature_id, r.category_id, c.name AS category_name, c.sort").
+		Joins("INNER JOIN paper_user_literature l ON l.id = r.user_literature_id AND l.user_id = ? AND l.status = 'active'", userID).
+		Joins("INNER JOIN paper_user_literature_category c ON c.id = r.category_id AND c.status = 'active'").
+		Where("r.user_literature_id IN ?", literatureIDs).
+		Order("r.user_literature_id ASC, c.sort ASC, c.id ASC").
+		Find(&rows).Error
+	return rows, err
 }

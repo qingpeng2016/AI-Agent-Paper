@@ -17,7 +17,15 @@ export type PaperUserLiteratureItem = {
   note?: string
   size_bytes: number
   storage_uri?: string
+  category_ids?: string[]
+  category_names?: string[]
   created_at?: string
+}
+
+export function formatUserLiteratureCategories(names?: string[]): string {
+  if (!names?.length) return '—'
+  const parts = names.map((n) => n.trim()).filter(Boolean)
+  return parts.length ? parts.join('、') : '—'
 }
 
 export type PaperUserLiteratureListResponse = {
@@ -68,13 +76,55 @@ export function formatFileSizeBytes(n?: number): string {
   return `${(v / (1024 * 1024)).toFixed(2)} MB`
 }
 
+export type PaperUserLiteratureCategoryItem = {
+  id: string
+  name: string
+  sort: number
+  status: string
+  created_at?: string
+}
+
+export type PaperUserLiteratureCategoryListResponse = {
+  items: PaperUserLiteratureCategoryItem[]
+  total?: number
+  page?: number
+  page_size?: number
+}
+
+export async function fetchUserLiteratureCategories(options: {
+  page: number
+  page_size?: number
+}): Promise<PaperUserLiteratureCategoryListResponse> {
+  const q = new URLSearchParams()
+  q.set('page', String(options.page))
+  q.set('page_size', String(options.page_size ?? PAPER_LIST_PAGE_SIZE))
+  const res = await fetch(`/api/v1/paper/user-literature/categories?${q}`, {
+    credentials: 'include',
+  })
+  if (!res.ok) {
+    throw new Error(`user-literature categories http ${res.status}`)
+  }
+  const envelope = (await res.json()) as ApiEnvelope<PaperUserLiteratureCategoryListResponse>
+  if (envelope.code !== 200 || !envelope.data) {
+    throw new Error(envelope.message ?? 'user-literature categories list failed')
+  }
+  return envelope.data
+}
+
 export async function fetchUserLiterature(options: {
   page: number
   page_size?: number
+  q?: string
+  /** 空=全部；none=未分类；否则分类 id */
+  category_id?: string
 }): Promise<PaperUserLiteratureListResponse> {
   const q = new URLSearchParams()
   q.set('page', String(options.page))
   q.set('page_size', String(options.page_size ?? PAPER_LIST_PAGE_SIZE))
+  const keyword = options.q?.trim()
+  if (keyword) q.set('q', keyword)
+  const cat = options.category_id?.trim()
+  if (cat) q.set('category_id', cat)
   const res = await fetch(`/api/v1/paper/user-literature?${q}`, { credentials: 'include' })
   if (!res.ok) {
     throw new Error(`user-literature list http ${res.status}`)

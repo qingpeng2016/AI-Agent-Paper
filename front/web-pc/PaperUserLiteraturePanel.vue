@@ -1,16 +1,24 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { REFERENCE_UPLOAD_ACCEPT } from '@paper/types'
 import {
   fetchUserLiterature,
+  fetchUserLiteratureCategories,
   formatFileSizeBytes,
+  formatUserLiteratureCategories,
   formatUserLiteratureFrom,
   PAPER_LIST_PAGE_SIZE,
   userLiteratureFromTone,
   type PaperUserLiteratureItem,
 } from '@/api/userLiterature'
 import PaperListPagination from './PaperListPagination.vue'
+import PaperSelect from './PaperSelect.vue'
+import PaperUserLiteratureCategoryPanel from './PaperUserLiteratureCategoryPanel.vue'
+
+export type UserLiteratureTabId = 'list' | 'categories'
+
+const activeTab = ref<UserLiteratureTabId>('list')
 
 const items = ref<PaperUserLiteratureItem[]>([])
 const total = ref(0)
@@ -25,6 +33,34 @@ const uploadInputRef = ref<HTMLInputElement | null>(null)
 const uploadSubmitting = ref(false)
 const uploadTitle = ref('')
 const uploadNote = ref('')
+
+const filterKeywordDraft = ref('')
+const filterKeywordApplied = ref('')
+const filterCategoryId = ref('')
+
+const categoryFilterOptions = ref<{ value: string; label: string }[]>([
+  { value: '', label: '全部分类' },
+  { value: 'none', label: '未分类' },
+])
+
+const categorySelectOptions = computed(() => categoryFilterOptions.value)
+
+async function loadCategoryFilterOptions() {
+  try {
+    const data = await fetchUserLiteratureCategories({ page: 1, page_size: 200 })
+    const fromApi = (data.items ?? []).map((c) => ({
+      value: c.id,
+      label: c.name,
+    }))
+    categoryFilterOptions.value = [
+      { value: '', label: '全部分类' },
+      { value: 'none', label: '未分类' },
+      ...fromApi,
+    ]
+  } catch {
+    /* 保留默认「全部 / 未分类」 */
+  }
+}
 
 function formatCreatedAt(iso?: string): string {
   if (!iso?.trim()) return '—'
@@ -41,6 +77,8 @@ async function loadPage(targetPage = page.value) {
     const data = await fetchUserLiterature({
       page: targetPage,
       page_size: PAPER_LIST_PAGE_SIZE,
+      q: filterKeywordApplied.value || undefined,
+      category_id: filterCategoryId.value || undefined,
     })
     items.value = data.items ?? []
     total.value = data.total ?? items.value.length
@@ -61,6 +99,16 @@ async function loadPage(targetPage = page.value) {
 function onPageChange(p: number) {
   page.value = p
   void loadPage(p)
+}
+
+function applyFilters() {
+  filterKeywordApplied.value = filterKeywordDraft.value.trim()
+  page.value = 1
+  void loadPage(1)
+}
+
+function onFilterKeywordKeydown(ev: KeyboardEvent) {
+  if (ev.key === 'Enter') applyFilters()
 }
 
 function openDetail(item: PaperUserLiteratureItem) {
@@ -133,17 +181,78 @@ async function submitUpload() {
 
 defineExpose({ openUploadDialog })
 
+void loadCategoryFilterOptions()
 void loadPage(1)
 </script>
 
 <template>
   <section class="ul-panel">
+    <div class="ul-tabs" role="tablist" aria-label="文献管理">
+      <button
+        type="button"
+        role="tab"
+        class="ul-tab"
+        :class="{ 'ul-tab--active': activeTab === 'list' }"
+        :aria-selected="activeTab === 'list'"
+        @click="activeTab = 'list'"
+      >
+        文献列表
+      </button>
+      <button
+        type="button"
+        role="tab"
+        class="ul-tab"
+        :class="{ 'ul-tab--active': activeTab === 'categories' }"
+        :aria-selected="activeTab === 'categories'"
+        @click="activeTab = 'categories'"
+      >
+        分类管理
+      </button>
+    </div>
+
+    <div v-show="activeTab === 'list'" class="ul-tab-pane" role="tabpanel">
+    <div class="ul-filter">
+      <div class="ul-filter-label-row">
+        <label class="ul-filter-label ul-filter-label--search" for="ul-filter-keyword">搜索</label>
+        <label class="ul-filter-label ul-filter-label--category" for="ul-filter-category">
+          分类
+        </label>
+      </div>
+      <div class="ul-filter-control-row">
+        <div class="ul-filter-control-slot ul-filter-control-slot--search">
+          <input
+            id="ul-filter-keyword"
+            v-model="filterKeywordDraft"
+            type="search"
+            class="ul-filter-input"
+            autocomplete="off"
+            @keydown="onFilterKeywordKeydown"
+          />
+        </div>
+        <div id="ul-filter-category" class="ul-filter-control-slot ul-filter-control-slot--category">
+          <PaperSelect v-model="filterCategoryId" :options="categorySelectOptions" />
+        </div>
+        <div class="ul-filter-control-slot ul-filter-control-slot--action">
+          <button type="button" class="ul-filter-btn ul-filter-btn--primary" @click="applyFilters">
+            查询
+          </button>
+        </div>
+      </div>
+    </div>
+
     <p v-if="loading" class="ul-meta">正在加载文献列表…</p>
-    <p v-else-if="!total" class="ul-empty">暂无文献（status=active）。</p>
+    <p v-else-if="!total" class="ul-empty">
+      {{
+        filterKeywordApplied || filterCategoryId
+          ? '无匹配的文献，请调整筛选条件。'
+          : '暂无文献（status=active）。'
+      }}
+    </p>
     <template v-else>
       <table class="ul-table">
         <colgroup>
           <col class="ul-col-title" />
+          <col class="ul-col-cat" />
           <col class="ul-col-created" />
           <col class="ul-col-from" />
           <col class="ul-col-ext" />
@@ -152,6 +261,7 @@ void loadPage(1)
         <thead>
           <tr>
             <th>标题</th>
+            <th>分类</th>
             <th>创建时间</th>
             <th>来源</th>
             <th>格式</th>
@@ -163,6 +273,7 @@ void loadPage(1)
             <td class="ul-col-title" :title="item.literature_title">
               {{ item.literature_title }}
             </td>
+            <td class="ul-col-cat">{{ formatUserLiteratureCategories(item.category_names) }}</td>
             <td class="ul-col-created">{{ formatCreatedAt(item.created_at) }}</td>
             <td class="ul-col-from">
               <span
@@ -186,6 +297,12 @@ void loadPage(1)
         @update:current-page="onPageChange"
       />
     </template>
+    </div>
+
+    <PaperUserLiteratureCategoryPanel
+      v-show="activeTab === 'categories'"
+      :active="activeTab === 'categories'"
+    />
 
     <Teleport to="body">
       <div
@@ -299,6 +416,8 @@ void loadPage(1)
         <dl class="ul-detail">
           <dt>题名</dt>
           <dd>{{ detailItem.literature_title }}</dd>
+          <dt>分类</dt>
+          <dd>{{ formatUserLiteratureCategories(detailItem.category_names) }}</dd>
           <dt>文件名</dt>
           <dd>{{ detailItem.file_name }}</dd>
           <dt>来源</dt>
@@ -328,6 +447,193 @@ void loadPage(1)
   box-shadow: 0 4px 24px rgba(30, 27, 75, 0.06);
 }
 
+.ul-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 2px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.ul-tab {
+  position: relative;
+  flex: 0 1 auto;
+  min-width: 112px;
+  padding: 12px 20px;
+  margin-bottom: -1px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #64748b;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 8px 8px 0 0;
+  transition:
+    color 0.15s,
+    background 0.15s,
+    border-color 0.15s;
+}
+
+.ul-tab:hover:not(.ul-tab--active) {
+  color: #334155;
+  background: #f8fafc;
+}
+
+.ul-tab--active {
+  font-weight: 600;
+  color: #1e293b;
+  background: #fff;
+  border-bottom-color: #6366f1;
+  box-shadow: inset 0 -1px 0 #fff;
+}
+
+.ul-tab-pane {
+  padding-top: 4px;
+}
+
+.ul-filter {
+  --ul-filter-control-h: 38px;
+
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+
+.ul-filter-label-row,
+.ul-filter-control-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: center;
+}
+
+.ul-filter-control-row {
+  align-items: stretch;
+}
+
+.ul-filter-label {
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.5;
+  color: #64748b;
+}
+
+.ul-filter-label--search {
+  flex: 0 0 auto;
+  width: 280px;
+  max-width: 100%;
+}
+
+.ul-filter-label--category {
+  flex: 0 0 auto;
+  width: 168px;
+}
+
+.ul-filter-control-slot {
+  display: flex;
+  align-items: flex-end;
+  height: var(--ul-filter-control-h);
+  box-sizing: border-box;
+}
+
+.ul-filter-control-slot--search {
+  flex: 0 0 auto;
+  width: 280px;
+  max-width: 100%;
+}
+
+.ul-filter-control-slot--category {
+  flex: 0 0 auto;
+  width: 168px;
+}
+
+.ul-filter-control-slot--category :deep(.paper-select) {
+  width: 100%;
+}
+
+.ul-filter-control-slot--action {
+  flex-shrink: 0;
+}
+
+.ul-filter-input {
+  width: 100%;
+  height: 100%;
+  padding: 0 12px;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.25;
+  color: #1e293b;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-sizing: border-box;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.ul-filter-input::-webkit-search-decoration,
+.ul-filter-input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+}
+
+.ul-filter-input:focus {
+  outline: none;
+  border-color: #818cf8;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+}
+
+.ul-filter :deep(.paper-select-trigger) {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: 0 10px 0 12px;
+  font-size: 13px;
+  background: #fff;
+  border-radius: 8px;
+  box-sizing: border-box;
+}
+
+.ul-filter-control-slot--category :deep(.paper-select) {
+  height: 100%;
+}
+
+.ul-filter :deep(.paper-select-option) {
+  font-size: 13px;
+}
+
+.ul-filter-btn {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  min-width: 72px;
+  height: calc(var(--ul-filter-control-h) - 2px);
+  padding: 0 16px;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+  color: #475569;
+  cursor: pointer;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-sizing: border-box;
+}
+
+.ul-filter-btn--primary {
+  color: #fff;
+  background: linear-gradient(135deg, #7c3aed, #6366f1);
+  border: 1px solid transparent;
+}
+
+.ul-filter-btn:hover {
+  border-color: #cbd5e1;
+}
+
 .ul-meta,
 .ul-empty {
   margin: 0;
@@ -350,20 +656,34 @@ void loadPage(1)
 }
 
 .ul-table col.ul-col-title {
-  width: 40%;
+  width: 28%;
+}
+
+.ul-table col.ul-col-cat {
+  width: 14%;
 }
 
 .ul-table col.ul-col-created {
-  width: 18%;
+  width: 15%;
 }
 
-.ul-table col.ul-col-from,
+.ul-table col.ul-col-from {
+  width: 17%;
+}
+
 .ul-table col.ul-col-ext {
-  width: 12%;
+  width: 6%;
 }
 
 .ul-table col.ul-col-actions {
   width: 18%;
+}
+
+.ul-col-cat {
+  overflow: hidden;
+  color: #475569;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ul-table th,
@@ -392,6 +712,10 @@ void loadPage(1)
   font-weight: 400;
   color: #334155;
   font-variant-numeric: tabular-nums;
+}
+
+.ul-col-from {
+  white-space: nowrap;
 }
 
 .ul-col-ext {

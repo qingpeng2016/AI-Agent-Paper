@@ -82,6 +82,7 @@ func (r *Router) setupRouters() *gin.Engine {
 		paperAuth.GET("/topic-discovery/run/current", r.paperTopicDiscoveryHandler.GetCurrentRun)
 		paperAuth.POST("/topic-discovery/run/cancel", r.paperTopicDiscoveryHandler.PostCancelRun)
 		paperAuth.POST("/topic-discovery/commit-manuscript", r.paperTopicDiscoveryHandler.PostCommitManuscript)
+		paperAuth.GET("/user-literature/categories", r.paperUserLiteratureHandler.GetUserLiteratureCategories)
 		paperAuth.GET("/user-literature", r.paperUserLiteratureHandler.GetUserLiterature)
 		paperAuth.GET("/manuscripts", r.paperManuscriptHandler.GetManuscripts)
 		paperAuth.POST("/manuscripts", r.paperManuscriptHandler.PostCreateManuscript)
