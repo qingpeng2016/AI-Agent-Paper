@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { REFERENCE_UPLOAD_ACCEPT } from '@paper/types'
+import { fetchPaperManuscripts } from '@/api/manuscripts'
 import {
   fetchUserLiterature,
   fetchUserLiteratureCategories,
@@ -37,13 +38,14 @@ const uploadNote = ref('')
 const filterKeywordDraft = ref('')
 const filterKeywordApplied = ref('')
 const filterCategoryId = ref('')
+const filterManuscriptId = ref('')
 
-const categoryFilterOptions = ref<{ value: string; label: string }[]>([
-  { value: '', label: '全部分类' },
-  { value: 'none', label: '未分类' },
-])
+const categoryFilterOptions = ref<{ value: string; label: string }[]>([{ value: '', label: '全部' }])
+
+const manuscriptFilterOptions = ref<{ value: string; label: string }[]>([{ value: '', label: '全部' }])
 
 const categorySelectOptions = computed(() => categoryFilterOptions.value)
+const manuscriptSelectOptions = computed(() => manuscriptFilterOptions.value)
 
 async function loadCategoryFilterOptions() {
   try {
@@ -52,14 +54,28 @@ async function loadCategoryFilterOptions() {
       value: c.id,
       label: c.name,
     }))
-    categoryFilterOptions.value = [
-      { value: '', label: '全部分类' },
-      { value: 'none', label: '未分类' },
-      ...fromApi,
-    ]
+    categoryFilterOptions.value = [{ value: '', label: '全部' }, ...fromApi]
   } catch {
-    /* 保留默认「全部 / 未分类」 */
+    /* 保留默认「全部」 */
   }
+}
+
+async function loadManuscriptFilterOptions() {
+  try {
+    const data = await fetchPaperManuscripts({ page: 1, page_size: 200 })
+    const fromApi = (data.items ?? []).map((m) => ({
+      value: m.id,
+      label: m.is_current ? `${m.title}（当前）` : m.title,
+    }))
+    manuscriptFilterOptions.value = [{ value: '', label: '全部' }, ...fromApi]
+  } catch {
+    /* 保留默认「全部」 */
+  }
+}
+
+function reloadFilterOptions() {
+  void loadCategoryFilterOptions()
+  void loadManuscriptFilterOptions()
 }
 
 function formatCreatedAt(iso?: string): string {
@@ -79,6 +95,7 @@ async function loadPage(targetPage = page.value) {
       page_size: PAPER_LIST_PAGE_SIZE,
       q: filterKeywordApplied.value || undefined,
       category_id: filterCategoryId.value || undefined,
+      manuscript_id: filterManuscriptId.value || undefined,
     })
     items.value = data.items ?? []
     total.value = data.total ?? items.value.length
@@ -181,7 +198,7 @@ async function submitUpload() {
 
 defineExpose({ openUploadDialog })
 
-void loadCategoryFilterOptions()
+reloadFilterOptions()
 void loadPage(1)
 </script>
 
@@ -214,9 +231,8 @@ void loadPage(1)
     <div class="ul-filter">
       <div class="ul-filter-label-row">
         <label class="ul-filter-label ul-filter-label--search" for="ul-filter-keyword">搜索</label>
-        <label class="ul-filter-label ul-filter-label--category" for="ul-filter-category">
-          分类
-        </label>
+        <label class="ul-filter-label ul-filter-label--select" for="ul-filter-category">按名称</label>
+        <label class="ul-filter-label ul-filter-label--select" for="ul-filter-manuscript">按论文</label>
       </div>
       <div class="ul-filter-control-row">
         <div class="ul-filter-control-slot ul-filter-control-slot--search">
@@ -229,8 +245,11 @@ void loadPage(1)
             @keydown="onFilterKeywordKeydown"
           />
         </div>
-        <div id="ul-filter-category" class="ul-filter-control-slot ul-filter-control-slot--category">
+        <div id="ul-filter-category" class="ul-filter-control-slot ul-filter-control-slot--select">
           <PaperSelect v-model="filterCategoryId" :options="categorySelectOptions" />
+        </div>
+        <div id="ul-filter-manuscript" class="ul-filter-control-slot ul-filter-control-slot--select">
+          <PaperSelect v-model="filterManuscriptId" :options="manuscriptSelectOptions" />
         </div>
         <div class="ul-filter-control-slot ul-filter-control-slot--action">
           <button type="button" class="ul-filter-btn ul-filter-btn--primary" @click="applyFilters">
@@ -243,7 +262,7 @@ void loadPage(1)
     <p v-if="loading" class="ul-meta">正在加载文献列表…</p>
     <p v-else-if="!total" class="ul-empty">
       {{
-        filterKeywordApplied || filterCategoryId
+        filterKeywordApplied || filterCategoryId || filterManuscriptId
           ? '无匹配的文献，请调整筛选条件。'
           : '暂无文献（status=active）。'
       }}
@@ -253,6 +272,7 @@ void loadPage(1)
         <colgroup>
           <col class="ul-col-title" />
           <col class="ul-col-cat" />
+          <col class="ul-col-ms" />
           <col class="ul-col-created" />
           <col class="ul-col-from" />
           <col class="ul-col-ext" />
@@ -261,7 +281,8 @@ void loadPage(1)
         <thead>
           <tr>
             <th>标题</th>
-            <th>分类</th>
+            <th>所属分类</th>
+            <th>所属论文</th>
             <th>创建时间</th>
             <th>来源</th>
             <th>格式</th>
@@ -273,7 +294,12 @@ void loadPage(1)
             <td class="ul-col-title" :title="item.literature_title">
               {{ item.literature_title }}
             </td>
-            <td class="ul-col-cat">{{ formatUserLiteratureCategories(item.category_names) }}</td>
+            <td class="ul-col-cat" :title="formatUserLiteratureCategories(item.category_names)">
+              {{ formatUserLiteratureCategories(item.category_names) }}
+            </td>
+            <td class="ul-col-ms" :title="formatUserLiteratureCategories(item.manuscript_titles)">
+              {{ formatUserLiteratureCategories(item.manuscript_titles) }}
+            </td>
             <td class="ul-col-created">{{ formatCreatedAt(item.created_at) }}</td>
             <td class="ul-col-from">
               <span
@@ -302,6 +328,7 @@ void loadPage(1)
     <PaperUserLiteratureCategoryPanel
       v-show="activeTab === 'categories'"
       :active="activeTab === 'categories'"
+      @changed="reloadFilterOptions"
     />
 
     <Teleport to="body">
@@ -416,8 +443,10 @@ void loadPage(1)
         <dl class="ul-detail">
           <dt>题名</dt>
           <dd>{{ detailItem.literature_title }}</dd>
-          <dt>分类</dt>
+          <dt>所属分类</dt>
           <dd>{{ formatUserLiteratureCategories(detailItem.category_names) }}</dd>
+          <dt>所属论文</dt>
+          <dd>{{ formatUserLiteratureCategories(detailItem.manuscript_titles) }}</dd>
           <dt>文件名</dt>
           <dd>{{ detailItem.file_name }}</dd>
           <dt>来源</dt>
@@ -527,7 +556,7 @@ void loadPage(1)
   max-width: 100%;
 }
 
-.ul-filter-label--category {
+.ul-filter-label--select {
   flex: 0 0 auto;
   width: 168px;
 }
@@ -545,12 +574,12 @@ void loadPage(1)
   max-width: 100%;
 }
 
-.ul-filter-control-slot--category {
+.ul-filter-control-slot--select {
   flex: 0 0 auto;
   width: 168px;
 }
 
-.ul-filter-control-slot--category :deep(.paper-select) {
+.ul-filter-control-slot--select :deep(.paper-select) {
   width: 100%;
 }
 
@@ -596,7 +625,7 @@ void loadPage(1)
   box-sizing: border-box;
 }
 
-.ul-filter-control-slot--category :deep(.paper-select) {
+.ul-filter-control-slot--select :deep(.paper-select) {
   height: 100%;
 }
 
@@ -656,19 +685,23 @@ void loadPage(1)
 }
 
 .ul-table col.ul-col-title {
-  width: 28%;
+  width: 22%;
 }
 
 .ul-table col.ul-col-cat {
-  width: 14%;
+  width: 12%;
+}
+
+.ul-table col.ul-col-ms {
+  width: 22%;
 }
 
 .ul-table col.ul-col-created {
-  width: 15%;
+  width: 13%;
 }
 
 .ul-table col.ul-col-from {
-  width: 17%;
+  width: 15%;
 }
 
 .ul-table col.ul-col-ext {
@@ -676,10 +709,11 @@ void loadPage(1)
 }
 
 .ul-table col.ul-col-actions {
-  width: 18%;
+  width: 10%;
 }
 
-.ul-col-cat {
+.ul-col-cat,
+.ul-col-ms {
   overflow: hidden;
   color: #475569;
   text-overflow: ellipsis;

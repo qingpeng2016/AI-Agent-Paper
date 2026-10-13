@@ -5,4 +5,6 @@ type UserLiteratureListFilter struct {
 	Keyword string
 	// CategoryID：nil=不限；指向 0=仅未分类；>0=指定分类
 	CategoryID *uint64
+	// ManuscriptID：nil=不限；指向 0=未关联任何论文；>0=指定论文
+	ManuscriptID *uint64
 }

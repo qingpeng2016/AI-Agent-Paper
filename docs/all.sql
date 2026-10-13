@@ -568,15 +568,24 @@ CREATE TABLE IF NOT EXISTS `paper_user_literature_category_rel` (
   KEY `idx_paper_user_lit_cat_rel_cat` (`category_id`, `user_literature_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户文献与分类多对多';
 
+CREATE TABLE IF NOT EXISTS `paper_user_literature_manuscript_rel` (
+  `id`                 BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '关联 ID',
+  `user_literature_id` BIGINT UNSIGNED NOT NULL COMMENT 'paper_user_literature.id',
+  `manuscript_id`      BIGINT UNSIGNED NOT NULL COMMENT 'paper_manuscript.id',
+  `created_at`         DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_paper_user_lit_ms_rel` (`user_literature_id`, `manuscript_id`),
+  KEY `idx_paper_user_lit_ms_rel_ms` (`manuscript_id`, `user_literature_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户文献与论文章多对多';
+
 CREATE TABLE IF NOT EXISTS `paper_user_literature_category` (
   `id`         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '分类 ID',
   `name`       VARCHAR(128)    NOT NULL COMMENT '分类名称',
-  `sort`       INT             NOT NULL DEFAULT 100 COMMENT '展示顺序，越小越靠前',
   `status`     VARCHAR(16)     NOT NULL DEFAULT 'active' COMMENT 'active|deleted',
   `created_at` DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at` DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
-  KEY `idx_paper_user_lit_cat_status_sort` (`status`, `sort`, `id`)
+  KEY `idx_paper_user_lit_cat_status_id` (`status`, `id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户文献分类';
 
 -- ---------------------------------------------------------------------------

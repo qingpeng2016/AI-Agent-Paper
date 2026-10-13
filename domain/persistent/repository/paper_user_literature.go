@@ -17,4 +17,10 @@ type PaperUserLiteratureRepo interface {
 		userID uint64,
 		literatureIDs []uint64,
 	) ([]UserLiteratureCategoryBinding, error)
+	ListActiveLiteratureIDsByCategory(ctx context.Context, userID, categoryID uint64) ([]uint64, error)
+	SyncCategoryLiteratureMembership(
+		ctx context.Context,
+		userID, categoryID uint64,
+		literatureIDs []uint64,
+	) error
 }

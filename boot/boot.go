@@ -101,6 +101,7 @@ func BuildContainer() *dig.Container {
 	_ = c.Provide(mysql.NewPaperUserPreferenceImpl)
 	_ = c.Provide(mysql.NewPaperUserLiteratureImpl)
 	_ = c.Provide(mysql.NewPaperUserLiteratureCategoryImpl)
+	_ = c.Provide(mysql.NewPaperUserLiteratureManuscriptRelImpl)
 	_ = c.Provide(mysql.NewPaperOutputFigureImpl)
 	_ = c.Provide(redis.NewClient)
 	_ = c.Provide(http.NewHTTPClient)
