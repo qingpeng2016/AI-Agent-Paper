@@ -81,7 +81,7 @@ export type PaperModuleGroup = {
 export const PAPER_MODULE_GROUPS: PaperModuleGroup[] = [
   {
     id: 'topic-experiment',
-    label: 'AI论文全链路',
+    label: 'AI科研全链路',
     moduleIds: [
       'topic-discovery',
       'literature-review',
