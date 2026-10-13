@@ -2,9 +2,8 @@ export type PaperModuleId =
   | 'topic-discovery'
   | 'literature-review'
   | 'experiment-planning'
-  | 'paper-writing'
   | 'figure-generation'
-  | 'manuscript-analysis'
+  | 'user-literature'
   | 'my-manuscripts'
   | 'invite-rebate'
   | 'personal-center'
@@ -34,9 +33,9 @@ export const PAPER_MODULES: PaperModuleMeta[] = [
     description: '设计假设、基线、指标与可执行实验步骤',
   },
   {
-    id: 'paper-writing',
-    label: '论文写作',
-    description: '按目标 venue 风格分节撰写与润色稿件',
+    id: 'user-literature',
+    label: '文献管理',
+    description: '查看与管理已入库的用户文献（paper_user_literature，含本地上传与各平台同步）',
   },
   {
     id: 'figure-generation',
@@ -44,14 +43,9 @@ export const PAPER_MODULES: PaperModuleMeta[] = [
     description: '上传自有 figure 资产，或基于实验数据一键生成可复现统计图',
   },
   {
-    id: 'manuscript-analysis',
-    label: '论文审查',
-    description: '写作完成后：对全文做投稿前全面审查（贡献、实验、引用、venue fit、kill argument）',
-  },
-  {
     id: 'my-manuscripts',
-    label: '我的论文',
-    description: '切换、编辑与归档工作台下的论文项目（paper_manuscript）',
+    label: '论文管理',
+    description: '查看与管理 active 论文列表，切换工作台当前论文（paper_manuscript）',
   },
   {
     id: 'invite-rebate',
@@ -91,8 +85,8 @@ export const PAPER_MODULE_GROUPS: PaperModuleGroup[] = [
   },
   {
     id: 'writing',
-    label: '撰写与审查',
-    moduleIds: ['paper-writing', 'manuscript-analysis', 'my-manuscripts', 'figure-generation'],
+    label: '稿件与图表',
+    moduleIds: ['my-manuscripts', 'user-literature', 'figure-generation'],
   },
   {
     id: 'resources',

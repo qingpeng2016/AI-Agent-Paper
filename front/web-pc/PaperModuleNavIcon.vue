@@ -31,16 +31,10 @@ defineProps<{
       <path d="M10 3v6l-5 9a2 2 0 0 0 1.7 3h10.6a2 2 0 0 0 1.7-3l-5-9V3" />
       <path d="M8 3h8" />
     </template>
-    <!-- 论文写作：文档 -->
-    <template v-else-if="moduleId === 'paper-writing'">
-      <path d="M14 3H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8l-4-5z" />
-      <path d="M14 3v5h5M10 13h4M10 17h4" />
-    </template>
-    <!-- 论文审查：带勾文档 -->
-    <template v-else-if="moduleId === 'manuscript-analysis'">
-      <path d="M14 3H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8l-4-5z" />
-      <path d="M14 3v5h5" />
-      <path d="m9 14 2 2 4-4" />
+    <!-- 文献管理：书页 -->
+    <template v-else-if="moduleId === 'user-literature'">
+      <path d="M6 4h8a2 2 0 0 1 2 2v14a1 1 0 0 0-1-1H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" />
+      <path d="M8 4v16M14 8h4M14 12h4M14 16h3" opacity="0.55" />
     </template>
     <!-- 图表管理：图框 -->
     <template v-else-if="moduleId === 'figure-generation'">
@@ -48,7 +42,7 @@ defineProps<{
       <circle cx="9" cy="11" r="1.5" fill="currentColor" stroke="none" />
       <path d="M4 16l4-4 3 3 5-6 4 5" />
     </template>
-    <!-- 我的论文：叠层 -->
+    <!-- 论文管理：叠层 -->
     <template v-else-if="moduleId === 'my-manuscripts'">
       <path d="M8 6h8l4 4v10a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2z" />
       <path d="M16 6v4h4M12 11h4M12 15h4" opacity="0.5" />

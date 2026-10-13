@@ -27,6 +27,7 @@ func (s *LiteratureReviewService) ListByManuscript(
 	ctx context.Context,
 	userID uint,
 	manuscriptID uint64,
+	page, pageSize int,
 ) (*response.PaperLiteratureReviewListView, error) {
 	if manuscriptID == 0 {
 		return nil, errorx.ErrParamsError
@@ -38,13 +39,21 @@ func (s *LiteratureReviewService) ListByManuscript(
 	if ms == nil {
 		return nil, errorx.ErrParamsError.WithDetail("manuscript 不存在或无权访问")
 	}
-	rows, err := s.reviews.ListByManuscript(ctx, manuscriptID)
+	page, pageSize, offset := NormalizeListPage(page, pageSize)
+	total, err := s.reviews.CountByManuscriptForUser(ctx, userID, manuscriptID)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.reviews.ListByManuscriptForUserPaged(ctx, userID, manuscriptID, offset, pageSize)
 	if err != nil {
 		return nil, err
 	}
 	out := &response.PaperLiteratureReviewListView{
 		ManuscriptID: manuscriptID,
 		Items:        make([]response.PaperLiteratureReviewItemView, 0, len(rows)),
+		Total:        total,
+		Page:         page,
+		PageSize:     pageSize,
 	}
 	for _, row := range rows {
 		out.Items = append(out.Items, literatureReviewItemView(row))

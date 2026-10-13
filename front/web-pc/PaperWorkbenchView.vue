@@ -47,6 +47,7 @@ import {
 import { DEMO_MODULE_TOKEN_ESTIMATES } from './demoOperationLogs'
 import PaperModuleNavIcon from './PaperModuleNavIcon.vue'
 import PaperMyManuscriptsPanel from './PaperMyManuscriptsPanel.vue'
+import PaperUserLiteraturePanel from './PaperUserLiteraturePanel.vue'
 import PaperInviteRebatePanel from './PaperInviteRebatePanel.vue'
 import PaperPersonalCenterPanel from './PaperPersonalCenterPanel.vue'
 import PaperSelect from './PaperSelect.vue'
@@ -619,11 +620,13 @@ const topicDisciplineDisplayLabel = computed(() => {
 })
 
 const isMyManuscriptsModule = computed(() => activeModule.value === 'my-manuscripts')
+const isUserLiteratureModule = computed(() => activeModule.value === 'user-literature')
 const isInviteRebateModule = computed(() => activeModule.value === 'invite-rebate')
 const isPersonalCenterModule = computed(() => activeModule.value === 'personal-center')
 const isUtilityModule = computed(
   () =>
     isMyManuscriptsModule.value ||
+    isUserLiteratureModule.value ||
     isInviteRebateModule.value ||
     isPersonalCenterModule.value,
 )
@@ -674,8 +677,6 @@ function onEnvironmentSaved() {
 const SECONDARY_WORKFLOW_MODULES = [
   'literature-review',
   'experiment-planning',
-  'paper-writing',
-  'manuscript-analysis',
   'figure-generation',
 ] as const
 
@@ -1785,7 +1786,8 @@ async function onPrimaryAction() {
           mod !== 'personal-center' &&
           mod !== 'invite-rebate' &&
           mod !== 'environment' &&
-          mod !== 'my-manuscripts'
+          mod !== 'my-manuscripts' &&
+          mod !== 'user-literature'
         ) {
           recordModuleOperationLog(mod, `运行「${currentMeta.value.label}」`)
         }
@@ -2350,10 +2352,13 @@ watch(
       <PaperMyManuscriptsPanel
         v-else-if="activeModule === 'my-manuscripts'"
         :key="`my-manuscripts-${moduleContentKey}`"
-        :manuscripts="manuscripts"
         :active-manuscript-id="activeManuscriptId"
         @select="onManuscriptChange"
-        @update-manuscripts="onManuscriptsListUpdate"
+      />
+
+      <PaperUserLiteraturePanel
+        v-else-if="activeModule === 'user-literature'"
+        :key="`user-literature-${moduleContentKey}`"
       />
 
       <PaperInviteRebatePanel

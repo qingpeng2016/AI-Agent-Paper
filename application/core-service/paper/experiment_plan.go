@@ -272,6 +272,7 @@ func (s *ExperimentPlanService) ListByManuscript(
 	ctx context.Context,
 	userID uint,
 	manuscriptID uint64,
+	page, pageSize int,
 ) (*response.PaperExperimentPlanListView, error) {
 	if manuscriptID == 0 {
 		return nil, errorx.ErrParamsError
@@ -283,7 +284,12 @@ func (s *ExperimentPlanService) ListByManuscript(
 	if ms == nil {
 		return nil, errorx.ErrParamsError.WithDetail("manuscript 不存在或无权访问")
 	}
-	rows, err := s.plans.ListByManuscript(ctx, manuscriptID)
+	page, pageSize, offset := NormalizeListPage(page, pageSize)
+	total, err := s.plans.CountByManuscript(ctx, manuscriptID)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.plans.ListByManuscriptPaged(ctx, manuscriptID, offset, pageSize)
 	if err != nil {
 		return nil, err
 	}
@@ -298,6 +304,9 @@ func (s *ExperimentPlanService) ListByManuscript(
 	out := &response.PaperExperimentPlanListView{
 		ManuscriptID: manuscriptID,
 		Items:        make([]response.PaperExperimentPlanItemView, 0, len(rows)),
+		Total:        total,
+		Page:         page,
+		PageSize:     pageSize,
 	}
 	for _, row := range rows {
 		item := experimentPlanListItemView(row)

@@ -16,6 +16,9 @@ type PaperLiteratureReviewItemView struct {
 }
 
 type PaperLiteratureReviewListView struct {
-	ManuscriptID uint64                        `json:"manuscript_id"`
+	ManuscriptID uint64                          `json:"manuscript_id"`
 	Items        []PaperLiteratureReviewItemView `json:"items"`
+	Total        int64                           `json:"total,omitempty"`
+	Page         int                             `json:"page,omitempty"`
+	PageSize     int                             `json:"page_size,omitempty"`
 }

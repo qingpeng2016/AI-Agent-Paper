@@ -6,6 +6,7 @@ import (
 	"github.com/qingpeng2016/ai-agent-paper/common/dederi/gin/response"
 	"github.com/qingpeng2016/ai-agent-paper/common/errorx"
 	"github.com/qingpeng2016/ai-agent-paper/domain/rest/request"
+	apiresp "github.com/qingpeng2016/ai-agent-paper/domain/rest/response"
 	"github.com/gin-gonic/gin"
 )
 
@@ -24,7 +25,15 @@ func (h *PaperManuscriptHandler) GetManuscripts(c *gin.Context) {
 		response.ResponseErr(c, errorx.ErrParamsError)
 		return
 	}
-	data, err := h.ms.ListMine(c.Request.Context(), userID)
+	var q request.PaperManuscriptListQuery
+	_ = c.ShouldBindQuery(&q)
+	var data *apiresp.PaperManuscriptListView
+	var err error
+	if q.Page > 0 {
+		data, err = h.ms.ListMinePaged(c.Request.Context(), userID, q.Page, q.PageSize)
+	} else {
+		data, err = h.ms.ListMine(c.Request.Context(), userID)
+	}
 	if err != nil {
 		response.ResponseErr(c, err)
 		return

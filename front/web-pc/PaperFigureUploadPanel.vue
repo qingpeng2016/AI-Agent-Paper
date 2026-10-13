@@ -140,7 +140,7 @@ function kindLabel(kind: UploadedFigureItem['kind']) {
 <template>
   <section class="fig-upload-panel" :class="{ 'fig-upload-panel--embedded': embedded }">
     <p class="fig-upload-lead">
-      为当前论文「<strong>{{ manuscriptTitle }}</strong>」上传 figure / 表格截图等文件，供写作与论文审查引用（演示：本地仅存文件名与元数据）。
+      为当前论文「<strong>{{ manuscriptTitle }}</strong>」上传 figure / 表格截图等文件，供稿件与实验汇报引用（演示：本地仅存文件名与元数据）。
     </p>
 
     <div class="fig-upload-toolbar">

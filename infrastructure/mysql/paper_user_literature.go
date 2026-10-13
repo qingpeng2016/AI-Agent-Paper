@@ -26,6 +26,27 @@ func (r *PaperUserLiteratureImpl) ListActiveByUser(ctx context.Context, userID u
 	return rows, err
 }
 
+func (r *PaperUserLiteratureImpl) ListActiveByUserPaged(ctx context.Context, userID uint64, offset, limit int) ([]entity.PaperUserLiterature, error) {
+	var rows []entity.PaperUserLiterature
+	q := r.db.WithContext(ctx).
+		Where("user_id = ? AND status = ?", userID, "active").
+		Order("created_at DESC, id DESC")
+	if limit > 0 {
+		q = q.Offset(offset).Limit(limit)
+	}
+	err := q.Find(&rows).Error
+	return rows, err
+}
+
+func (r *PaperUserLiteratureImpl) CountActiveByUser(ctx context.Context, userID uint64) (int64, error) {
+	var n int64
+	err := r.db.WithContext(ctx).
+		Model(&entity.PaperUserLiterature{}).
+		Where("user_id = ? AND status = ?", userID, "active").
+		Count(&n).Error
+	return n, err
+}
+
 func (r *PaperUserLiteratureImpl) FindActiveByUserStorageURL(ctx context.Context, userID uint64, storageURL string) (*entity.PaperUserLiterature, error) {
 	storageURL = strings.TrimSpace(storageURL)
 	if userID == 0 || storageURL == "" {

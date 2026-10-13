@@ -94,9 +94,14 @@ export function literatureReviewBibliographyEntries(
   })
 }
 
+export const LITERATURE_REVIEW_LIST_PAGE_SIZE = 20
+
 export type PaperLiteratureReviewListResponse = {
   manuscript_id: number
   items: PaperLiteratureReviewItem[]
+  total?: number
+  page?: number
+  page_size?: number
 }
 
 export async function fetchLiteratureReviewDetail(
@@ -125,15 +130,19 @@ export async function fetchLiteratureReviewDetail(
 
 export async function fetchLiteratureReviews(
   manuscriptId: string,
+  page = 1,
+  pageSize = LITERATURE_REVIEW_LIST_PAGE_SIZE,
 ): Promise<PaperLiteratureReviewListResponse> {
   const idNum = Number(manuscriptId)
   if (!Number.isFinite(idNum) || idNum <= 0) {
-    return { manuscript_id: 0, items: [] }
+    return { manuscript_id: 0, items: [], total: 0, page: 1, page_size: pageSize }
   }
-  const res = await fetch(
-    `/api/v1/paper/literature-reviews?manuscript_id=${encodeURIComponent(idNum)}`,
-    { credentials: 'include' },
-  )
+  const q = new URLSearchParams({
+    manuscript_id: String(idNum),
+    page: String(page > 0 ? page : 1),
+    page_size: String(pageSize > 0 ? pageSize : LITERATURE_REVIEW_LIST_PAGE_SIZE),
+  })
+  const res = await fetch(`/api/v1/paper/literature-reviews?${q}`, { credentials: 'include' })
   if (!res.ok) {
     throw new Error(`literature-reviews http ${res.status}`)
   }

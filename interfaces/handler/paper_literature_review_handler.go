@@ -33,7 +33,7 @@ func (h *PaperLiteratureReviewHandler) GetLiteratureReviews(c *gin.Context) {
 		response.ResponseErr(c, errorx.ErrParamsError)
 		return
 	}
-	data, err := h.svc.ListByManuscript(c.Request.Context(), userID, q.ManuscriptID)
+	data, err := h.svc.ListByManuscript(c.Request.Context(), userID, q.ManuscriptID, q.Page, q.PageSize)
 	if err != nil {
 		response.ResponseErr(c, err)
 		return

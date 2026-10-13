@@ -7,9 +7,7 @@ export const DEMO_MODULE_TOKEN_ESTIMATES: Partial<
   'topic-discovery': { prompt: 18_400, completion: 6_200 },
   'literature-review': { prompt: 9_800, completion: 4_100 },
   'experiment-planning': { prompt: 5_200, completion: 2_400 },
-  'paper-writing': { prompt: 22_000, completion: 11_500 },
   'figure-generation': { prompt: 3_400, completion: 1_200 },
-  'manuscript-analysis': { prompt: 14_200, completion: 5_800 },
   environment: { prompt: 120, completion: 80 },
 }
 
@@ -43,9 +41,9 @@ export const DEMO_OPERATION_LOG_SEED: PaperOperationLogEntry[] = [
   {
     id: 'op-seed-3',
     occurredAt: '2026-10-06T14:22:18.000Z',
-    moduleId: 'paper-writing',
-    moduleLabel: '论文写作',
-    action: '分节撰写（Introduction + Related Work）',
+    moduleId: 'figure-generation',
+    moduleLabel: '图表管理',
+    action: '一键生成统计图（演示）',
     tokensPrompt: 12_400,
     tokensCompletion: 6_800,
     tokensTotal: 19_200,

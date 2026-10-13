@@ -40,6 +40,27 @@ func (r *PaperManuscriptImpl) ListByUser(ctx context.Context, userID uint) ([]en
 	return rows, err
 }
 
+func (r *PaperManuscriptImpl) ListByUserPaged(ctx context.Context, userID uint, offset, limit int) ([]entity.PaperManuscript, error) {
+	var rows []entity.PaperManuscript
+	q := r.db.WithContext(ctx).
+		Where("user_id = ? AND status = ?", userID, "active").
+		Order("is_current DESC, updated_at DESC, id DESC")
+	if limit > 0 {
+		q = q.Offset(offset).Limit(limit)
+	}
+	err := q.Find(&rows).Error
+	return rows, err
+}
+
+func (r *PaperManuscriptImpl) CountByUserActive(ctx context.Context, userID uint) (int64, error) {
+	var n int64
+	err := r.db.WithContext(ctx).
+		Model(&entity.PaperManuscript{}).
+		Where("user_id = ? AND status = ?", userID, "active").
+		Count(&n).Error
+	return n, err
+}
+
 func (r *PaperManuscriptImpl) Create(ctx context.Context, userID uint, title string, disciplineID *uint64, contentLanguage string) (*entity.PaperManuscript, error) {
 	row := entity.PaperManuscript{
 		UserID:          userID,

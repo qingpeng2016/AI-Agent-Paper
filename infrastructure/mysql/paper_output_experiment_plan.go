@@ -46,21 +46,46 @@ func (r *PaperOutputExperimentPlanImpl) Create(ctx context.Context, row *entity.
 	})
 }
 
-func (r *PaperOutputExperimentPlanImpl) ListByManuscript(
-	ctx context.Context,
-	manuscriptID uint64,
-) ([]entity.PaperOutputExperimentPlan, error) {
-	var rows []entity.PaperOutputExperimentPlan
-	err := r.db.WithContext(ctx).
+func (r *PaperOutputExperimentPlanImpl) experimentPlanListQuery(ctx context.Context, manuscriptID uint64) *gorm.DB {
+	return r.db.WithContext(ctx).
+		Model(&entity.PaperOutputExperimentPlan{}).
 		Select(
 			"id", "manuscript_id", "user_id", "version", "is_current", "status",
 			"title", "summary", "format", "input_params", "experiment_data_uri",
 			"created_at", "updated_at",
 		).
 		Where("manuscript_id = ? AND status <> ?", manuscriptID, "deleted").
-		Order("created_at DESC, id DESC").
-		Find(&rows).Error
+		Order("created_at DESC, id DESC")
+}
+
+func (r *PaperOutputExperimentPlanImpl) ListByManuscript(
+	ctx context.Context,
+	manuscriptID uint64,
+) ([]entity.PaperOutputExperimentPlan, error) {
+	return r.ListByManuscriptPaged(ctx, manuscriptID, 0, 0)
+}
+
+func (r *PaperOutputExperimentPlanImpl) ListByManuscriptPaged(
+	ctx context.Context,
+	manuscriptID uint64,
+	offset, limit int,
+) ([]entity.PaperOutputExperimentPlan, error) {
+	var rows []entity.PaperOutputExperimentPlan
+	q := r.experimentPlanListQuery(ctx, manuscriptID)
+	if limit > 0 {
+		q = q.Offset(offset).Limit(limit)
+	}
+	err := q.Find(&rows).Error
 	return rows, err
+}
+
+func (r *PaperOutputExperimentPlanImpl) CountByManuscript(ctx context.Context, manuscriptID uint64) (int64, error) {
+	var n int64
+	err := r.db.WithContext(ctx).
+		Model(&entity.PaperOutputExperimentPlan{}).
+		Where("manuscript_id = ? AND status <> ?", manuscriptID, "deleted").
+		Count(&n).Error
+	return n, err
 }
 
 func (r *PaperOutputExperimentPlanImpl) GetByIDForUser(

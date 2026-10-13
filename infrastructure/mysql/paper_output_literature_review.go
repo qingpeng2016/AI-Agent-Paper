@@ -48,12 +48,37 @@ func (r *PaperOutputLiteratureReviewImpl) ListByManuscriptForUser(
 	userID uint,
 	manuscriptID uint64,
 ) ([]entity.PaperOutputLiteratureReview, error) {
+	return r.ListByManuscriptForUserPaged(ctx, userID, manuscriptID, 0, 0)
+}
+
+func (r *PaperOutputLiteratureReviewImpl) ListByManuscriptForUserPaged(
+	ctx context.Context,
+	userID uint,
+	manuscriptID uint64,
+	offset, limit int,
+) ([]entity.PaperOutputLiteratureReview, error) {
 	var rows []entity.PaperOutputLiteratureReview
-	err := r.db.WithContext(ctx).
+	q := r.db.WithContext(ctx).
 		Where("manuscript_id = ? AND user_id = ? AND status <> ?", manuscriptID, userID, "deleted").
-		Order("created_at DESC, id DESC").
-		Find(&rows).Error
+		Order("created_at DESC, id DESC")
+	if limit > 0 {
+		q = q.Offset(offset).Limit(limit)
+	}
+	err := q.Find(&rows).Error
 	return rows, err
+}
+
+func (r *PaperOutputLiteratureReviewImpl) CountByManuscriptForUser(
+	ctx context.Context,
+	userID uint,
+	manuscriptID uint64,
+) (int64, error) {
+	var n int64
+	err := r.db.WithContext(ctx).
+		Model(&entity.PaperOutputLiteratureReview{}).
+		Where("manuscript_id = ? AND user_id = ? AND status <> ?", manuscriptID, userID, "deleted").
+		Count(&n).Error
+	return n, err
 }
 
 func (r *PaperOutputLiteratureReviewImpl) ListByManuscript(

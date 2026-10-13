@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/qingpeng2016/ai-agent-paper/common/errorx"
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
@@ -31,8 +32,39 @@ func (s *ManuscriptService) ListMine(ctx context.Context, userID uint) (*respons
 	if err != nil {
 		return nil, err
 	}
+	return s.manuscriptListViewFromRows(ctx, rows, 0, 0, 0), nil
+}
+
+func (s *ManuscriptService) ListMinePaged(
+	ctx context.Context,
+	userID uint,
+	page, pageSize int,
+) (*response.PaperManuscriptListView, error) {
+	page, pageSize, offset := NormalizeListPage(page, pageSize)
+	total, err := s.manuscripts.CountByUserActive(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.manuscripts.ListByUserPaged(ctx, userID, offset, pageSize)
+	if err != nil {
+		return nil, err
+	}
+	return s.manuscriptListViewFromRows(ctx, rows, total, page, pageSize), nil
+}
+
+func (s *ManuscriptService) manuscriptListViewFromRows(
+	ctx context.Context,
+	rows []entity.PaperManuscript,
+	total int64,
+	page, pageSize int,
+) *response.PaperManuscriptListView {
 	out := &response.PaperManuscriptListView{
 		Items: make([]response.PaperManuscriptItemView, 0, len(rows)),
+	}
+	if total > 0 {
+		out.Total = total
+		out.Page = page
+		out.PageSize = pageSize
 	}
 	for _, row := range rows {
 		item := s.manuscriptItemView(ctx, row)
@@ -41,7 +73,7 @@ func (s *ManuscriptService) ListMine(ctx context.Context, userID uint) (*respons
 			out.CurrentManuscriptID = uint64(row.ID)
 		}
 	}
-	return out, nil
+	return out
 }
 
 func (s *ManuscriptService) manuscriptItemView(ctx context.Context, row entity.PaperManuscript) response.PaperManuscriptItemView {
@@ -51,6 +83,7 @@ func (s *ManuscriptService) manuscriptItemView(ctx context.Context, row entity.P
 		Status:          row.Status,
 		IsCurrent:       row.IsCurrent,
 		ContentLanguage: NormalizeContentLanguage(row.ContentLanguage),
+		CreatedAt:       row.CreatedAt.UTC().Format(time.RFC3339),
 	}
 	if row.DisciplineID != nil && *row.DisciplineID > 0 {
 		disc, err := s.catalog.FindDisciplineByID(ctx, *row.DisciplineID)

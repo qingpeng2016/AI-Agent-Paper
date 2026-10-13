@@ -74,9 +74,14 @@ export async function deleteExperimentPlanData(
   return envelope.data
 }
 
+export const EXPERIMENT_PLAN_LIST_PAGE_SIZE = 20
+
 export type PaperExperimentPlanListResponse = {
   manuscript_id: number
   items: PaperExperimentPlanItem[]
+  total?: number
+  page?: number
+  page_size?: number
 }
 
 export async function fetchExperimentPlanDetail(
@@ -105,15 +110,19 @@ export async function fetchExperimentPlanDetail(
 
 export async function fetchExperimentPlans(
   manuscriptId: string,
+  page = 1,
+  pageSize = EXPERIMENT_PLAN_LIST_PAGE_SIZE,
 ): Promise<PaperExperimentPlanListResponse> {
   const idNum = Number(manuscriptId)
   if (!Number.isFinite(idNum) || idNum <= 0) {
-    return { manuscript_id: 0, items: [] }
+    return { manuscript_id: 0, items: [], total: 0, page: 1, page_size: pageSize }
   }
-  const res = await fetch(
-    `/api/v1/paper/experiment-plans?manuscript_id=${encodeURIComponent(idNum)}`,
-    { credentials: 'include' },
-  )
+  const q = new URLSearchParams({
+    manuscript_id: String(idNum),
+    page: String(page > 0 ? page : 1),
+    page_size: String(pageSize > 0 ? pageSize : EXPERIMENT_PLAN_LIST_PAGE_SIZE),
+  })
+  const res = await fetch(`/api/v1/paper/experiment-plans?${q}`, { credentials: 'include' })
   if (!res.ok) {
     throw new Error(`experiment-plans http ${res.status}`)
   }

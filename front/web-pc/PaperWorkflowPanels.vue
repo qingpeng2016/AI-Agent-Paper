@@ -4,6 +4,7 @@ import { ElMessage } from 'element-plus'
 import {
   fetchLiteratureReviewDetail,
   fetchLiteratureReviews,
+  LITERATURE_REVIEW_LIST_PAGE_SIZE,
   formatLiteratureReviewFrom,
   literatureReviewBibliographyEntries,
   literatureReviewCanDownloadDocuments,
@@ -26,28 +27,21 @@ import {
   experimentPlanRowTitle,
   fetchExperimentPlanDetail,
   fetchExperimentPlans,
+  EXPERIMENT_PLAN_LIST_PAGE_SIZE,
   formatExperimentPlanStatus,
   experimentPlanStatusTone,
   uploadExperimentPlanData,
   type PaperExperimentPlanItem,
 } from '@/api/experimentPlans'
-import {
-  DEMO_FIGURES,
-  DEMO_MANUSCRIPT,
-  DEMO_MANUSCRIPT_ANALYSIS,
-} from './demoModuleOutputs'
+import { DEMO_FIGURES, DEMO_MANUSCRIPT } from './demoModuleOutputs'
 import PaperFigureUploadPanel from './PaperFigureUploadPanel.vue'
+import PaperListPagination from './PaperListPagination.vue'
 import PaperSelect from './PaperSelect.vue'
 import {
   DEFAULT_FIGURE_GENERATION,
-  DEFAULT_MANUSCRIPT_ANALYSIS,
-  DEFAULT_PAPER_WRITING,
   FIGURE_CHART_OPTIONS,
-  PAPER_WRITING_SECTION_OPTIONS,
   type FigureGenerationForm,
-  type ManuscriptAnalysisForm,
   type PaperModuleId,
-  type PaperWritingForm,
 } from './types'
 
 export type FigureManagementTabId = 'upload' | 'generate'
@@ -74,19 +68,16 @@ const props = withDefaults(
 )
 const { moduleId, manuscriptId, manuscriptTitle } = toRefs(props)
 
-const writeForm = reactive<PaperWritingForm>({
-  ...DEFAULT_PAPER_WRITING,
-  sections: [...DEFAULT_PAPER_WRITING.sections],
-})
 const figureForm = reactive<FigureGenerationForm>({
   ...DEFAULT_FIGURE_GENERATION,
   chartTypes: [...DEFAULT_FIGURE_GENERATION.chartTypes],
 })
-const analysisForm = reactive<ManuscriptAnalysisForm>({ ...DEFAULT_MANUSCRIPT_ANALYSIS })
 
 const resultVisible = ref<Partial<Record<PaperModuleId, boolean>>>({})
 
 const litReviewItems = ref<PaperLiteratureReviewItem[]>([])
+const litReviewListTotal = ref(0)
+const litReviewListPage = ref(1)
 const litReviewsLoading = ref(false)
 const litReviewViewItem = ref<PaperLiteratureReviewItem | null>(null)
 const litReviewViewDownloadKind = ref<'pdf' | 'docx' | null>(null)
@@ -104,6 +95,8 @@ const litReviewUploadExpPlanSubmitting = ref(false)
 let litReviewPollTimer: ReturnType<typeof setInterval> | null = null
 
 const expPlanItems = ref<PaperExperimentPlanItem[]>([])
+const expPlanListTotal = ref(0)
+const expPlanListPage = ref(1)
 const expPlansLoading = ref(false)
 const expPlanViewItem = ref<PaperExperimentPlanItem | null>(null)
 const expPlanLitReviewLoading = ref(false)
@@ -115,23 +108,39 @@ let expPlanReloadSeq = 0
 
 let litReviewReloadSeq = 0
 
-async function reloadLiteratureReviews(opts?: { silent?: boolean }) {
+async function reloadLiteratureReviews(opts?: { silent?: boolean; page?: number }) {
   const silent = opts?.silent === true
   const ms = manuscriptId.value
   if (!ms || !/^\d+$/.test(ms)) {
-    if (!silent) litReviewItems.value = []
+    if (!silent) {
+      litReviewItems.value = []
+      litReviewListTotal.value = 0
+    }
     return
   }
+  const page = opts?.page ?? litReviewListPage.value
   const seq = ++litReviewReloadSeq
   if (!silent) litReviewsLoading.value = true
   try {
-    const data = await fetchLiteratureReviews(ms)
+    const data = await fetchLiteratureReviews(ms, page, LITERATURE_REVIEW_LIST_PAGE_SIZE)
     if (seq !== litReviewReloadSeq) return
     litReviewItems.value = data.items ?? []
+    litReviewListTotal.value = data.total ?? litReviewItems.value.length
+    litReviewListPage.value = data.page ?? page
+    if (
+      litReviewItems.value.length === 0 &&
+      litReviewListTotal.value > 0 &&
+      litReviewListPage.value > 1
+    ) {
+      litReviewListPage.value = Math.max(1, litReviewListPage.value - 1)
+      await reloadLiteratureReviews({ silent, page: litReviewListPage.value })
+      return
+    }
   } catch (e) {
     if (seq !== litReviewReloadSeq) return
     if (!silent) {
       litReviewItems.value = []
+      litReviewListTotal.value = 0
       const msg = e instanceof Error ? e.message : '加载文献综述失败'
       ElMessage.error(msg)
     }
@@ -143,6 +152,11 @@ async function reloadLiteratureReviews(opts?: { silent?: boolean }) {
   }
 }
 
+function onLitReviewListPageChange(page: number) {
+  litReviewListPage.value = page
+  void reloadLiteratureReviews({ page })
+}
+
 /** 进入文献综述 / 切换当前论文 / 刷新：同一条路径拉列表（不依赖父组件 ref 时序） */
 watch(
   () => [moduleId.value, manuscriptId.value] as const,
@@ -150,9 +164,12 @@ watch(
     if (mod !== 'literature-review') return
     if (!ms || !/^\d+$/.test(ms)) {
       litReviewItems.value = []
+      litReviewListTotal.value = 0
+      litReviewListPage.value = 1
       return
     }
-    void reloadLiteratureReviews()
+    litReviewListPage.value = 1
+    void reloadLiteratureReviews({ page: 1 })
   },
   { immediate: true },
 )
@@ -432,32 +449,53 @@ async function tryOpenPendingExperimentPlan() {
   }
 }
 
-async function reloadExperimentPlans(opts?: { silent?: boolean }) {
+async function reloadExperimentPlans(opts?: { silent?: boolean; page?: number }) {
   const silent = opts?.silent === true
   const ms = manuscriptId.value
   if (!ms || !/^\d+$/.test(ms)) {
-    if (!silent) expPlanItems.value = []
+    if (!silent) {
+      expPlanItems.value = []
+      expPlanListTotal.value = 0
+    }
     return
   }
+  const page = opts?.page ?? expPlanListPage.value
   const seq = ++expPlanReloadSeq
   if (!silent) expPlansLoading.value = true
   try {
-    const data = await fetchExperimentPlans(ms)
+    const data = await fetchExperimentPlans(ms, page, EXPERIMENT_PLAN_LIST_PAGE_SIZE)
     if (seq !== expPlanReloadSeq) return
     expPlanItems.value = data.items ?? []
+    expPlanListTotal.value = data.total ?? expPlanItems.value.length
+    expPlanListPage.value = data.page ?? page
+    if (
+      expPlanItems.value.length === 0 &&
+      expPlanListTotal.value > 0 &&
+      expPlanListPage.value > 1
+    ) {
+      expPlanListPage.value = Math.max(1, expPlanListPage.value - 1)
+      await reloadExperimentPlans({ silent, page: expPlanListPage.value })
+      return
+    }
   } catch (e) {
     if (seq !== expPlanReloadSeq) return
     if (!silent) {
       expPlanItems.value = []
+      expPlanListTotal.value = 0
       const msg = e instanceof Error ? e.message : '加载实验方案失败'
       ElMessage.error(msg)
     }
   } finally {
-    if (seq === expPlanReloadSeq && !silent) {
-      expPlansLoading.value = false
+    if (seq === expPlanReloadSeq) {
+      if (!silent) expPlansLoading.value = false
       void tryOpenPendingExperimentPlan()
     }
   }
+}
+
+function onExpPlanListPageChange(page: number) {
+  expPlanListPage.value = page
+  void reloadExperimentPlans({ page })
 }
 
 /** 进入实验方案 / 切换当前论文 / 刷新：同文献综述，模块内 loading（不走顶栏 generic loading） */
@@ -467,9 +505,12 @@ watch(
     if (mod !== 'experiment-planning') return
     if (!ms || !/^\d+$/.test(ms)) {
       expPlanItems.value = []
+      expPlanListTotal.value = 0
+      expPlanListPage.value = 1
       return
     }
-    void reloadExperimentPlans()
+    expPlanListPage.value = 1
+    void reloadExperimentPlans({ page: 1 })
   },
   { immediate: true },
 )
@@ -481,17 +522,6 @@ watch(
   },
 )
 
-const auditOptions = [
-  { value: 'polished', label: '基础' },
-  { value: 'standard', label: '标准' },
-  { value: 'strict', label: '严格' },
-]
-
-const writeToneOptions = [
-  { value: 'concise', label: '简洁' },
-  { value: 'standard', label: '标准 conference' },
-]
-
 const figureDatasetOptions = [
   { value: 'results_main.csv', label: 'results_main.csv（演示）' },
   { value: 'ablation_B.csv', label: 'ablation_B.csv（演示）' },
@@ -502,17 +532,6 @@ const captionLangOptions = [
   { value: 'en', label: 'English' },
   { value: 'zh', label: '中文' },
 ]
-
-function toggleWritingSection(value: string, checked: boolean) {
-  const set = new Set(writeForm.sections)
-  if (checked) set.add(value)
-  else set.delete(value)
-  writeForm.sections = [...set]
-}
-
-function isWritingSectionChecked(value: string) {
-  return writeForm.sections.includes(value)
-}
 
 function toggleChartType(value: string, checked: boolean) {
   const set = new Set(figureForm.chartTypes)
@@ -765,16 +784,12 @@ async function runModule(id: PaperModuleId): Promise<boolean> {
     return true
   }
   if (id === 'experiment-planning') {
-    await reloadExperimentPlans()
-    if (!expPlanItems.value.length) {
+    await reloadExperimentPlans({ page: expPlanListPage.value })
+    if (!expPlanListTotal.value) {
       ElMessage.warning('暂无实验方案，请先在「文献综述」等待生成完成后点击「查看实验方案」')
       return false
     }
     return true
-  }
-  if (id === 'paper-writing' && writeForm.sections.length === 0) {
-    ElMessage.warning('请至少选择一个章节')
-    return false
   }
   if (id === 'figure-generation' && figureForm.chartTypes.length === 0) {
     ElMessage.warning('请至少选择一种图表类型')
@@ -892,6 +907,12 @@ defineExpose({
           </tr>
         </tbody>
       </table>
+      <PaperListPagination
+        :total="litReviewListTotal"
+        :page-size="LITERATURE_REVIEW_LIST_PAGE_SIZE"
+        :current-page="litReviewListPage"
+        @update:current-page="onLitReviewListPageChange"
+      />
     </section>
 
     <Teleport to="body">
@@ -1042,7 +1063,7 @@ defineExpose({
       <p class="wf-meta">正在加载实验方案…</p>
     </section>
 
-    <section v-else-if="!expPlanItems.length" class="wf-panel">
+    <section v-else-if="expPlanListTotal === 0" class="wf-panel">
       <h2 class="wf-title wf-title--module-head">实验方案</h2>
       <p class="wf-lead">
         当前论文尚无实验方案。请在「文献综述」中等待方案生成后，点击「查看实验方案」进入。
@@ -1130,6 +1151,12 @@ defineExpose({
           </tr>
         </tbody>
       </table>
+      <PaperListPagination
+        :total="expPlanListTotal"
+        :page-size="EXPERIMENT_PLAN_LIST_PAGE_SIZE"
+        :current-page="expPlanListPage"
+        @update:current-page="onExpPlanListPageChange"
+      />
     </section>
 
     <Teleport to="body">
@@ -1211,70 +1238,6 @@ defineExpose({
         </div>
       </div>
     </Teleport>
-  </div>
-
-  <!-- 论文写作 -->
-  <div v-else-if="moduleId === 'paper-writing'" class="wf-stack">
-    <section class="wf-panel">
-      <h2 class="wf-title">参数</h2>
-      <div class="wf-grid">
-        <label class="wf-field">
-          <span class="wf-label">目标 venue</span>
-          <input v-model="writeForm.venue" type="text" class="wf-input" />
-        </label>
-        <label class="wf-field">
-          <span class="wf-label">文风</span>
-          <PaperSelect v-model="writeForm.tone" :options="writeToneOptions" />
-        </label>
-      </div>
-      <div class="wf-field wf-field--block">
-        <span class="wf-label">生成章节</span>
-        <div class="wf-check-group">
-          <label v-for="opt in PAPER_WRITING_SECTION_OPTIONS" :key="opt.value" class="wf-check wf-check--inline">
-            <input
-              type="checkbox"
-              :checked="isWritingSectionChecked(opt.value)"
-              @change="toggleWritingSection(opt.value, ($event.target as HTMLInputElement).checked)"
-            />
-            <span>{{ opt.label }}</span>
-          </label>
-        </div>
-      </div>
-      <label class="wf-check">
-        <input v-model="writeForm.useLitReview" type="checkbox" />
-        <span>引用已有文献综述 artifact</span>
-      </label>
-      <label class="wf-check">
-        <input v-model="writeForm.useReviewArtifact" type="checkbox" />
-        <span>参考写前审查意见修订 Experiments 表述</span>
-      </label>
-    </section>
-    <section v-if="resultVisible['paper-writing']" class="wf-panel wf-panel--result">
-      <h2 class="wf-title">稿件（演示）</h2>
-      <p class="wf-kv"><span>标题</span>{{ DEMO_MANUSCRIPT.title }}</p>
-      <table class="wf-table">
-        <thead>
-          <tr>
-            <th>章节</th>
-            <th>字数</th>
-            <th>状态</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="s in DEMO_MANUSCRIPT.sections" :key="s.name">
-            <td>{{ s.name }}</td>
-            <td>{{ s.words }}</td>
-            <td>
-              <span class="wf-tag" :class="s.status === 'done' ? 'wf-tag--ok' : 'wf-tag--draft'">{{
-                s.status
-              }}</span>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      <p class="wf-meta">引用 {{ DEMO_MANUSCRIPT.cites }} · 已验证 {{ DEMO_MANUSCRIPT.verifiedCites }}</p>
-      <pre class="wf-pre">{{ DEMO_MANUSCRIPT.excerpt }}</pre>
-    </section>
   </div>
 
   <!-- 图表管理 -->
@@ -1373,44 +1336,6 @@ defineExpose({
     </section>
     </div>
   </section>
-
-  <!-- 论文审查 -->
-  <div v-else-if="moduleId === 'manuscript-analysis'" class="wf-stack">
-    <section class="wf-panel">
-      <h2 class="wf-title">参数</h2>
-      <p class="wf-lead">写作完成后对全文做投稿前全面分析。</p>
-      <div class="wf-grid">
-        <label class="wf-field">
-          <span class="wf-label">分析深度</span>
-          <PaperSelect v-model="analysisForm.depth" :options="auditOptions" />
-        </label>
-      </div>
-      <label class="wf-check">
-        <input v-model="analysisForm.includeFigures" type="checkbox" />
-        <span>纳入图表与表（{{ DEMO_FIGURES.files.length }} 个 demo figure）</span>
-      </label>
-      <label class="wf-check">
-        <input v-model="analysisForm.includeBib" type="checkbox" />
-        <span>纳入参考文献门禁结果</span>
-      </label>
-    </section>
-    <section v-if="resultVisible['manuscript-analysis']" class="wf-panel wf-panel--result">
-      <h2 class="wf-title">论文审查报告（演示）</h2>
-      <p class="wf-score-big">总评 {{ DEMO_MANUSCRIPT_ANALYSIS.overall }} / 10</p>
-      <p class="wf-meta">{{ DEMO_MANUSCRIPT_ANALYSIS.recommendation }}</p>
-      <div class="wf-dim-grid">
-        <div v-for="d in DEMO_MANUSCRIPT_ANALYSIS.dimensions" :key="d.name" class="wf-dim">
-          <span>{{ d.name }}</span>
-          <strong>{{ d.score }}</strong>
-        </div>
-      </div>
-      <h3 class="wf-subtitle">Must fix</h3>
-      <ul class="wf-list">
-        <li v-for="(m, i) in DEMO_MANUSCRIPT_ANALYSIS.mustFix" :key="i">{{ m }}</li>
-      </ul>
-      <p class="wf-callout wf-callout--warn"><strong>Kill argument：</strong>{{ DEMO_MANUSCRIPT_ANALYSIS.kill }}</p>
-    </section>
-  </div>
 
   <Teleport to="body">
     <div

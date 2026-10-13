@@ -1,345 +1,255 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { paperConfirm, paperPrompt } from '@/utils/paperDialog'
-import type { PaperManuscriptItem } from './types'
+import {
+  fetchPaperManuscripts,
+  PAPER_LIST_PAGE_SIZE,
+  type PaperManuscriptApiItem,
+} from '@/api/manuscripts'
+import PaperListPagination from './PaperListPagination.vue'
 
 const props = defineProps<{
-  manuscripts: PaperManuscriptItem[]
   activeManuscriptId: string
 }>()
 
 const emit = defineEmits<{
   select: [id: string]
-  updateManuscripts: [list: PaperManuscriptItem[]]
 }>()
 
-const tab = ref<'active' | 'archived'>('active')
-const searchQuery = ref('')
+const items = ref<PaperManuscriptApiItem[]>([])
+const total = ref(0)
+const page = ref(1)
+const loading = ref(false)
 
-const filteredList = computed(() => {
-  const q = searchQuery.value.trim().toLowerCase()
-  return props.manuscripts.filter((m) => {
-    if (m.status !== tab.value) return false
-    if (!q) return true
-    const hay = `${m.title} ${m.venueHint}`.toLowerCase()
-    return hay.includes(q)
-  })
-})
-
-function setList(next: PaperManuscriptItem[]) {
-  emit('updateManuscripts', next)
+function formatCreatedAt(iso?: string): string {
+  if (!iso?.trim()) return '—'
+  try {
+    return new Date(iso).toLocaleString('zh-CN')
+  } catch {
+    return iso
+  }
 }
 
-async function editManuscript(item: PaperManuscriptItem) {
+async function loadPage(targetPage = page.value) {
+  loading.value = true
   try {
-    const title = await paperPrompt('标题与目标 venue 可在下方分别编辑。', '编辑论文', {
-      confirmButtonText: '保存',
-      cancelButtonText: '取消',
-      inputValue: item.title,
-      inputPlaceholder: '论文标题',
+    const data = await fetchPaperManuscripts({
+      page: targetPage,
+      page_size: PAPER_LIST_PAGE_SIZE,
     })
-    if (!title) return
-    let venue = item.venueHint
-    try {
-      venue = await paperPrompt('可选', '目标会议/期刊', {
-        confirmButtonText: '保存',
-        cancelButtonText: '跳过',
-        inputValue: item.venueHint,
-        inputPlaceholder: '如 NeurIPS 2026',
-      })
-    } catch {
-      /* 跳过 venue */
+    items.value = (data.items ?? []).filter((m) => m.status === 'active')
+    total.value = data.total ?? items.value.length
+    page.value = data.page ?? targetPage
+    if (items.value.length === 0 && total.value > 0 && page.value > 1) {
+      await loadPage(page.value - 1)
     }
-    const next = props.manuscripts.map((m) =>
-      m.id === item.id
-        ? { ...m, title, venueHint: venue.trim() || m.venueHint }
-        : m,
-    )
-    setList(next)
-    ElMessage.success('已保存（演示）')
-  } catch {
-    /* cancelled */
+  } catch (e) {
+    items.value = []
+    total.value = 0
+    const msg = e instanceof Error ? e.message : '加载论文列表失败'
+    ElMessage.error(msg)
+  } finally {
+    loading.value = false
   }
 }
 
-async function archiveManuscript(item: PaperManuscriptItem) {
-  try {
-    await paperConfirm(
-      `归档后「${item.title}」不会出现在侧栏当前论文下拉中，可随时恢复。`,
-      '归档论文',
-      {
-        variant: 'warning',
-        confirmButtonText: '归档',
-        cancelButtonText: '取消',
-      },
-    )
-    const next = props.manuscripts.map((m) =>
-      m.id === item.id ? { ...m, status: 'archived' as const } : m,
-    )
-    setList(next)
-    if (props.activeManuscriptId === item.id) {
-      const fallback = next.find((m) => m.status === 'active')
-      if (fallback) emit('select', fallback.id)
-    }
-    ElMessage.success('已归档')
-  } catch {
-    /* cancelled */
-  }
-}
-
-function restoreManuscript(item: PaperManuscriptItem) {
-  const next = props.manuscripts.map((m) =>
-    m.id === item.id ? { ...m, status: 'active' as const } : m,
-  )
-  setList(next)
-  ElMessage.success('已恢复为进行中')
+function onPageChange(p: number) {
+  page.value = p
+  void loadPage(p)
 }
 
 function selectAsCurrent(id: string) {
+  if (!id || id === props.activeManuscriptId) return
   emit('select', id)
-  ElMessage.success('已切换当前论文')
 }
+
+watch(
+  () => props.activeManuscriptId,
+  () => {
+    void loadPage(page.value)
+  },
+)
+
+void loadPage(1)
 </script>
 
 <template>
   <section class="ms-panel">
-    <p class="ms-lead">
-      管理本篇工作台下的论文项目（对应 <code>paper_manuscript</code>）。切换「当前论文」后，各模块运行与产出按篇隔离。
-    </p>
-
-    <div class="ms-toolbar">
-      <input v-model="searchQuery" type="search" class="ms-search" placeholder="搜索标题、venue…" />
-    </div>
-
-    <div class="ms-tabs" role="tablist">
-      <button
-        type="button"
-        class="ms-tab"
-        :class="{ 'ms-tab--active': tab === 'active' }"
-        @click="tab = 'active'"
-      >
-        进行中
-      </button>
-      <button
-        type="button"
-        class="ms-tab"
-        :class="{ 'ms-tab--active': tab === 'archived' }"
-        @click="tab = 'archived'"
-      >
-        已归档
-      </button>
-    </div>
-
-    <div v-if="filteredList.length === 0" class="ms-empty">
-      {{ tab === 'active' ? '暂无进行中的论文。' : '暂无归档论文。' }}
-    </div>
-
-    <ul v-else class="ms-list">
-      <li v-for="item in filteredList" :key="item.id" class="ms-row">
-        <div class="ms-row-main">
-          <div class="ms-row-head">
-            <strong class="ms-title">{{ item.title }}</strong>
-            <span
-              v-if="item.id === activeManuscriptId && item.status === 'active'"
-              class="ms-badge ms-badge--current"
-              >当前</span
-            >
-          </div>
-          <p v-if="item.venueHint" class="ms-venue">{{ item.venueHint }}</p>
-          <p class="ms-id">ID · {{ item.id }}</p>
-        </div>
-        <div class="ms-row-actions">
-          <button
-            v-if="item.status === 'active' && item.id !== activeManuscriptId"
-            type="button"
-            class="ms-btn-ghost"
-            @click="selectAsCurrent(item.id)"
-          >
-            设为当前
-          </button>
-          <button type="button" class="ms-btn-ghost" @click="editManuscript(item)">编辑</button>
-          <button
-            v-if="item.status === 'active'"
-            type="button"
-            class="ms-btn-ghost ms-btn-ghost--warn"
-            @click="archiveManuscript(item)"
-          >
-            归档
-          </button>
-          <button v-else type="button" class="ms-btn-ghost" @click="restoreManuscript(item)">恢复</button>
-        </div>
-      </li>
-    </ul>
+    <p v-if="loading" class="ms-meta">正在加载论文列表…</p>
+    <p v-else-if="!total" class="ms-empty">暂无进行中的论文（status=active）。</p>
+    <template v-else>
+      <table class="ms-table">
+        <colgroup>
+          <col class="ms-col-title" />
+          <col class="ms-col-created" />
+          <col class="ms-col-disc" />
+          <col class="ms-col-status" />
+          <col class="ms-col-actions" />
+        </colgroup>
+        <thead>
+          <tr>
+            <th>标题</th>
+            <th>创建时间</th>
+            <th>学科</th>
+            <th>状态</th>
+            <th class="ms-col-actions">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-for="item in items" :key="item.id">
+            <td class="ms-col-title">{{ item.title }}</td>
+            <td class="ms-col-created">{{ formatCreatedAt(item.created_at) }}</td>
+            <td class="ms-col-disc">
+              {{ item.discipline_label || item.discipline_code || '—' }}
+            </td>
+            <td class="ms-col-status">
+              <span v-if="item.is_current" class="ms-pill ms-pill--current">当前</span>
+              <span v-else class="ms-muted">—</span>
+            </td>
+            <td class="ms-col-actions">
+              <button
+                v-if="!item.is_current"
+                type="button"
+                class="ms-btn-primary"
+                @click="selectAsCurrent(item.id)"
+              >
+                设为当前
+              </button>
+              <span v-else class="ms-muted">已选中</span>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <PaperListPagination
+        :total="total"
+        :page-size="PAPER_LIST_PAGE_SIZE"
+        :current-page="page"
+        @update:current-page="onPageChange"
+      />
+    </template>
   </section>
 </template>
 
 <style scoped>
 .ms-panel {
-  padding: 24px 26px 28px;
+  padding: 20px 22px 24px;
   background: #fff;
   border: 1px solid #e8eaf0;
   border-radius: 16px;
   box-shadow: 0 4px 24px rgba(30, 27, 75, 0.06);
 }
 
-.ms-lead {
-  margin: 0 0 20px;
+.ms-meta {
+  margin: 0;
   font-size: 14px;
-  line-height: 1.55;
-  color: #475569;
-}
-
-.ms-lead code {
-  font-size: 12px;
-  color: #6366f1;
-}
-
-.ms-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.ms-btn-primary {
-  padding: 9px 18px;
-  font-size: 14px;
-  font-weight: 600;
-  color: #fff;
-  background: linear-gradient(135deg, #7c3aed, #6366f1);
-  border: none;
-  border-radius: 10px;
-  cursor: pointer;
-}
-
-.ms-search {
-  flex: 1;
-  min-width: 200px;
-  padding: 9px 12px;
-  font-size: 14px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-}
-
-.ms-tabs {
-  display: inline-flex;
-  gap: 4px;
-  padding: 4px;
-  margin-bottom: 16px;
-  background: #f1f5f9;
-  border-radius: 10px;
-}
-
-.ms-tab {
-  padding: 7px 16px;
-  font-size: 13px;
-  font-weight: 500;
   color: #64748b;
-  background: transparent;
-  border: none;
-  border-radius: 7px;
-  cursor: pointer;
-}
-
-.ms-tab--active {
-  color: #1e293b;
-  background: #fff;
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
 }
 
 .ms-empty {
+  margin: 0;
   padding: 32px 16px;
-  text-align: center;
   font-size: 14px;
   color: #64748b;
+  text-align: center;
   background: #f8fafc;
   border-radius: 12px;
 }
 
-.ms-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  border: 1px solid #e8eaf0;
-  border-radius: 12px;
-  overflow: hidden;
+.ms-table {
+  width: 100%;
+  font-size: 14px;
+  table-layout: fixed;
+  border-collapse: collapse;
 }
 
-.ms-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  align-items: flex-start;
-  justify-content: space-between;
-  padding: 16px 18px;
-  border-bottom: 1px solid #f1f5f9;
+.ms-table col.ms-col-title {
+  width: 40%;
 }
 
-.ms-row:last-child {
-  border-bottom: none;
+.ms-table col.ms-col-created {
+  width: 18%;
 }
 
-.ms-title {
-  font-size: 15px;
-  color: #0f172a;
+.ms-table col.ms-col-disc {
+  width: 12%;
 }
 
-.ms-row-head {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 4px;
+.ms-table col.ms-col-status {
+  width: 12%;
 }
 
-.ms-badge {
-  padding: 2px 8px;
-  font-size: 11px;
-  font-weight: 600;
-  border-radius: 6px;
+.ms-table col.ms-col-actions {
+  width: 18%;
 }
 
-.ms-badge--current {
-  color: #4338ca;
-  background: #eef2ff;
+.ms-table th,
+.ms-table td {
+  padding: 13px 12px;
+  line-height: 1.5;
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid #e2e8f0;
 }
 
-.ms-venue {
-  margin: 0 0 4px;
-  font-size: 13px;
+.ms-table th {
+  font-weight: 700;
   color: #64748b;
 }
 
-.ms-id {
-  margin: 0;
-  font-size: 11px;
+.ms-col-title {
+  overflow: hidden;
+  font-weight: 400;
+  color: #1e1b4b;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ms-col-created {
+  font-weight: 400;
+  color: #334155;
+  font-variant-numeric: tabular-nums;
+}
+
+.ms-col-disc {
+  overflow: hidden;
+  color: #475569;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ms-col-actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+.ms-pill {
+  display: inline-block;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.35;
+  border-radius: 999px;
+}
+
+.ms-pill--current {
+  color: #047857;
+  background: #d1fae5;
+}
+
+.ms-muted {
+  font-size: 13px;
   color: #94a3b8;
 }
 
-.ms-row-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.ms-btn-ghost {
-  padding: 6px 12px;
+.ms-btn-primary {
+  padding: 5px 10px;
   font-size: 13px;
-  font-weight: 500;
-  color: #475569;
-  background: #fff;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
+  font-weight: 600;
+  color: #fff;
   cursor: pointer;
+  background: linear-gradient(135deg, #7c3aed, #6366f1);
+  border: none;
+  border-radius: 7px;
 }
 
-.ms-btn-ghost:hover {
-  border-color: #94a3b8;
-}
-
-.ms-btn-ghost--warn {
-  color: #b45309;
-  border-color: #fcd34d;
-}
 </style>

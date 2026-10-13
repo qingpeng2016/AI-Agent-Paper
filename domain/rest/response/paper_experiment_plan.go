@@ -16,4 +16,7 @@ type PaperExperimentPlanItemView struct {
 type PaperExperimentPlanListView struct {
 	ManuscriptID uint64                        `json:"manuscript_id"`
 	Items        []PaperExperimentPlanItemView `json:"items"`
+	Total        int64                         `json:"total,omitempty"`
+	Page         int                           `json:"page,omitempty"`
+	PageSize     int                           `json:"page_size,omitempty"`
 }

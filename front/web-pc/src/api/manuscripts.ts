@@ -6,6 +6,8 @@ type ApiEnvelope<T> = {
 
 export type ManuscriptContentLanguage = 'zh' | 'en'
 
+export const PAPER_LIST_PAGE_SIZE = 20
+
 export type PaperManuscriptApiItem = {
   id: string
   title: string
@@ -14,15 +16,29 @@ export type PaperManuscriptApiItem = {
   content_language: ManuscriptContentLanguage
   discipline_code?: string
   discipline_label?: string
+  created_at?: string
 }
 
 export type PaperManuscriptListResponse = {
   current_manuscript_id?: number
   items: PaperManuscriptApiItem[]
+  total?: number
+  page?: number
+  page_size?: number
 }
 
-export async function fetchPaperManuscripts(): Promise<PaperManuscriptListResponse> {
-  const res = await fetch('/api/v1/paper/manuscripts', { credentials: 'include' })
+export async function fetchPaperManuscripts(options?: {
+  page?: number
+  page_size?: number
+}): Promise<PaperManuscriptListResponse> {
+  const q = new URLSearchParams()
+  if (options?.page != null && options.page > 0) {
+    q.set('page', String(options.page))
+    q.set('page_size', String(options.page_size ?? PAPER_LIST_PAGE_SIZE))
+  }
+  const qs = q.toString()
+  const url = qs ? `/api/v1/paper/manuscripts?${qs}` : '/api/v1/paper/manuscripts'
+  const res = await fetch(url, { credentials: 'include' })
   if (!res.ok) {
     throw new Error(`manuscripts list http ${res.status}`)
   }

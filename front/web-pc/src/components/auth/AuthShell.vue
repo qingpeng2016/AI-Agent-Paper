@@ -35,7 +35,7 @@ defineProps<{
           </li>
           <li>
             <span class="check" aria-hidden="true">✓</span>
-            实验方案、论文写作与投稿前审查闭环，产出按篇沉淀
+            选题、综述与实验方案闭环，产出按篇沉淀
           </li>
         </ul>
 
