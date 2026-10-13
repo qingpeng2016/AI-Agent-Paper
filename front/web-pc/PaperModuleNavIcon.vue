@@ -31,7 +31,7 @@ defineProps<{
       <path d="M10 3v6l-5 9a2 2 0 0 0 1.7 3h10.6a2 2 0 0 0 1.7-3l-5-9V3" />
       <path d="M8 3h8" />
     </template>
-    <!-- 论文撰写：笔 + 线 -->
+    <!-- 论文写作：笔 + 线 -->
     <template v-else-if="moduleId === 'paper-writing'">
       <path d="M12 20h9" />
       <path d="M14.5 6.5 17.5 3.5a2.1 2.1 0 0 1 3 3L8 19l-4 1 1-4 9.5-9.5z" />

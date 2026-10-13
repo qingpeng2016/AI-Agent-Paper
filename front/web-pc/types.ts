@@ -34,7 +34,7 @@ export const PAPER_MODULES: PaperModuleMeta[] = [
   },
   {
     id: 'paper-writing',
-    label: '论文撰写',
+    label: '论文写作',
     description: '基于综述、实验方案与图表生成稿件正文（LaTeX/Markdown），对接写作与审计流程',
   },
   {

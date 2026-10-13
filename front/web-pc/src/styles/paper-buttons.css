@@ -20,6 +20,28 @@
   opacity: 0.55;
 }
 
+/** 文献综述等「生成」入口（与 primary 管理、danger 删除区分） */
+.paper-btn-generate {
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(135deg, #059669 0%, #0d9488 100%);
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(13, 148, 136, 0.28);
+}
+
+.paper-btn-generate:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.paper-btn-generate:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .paper-btn-secondary {
   padding: 10px 18px;
   font-size: 14px;

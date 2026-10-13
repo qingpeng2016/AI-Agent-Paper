@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onUnmounted, reactive, ref, toRefs, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElTooltip } from 'element-plus'
 import {
   fetchLiteratureReviewDetail,
   fetchLiteratureReviews,
@@ -18,7 +18,7 @@ import {
   literatureReviewStatusTone,
   literatureReviewWordFileName,
   isLiteratureReviewGeneratingExperimentPlan,
-  literatureReviewHasPaperManuscript,
+  literatureReviewNeedsGenerateRun,
   softDeleteLiteratureReview,
   type LitReviewAttachmentKind,
   type LiteratureReviewBibliographyEntry,
@@ -41,9 +41,11 @@ import PaperSelect from './PaperSelect.vue'
 import {
   DEFAULT_FIGURE_GENERATION,
   FIGURE_CHART_OPTIONS,
+  LITERATURE_SOURCE_OPTIONS,
   type FigureGenerationForm,
   type PaperModuleId,
 } from './types'
+import PaperTopicUserLiteraturePickDialog from './PaperTopicUserLiteraturePickDialog.vue'
 
 export type FigureManagementTabId = 'upload' | 'generate'
 
@@ -93,24 +95,239 @@ const litReviewUploadExpPlanReviewId = ref('')
 const litReviewUploadExpPlanFile = ref<File | null>(null)
 const litReviewUploadExpPlanInputRef = ref<HTMLInputElement | null>(null)
 const litReviewUploadExpPlanSubmitting = ref(false)
+const litReviewGeneratePending = ref<PaperLiteratureReviewItem | null>(null)
+const litReviewGenerateSubmitting = ref(false)
+const litReviewGenerateUserLitOpen = ref(false)
+const litReviewGenerateForm = reactive({
+  sourceCodes: ['arxiv'] as string[],
+  randomReferences: true,
+  humanCheckpoint: true,
+  userLiteratureIds: [] as string[],
+})
 let litReviewPollTimer: ReturnType<typeof setInterval> | null = null
 
 const expPlanItems = ref<PaperExperimentPlanItem[]>([])
 const expPlanListTotal = ref(0)
 const expPlanListPage = ref(1)
 const expPlansLoading = ref(false)
-const expPlanViewItem = ref<PaperExperimentPlanItem | null>(null)
-const expPlanLitReviewLoading = ref(false)
-const expPlanUploadPending = ref<PaperExperimentPlanItem | null>(null)
-const expPlanUploadFile = ref<File | null>(null)
-const expPlanUploadInputRef = ref<HTMLInputElement | null>(null)
-const expPlanUploadSubmitting = ref(false)
+type ExpPlanBundleTabId = 'plan' | 'data' | 'code' | 'results' | 'audit'
+
+const expPlanBundleView = ref<{
+  item: PaperExperimentPlanItem
+  tab: ExpPlanBundleTabId
+  loading: boolean
+} | null>(null)
+const expPlanBundleDataFile = ref<File | null>(null)
+const expPlanBundleDataInputRef = ref<HTMLInputElement | null>(null)
+const expPlanBundleDataSubmitting = ref(false)
+const expPlanCodeRunning = ref(false)
+const expPlanAuditRunning = ref(false)
+const expPlanDeletePending = ref<PaperExperimentPlanItem | null>(null)
+const expPlanDeleteSubmitting = ref(false)
 const expPlanUploadPlanOpen = ref(false)
 const expPlanUploadPlanId = ref('')
 const expPlanUploadPlanFile = ref<File | null>(null)
 const expPlanUploadPlanInputRef = ref<HTMLInputElement | null>(null)
 const expPlanUploadPlanSubmitting = ref(false)
 let expPlanReloadSeq = 0
+
+type PaperWritePhaseId = 'plan' | 'write' | 'compile' | 'polish' | 'audit'
+
+const PAPER_WRITE_PHASES: { id: PaperWritePhaseId; label: string; skill: string }[] = [
+  { id: 'plan', label: '规划', skill: 'paper-plan' },
+  { id: 'write', label: '正文', skill: 'paper-write' },
+  { id: 'compile', label: '编译', skill: 'paper-compile' },
+  { id: 'polish', label: '润色', skill: 'auto-paper-improvement-loop' },
+  { id: 'audit', label: '审计', skill: 'paper-claim-audit' },
+]
+
+const PAPER_WRITE_OUTLINE_ROWS: {
+  section: string
+  claim: string
+  figures: string
+  pages: string
+  status: string
+  statusTone: 'success' | 'draft' | 'muted'
+}[] = [
+  {
+    section: 'Abstract',
+    claim: 'C1 主贡献',
+    figures: '—',
+    pages: '0.5',
+    status: '已定稿',
+    statusTone: 'success',
+  },
+  {
+    section: 'Introduction',
+    claim: 'C1 + 动机',
+    figures: 'Fig.1 总览',
+    pages: '1.5',
+    status: '草稿',
+    statusTone: 'draft',
+  },
+  {
+    section: 'Method',
+    claim: 'C1 机制',
+    figures: 'Fig.2 架构',
+    pages: '2.0',
+    status: '待写',
+    statusTone: 'muted',
+  },
+  {
+    section: 'Experiments',
+    claim: 'C1 证据',
+    figures: 'Fig.3–5',
+    pages: '3.0',
+    status: '待写',
+    statusTone: 'muted',
+  },
+]
+
+const PAPER_WRITE_CLAIM_AUDIT_ROWS = [
+  { claim: '准确率 85.3%', evidence: 'results/main.json', verdict: '待审计' },
+  { claim: '较基线 +12.8%', evidence: 'tables/ablation.csv', verdict: '待审计' },
+] as const
+
+const paperWritePhase = ref<PaperWritePhaseId>('plan')
+const paperWriteRunStatus = ref<'idle' | 'running'>('idle')
+const paperWriteSelectedSection = ref('Introduction')
+const paperWriteCompileAnonymous = ref(true)
+const paperWriteDepsLoading = ref(false)
+
+const paperWriteVenueLabel = computed(() => 'NeurIPS / ICLR / ICML')
+
+const paperWriteLitGateOk = computed(() =>
+  litReviewItems.value.some((it) => literatureReviewCanDownloadDocuments(it)),
+)
+
+const paperWriteExpGateOk = computed(() => expPlanListTotal.value > 0)
+
+const paperWriteFigureReadyCount = computed(() => DEMO_FIGURES.files.length)
+const paperWriteFigureTargetCount = 6
+const paperWriteFigureGateOk = computed(
+  () => paperWriteFigureReadyCount.value >= paperWriteFigureTargetCount,
+)
+
+const paperWritePhasePrimaryLabel = computed(() => {
+  switch (paperWritePhase.value) {
+    case 'plan':
+      return '生成大纲'
+    case 'write':
+      return '续写下一节'
+    case 'compile':
+      return '编译 PDF'
+    case 'polish':
+      return '开始润色'
+    case 'audit':
+      return '开始审计'
+    default:
+      return '运行'
+  }
+})
+
+const paperWritePhaseHeading = computed(() => {
+  switch (paperWritePhase.value) {
+    case 'plan':
+      return '规划 · PAPER_PLAN.md'
+    case 'write':
+      return '正文 · LaTeX 分节'
+    case 'compile':
+      return '编译 · PDF'
+    case 'polish':
+      return '润色 · 外审循环'
+    case 'audit':
+      return '审计 · Claim 核对'
+    default:
+      return '论文写作'
+  }
+})
+
+const paperWriteSectionsDone = computed(
+  () => DEMO_MANUSCRIPT.sections.filter((s) => s.status === 'done').length,
+)
+
+const paperWriteSectionPreview = computed(() => {
+  if (paperWriteSelectedSection.value === 'Introduction') {
+    return DEMO_MANUSCRIPT.excerpt
+  }
+  const name = paperWriteSelectedSection.value
+  return `\\section{${name}}\n\n（接入 Agent 后将加载对应 .tex 片段）`
+})
+
+async function reloadPaperWriteDependencies() {
+  const ms = manuscriptId.value
+  if (!ms || !/^\d+$/.test(ms)) return
+  paperWriteDepsLoading.value = true
+  try {
+    await Promise.all([
+      reloadLiteratureReviews({ silent: true }),
+      reloadExperimentPlans({ silent: true, page: 1 }),
+    ])
+  } finally {
+    paperWriteDepsLoading.value = false
+  }
+}
+
+function setPaperWritePhase(id: PaperWritePhaseId) {
+  paperWritePhase.value = id
+}
+
+function runPaperWritePhasePrimary() {
+  ElMessage.info(`${paperWritePhasePrimaryLabel.value}（接口接入后替换）`)
+}
+
+async function runPaperWriteFullPipeline() {
+  if (paperWriteRunStatus.value === 'running') return
+  paperWriteRunStatus.value = 'running'
+  try {
+    await reloadPaperWriteDependencies()
+    await new Promise((r) => setTimeout(r, 600))
+    resultVisible.value = { ...resultVisible.value, 'paper-writing': true }
+    ElMessage.success('已触发写作全流程（演示占位）')
+  } finally {
+    paperWriteRunStatus.value = 'idle'
+  }
+}
+
+function goToFigureManagement() {
+  emit('navigateModule', 'figure-generation')
+}
+
+function goToLiteratureReviewModule() {
+  emit('navigateModule', 'literature-review')
+}
+
+function goToExperimentPlanningModule() {
+  emit('navigateModule', 'experiment-planning')
+}
+
+watch(
+  () => [moduleId.value, manuscriptId.value] as const,
+  ([mod, ms]) => {
+    if (mod !== 'paper-writing') return
+    if (!ms || !/^\d+$/.test(ms)) return
+    void reloadPaperWriteDependencies()
+  },
+  { immediate: true },
+)
+
+const EXP_PLAN_BUNDLE_TABS: { id: ExpPlanBundleTabId; label: string }[] = [
+  { id: 'plan', label: '方案' },
+  { id: 'data', label: '数据' },
+  { id: 'code', label: '代码' },
+  { id: 'results', label: '结果' },
+  { id: 'audit', label: '审计' },
+]
+
+const EXP_PLAN_CODE_PLACEHOLDER = `# 实验可复现脚本（接入 storage_uri 后将加载真实代码）
+# 原始/输入数据请在「数据」Tab 上传
+
+def main():
+    print("实验流水线占位：运行接口接入后在此执行")
+
+if __name__ == "__main__":
+    main()
+`
 
 let litReviewReloadSeq = 0
 
@@ -214,32 +431,17 @@ onUnmounted(() => {
   }
 })
 
-function literatureReviewHasExperimentPlan(item: PaperLiteratureReviewItem): boolean {
-  const id = item.experiment_plan_id?.trim()
-  return !!id && id !== '0'
-}
-
-type LitReviewBundleTabId =
-  | 'literature-review'
-  | 'references'
-  | 'experiment-plan'
-  | 'ppt'
-  | 'paper'
+type LitReviewBundleTabId = 'literature-review' | 'references' | 'ppt'
 
 const LIT_REVIEW_BUNDLE_TABS: { id: LitReviewBundleTabId; label: string }[] = [
   { id: 'literature-review', label: '文献综述' },
-  { id: 'experiment-plan', label: '实验方案' },
   { id: 'ppt', label: '汇报 PPT' },
-  { id: 'paper', label: '论文' },
   { id: 'references', label: '参考文献' },
 ]
 
 const litReviewBundleView = ref<{
   item: PaperLiteratureReviewItem
   tab: LitReviewBundleTabId
-  expPlan: PaperExperimentPlanItem | null
-  expPlanLoading: boolean
-  expPlanError: string | null
 } | null>(null)
 
 const litReviewBundleBibliography = computed(() => {
@@ -268,27 +470,72 @@ async function ensureLitReviewDetail(item: PaperLiteratureReviewItem): Promise<P
   }
 }
 
-async function loadLitReviewBundleExpPlan(item: PaperLiteratureReviewItem) {
-  const planId = item.experiment_plan_id?.trim()
-  const ms = manuscriptId.value
-  const ctx = litReviewBundleView.value
-  if (!ctx || ctx.item.id !== item.id) return
-  if (!planId || planId === '0' || !ms) {
-    litReviewBundleView.value = { ...ctx, expPlanLoading: false, expPlan: null }
+function resetLitReviewGenerateForm() {
+  litReviewGenerateForm.sourceCodes = ['arxiv']
+  litReviewGenerateForm.randomReferences = true
+  litReviewGenerateForm.humanCheckpoint = true
+  litReviewGenerateForm.userLiteratureIds = []
+}
+
+function isLitReviewGenerateSourceChecked(code: string): boolean {
+  return litReviewGenerateForm.sourceCodes.includes(code)
+}
+
+function toggleLitReviewGenerateSource(code: string, checked: boolean) {
+  const set = new Set(litReviewGenerateForm.sourceCodes)
+  if (checked) set.add(code)
+  else set.delete(code)
+  litReviewGenerateForm.sourceCodes = [...set]
+}
+
+function openLitReviewGenerateDialog(item: PaperLiteratureReviewItem) {
+  resetLitReviewGenerateForm()
+  litReviewGeneratePending.value = item
+}
+
+function closeLitReviewGenerateDialog() {
+  if (litReviewGenerateSubmitting.value) return
+  litReviewGeneratePending.value = null
+  litReviewGenerateUserLitOpen.value = false
+}
+
+function openLitReviewGenerateUserLiteraturePicker() {
+  if (litReviewGenerateSubmitting.value) return
+  litReviewGenerateUserLitOpen.value = true
+}
+
+function closeLitReviewGenerateUserLiteraturePicker() {
+  litReviewGenerateUserLitOpen.value = false
+}
+
+function onLitReviewGenerateUserLiteraturePicked(ids: string[]) {
+  litReviewGenerateForm.userLiteratureIds = [...ids]
+  litReviewGenerateUserLitOpen.value = false
+}
+
+async function submitLitReviewGenerateRun() {
+  if (!litReviewGeneratePending.value) return
+  if (!litReviewGenerateForm.sourceCodes.length) {
+    ElMessage.warning('请至少选择一个文献来源')
     return
   }
-  litReviewBundleView.value = { ...ctx, expPlanLoading: true, expPlanError: null }
+  litReviewGenerateSubmitting.value = true
   try {
-    const expPlan = await fetchExperimentPlanDetail(ms, planId)
-    const cur = litReviewBundleView.value
-    if (!cur || cur.item.id !== item.id) return
-    litReviewBundleView.value = { ...cur, expPlan, expPlanLoading: false, expPlanError: null }
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : '加载实验方案失败'
-    const cur = litReviewBundleView.value
-    if (!cur || cur.item.id !== item.id) return
-    litReviewBundleView.value = { ...cur, expPlanLoading: false, expPlanError: msg }
+    await new Promise((r) => setTimeout(r, 400))
+    ElMessage.info('文献综述生成流程即将接入')
+    closeLitReviewGenerateDialog()
+    void reloadLiteratureReviews({ silent: true })
+  } finally {
+    litReviewGenerateSubmitting.value = false
   }
+}
+
+function onLitReviewRowPrimaryAction(item: PaperLiteratureReviewItem) {
+  if (literatureReviewNeedsGenerateRun(item)) {
+    openLitReviewGenerateDialog(item)
+    return
+  }
+  void openLitReviewBundleView(item)
 }
 
 async function openLitReviewBundleView(
@@ -296,15 +543,10 @@ async function openLitReviewBundleView(
   tab: LitReviewBundleTabId = 'literature-review',
 ) {
   const review = await ensureLitReviewDetail(item)
-  const hasPlan = literatureReviewHasExperimentPlan(review)
   litReviewBundleView.value = {
     item: review,
     tab,
-    expPlan: null,
-    expPlanLoading: hasPlan,
-    expPlanError: null,
   }
-  if (hasPlan) void loadLitReviewBundleExpPlan(review)
 }
 
 function setLitReviewBundleTab(tab: LitReviewBundleTabId) {
@@ -325,10 +567,6 @@ function downloadLitReviewBundlePpt() {
   ElMessage.info(`下载「${name}」功能即将接入`)
 }
 
-function aiGenerateLitReviewBundlePpt() {
-  ElMessage.info('AI 生成汇报 PPT 功能即将接入')
-}
-
 function downloadLitReviewBundleLiteratureReview() {
   const ctx = litReviewBundleView.value
   if (!ctx) return
@@ -337,103 +575,11 @@ function downloadLitReviewBundleLiteratureReview() {
   ElMessage.info(`下载「${pdf}」/「${docx}」功能即将接入`)
 }
 
-function aiGenerateLitReviewBundleDocuments() {
-  ElMessage.info('AI 生成综述功能即将接入')
-}
-
-function downloadLitReviewBundleExperimentPlan() {
-  const ctx = litReviewBundleView.value
-  if (!ctx?.expPlan) return
-  const name = experimentPlanRowTitle(ctx.expPlan)
-  ElMessage.info(`下载「${name}」功能即将接入`)
-}
-
-function aiGenerateLitReviewBundleExperimentPlan() {
-  ElMessage.info('生成实验方案功能即将接入')
-}
-
-function litReviewBundleCanDownloadExperimentPlan(
-  ctx: NonNullable<(typeof litReviewBundleView)['value']>,
-): boolean {
-  if (!literatureReviewHasExperimentPlan(ctx.item) || !ctx.expPlan) return false
-  return Boolean(ctx.expPlan.content_medium?.trim() || ctx.expPlan.summary?.trim())
-}
-
-function litReviewBundleShowExperimentPlanPrimary(
-  ctx: NonNullable<(typeof litReviewBundleView)['value']>,
-): boolean {
-  if (ctx.expPlanLoading) return false
-  if (isLiteratureReviewGeneratingExperimentPlan(ctx.item.status)) return false
-  return true
-}
-
-function onLitReviewBundleExperimentPlanPrimary() {
-  const ctx = litReviewBundleView.value
-  if (!ctx) return
-  if (litReviewBundleCanDownloadExperimentPlan(ctx)) {
-    downloadLitReviewBundleExperimentPlan()
-  } else {
-    aiGenerateLitReviewBundleExperimentPlan()
-  }
-}
-
-function downloadLitReviewBundlePaper() {
-  const ctx = litReviewBundleView.value
-  if (!ctx) return
-  const title = litReviewRowTitle(ctx.item)
-  ElMessage.info(`下载论文稿件「${title}」功能即将接入`)
-}
-
-function aiGenerateLitReviewBundlePaper() {
-  ElMessage.info('生成论文功能即将接入')
-}
-
-function litReviewBundleCanDownloadPaper(
-  ctx: NonNullable<(typeof litReviewBundleView)['value']>,
-): boolean {
-  return literatureReviewHasPaperManuscript(ctx.item)
-}
-
-function onLitReviewBundlePaperPrimary() {
-  const ctx = litReviewBundleView.value
-  if (!ctx) return
-  if (litReviewBundleCanDownloadPaper(ctx)) {
-    downloadLitReviewBundlePaper()
-  } else {
-    aiGenerateLitReviewBundlePaper()
-  }
-}
-
-function onLitReviewBundleLiteratureReviewPrimary() {
-  const ctx = litReviewBundleView.value
-  if (!ctx) return
-  if (literatureReviewCanDownloadDocuments(ctx.item)) {
-    downloadLitReviewBundleLiteratureReview()
-  } else {
-    aiGenerateLitReviewBundleDocuments()
-  }
-}
-
-function onLitReviewBundlePptPrimary() {
-  const ctx = litReviewBundleView.value
-  if (!ctx) return
-  if (literatureReviewCanDownloadPpt(ctx.item)) {
-    downloadLitReviewBundlePpt()
-  } else {
-    aiGenerateLitReviewBundlePpt()
-  }
-}
-
 function litReviewBundleHasDownloadAction(tab: LitReviewBundleTabId): boolean {
-  if (tab === 'literature-review' || tab === 'ppt') return true
-  if (tab === 'experiment-plan') {
-    const ctx = litReviewBundleView.value
-    return ctx ? litReviewBundleCanDownloadExperimentPlan(ctx) : false
-  }
-  if (tab === 'paper') {
-    const ctx = litReviewBundleView.value
-    return ctx ? litReviewBundleCanDownloadPaper(ctx) : false
-  }
+  const ctx = litReviewBundleView.value
+  if (!ctx) return false
+  if (tab === 'literature-review') return literatureReviewCanDownloadDocuments(ctx.item)
+  if (tab === 'ppt') return literatureReviewCanDownloadPpt(ctx.item)
   return false
 }
 
@@ -509,7 +655,7 @@ async function tryOpenPendingExperimentPlan() {
     item = expPlanItems.value.find((it) => it.id === planId)
   }
   if (item) {
-    openExpPlanView(item)
+    void openExpPlanBundleView(item)
     emit('consumedPendingExperimentPlan')
     return
   }
@@ -518,7 +664,7 @@ async function tryOpenPendingExperimentPlan() {
   if (!ms) return
   try {
     const detail = await fetchExperimentPlanDetail(ms, planId)
-    openExpPlanView(detail)
+    void openExpPlanBundleView(detail)
     emit('consumedPendingExperimentPlan')
   } catch (e) {
     const msg = e instanceof Error ? e.message : '加载实验方案失败'
@@ -686,59 +832,147 @@ function litReviewViewDownloadLabel(
   item: PaperLiteratureReviewItem,
   kind: 'pdf' | 'docx',
 ): string {
-  const uri = kind === 'pdf' ? item.pdf_uri : item.word_uri
-  if (!literatureReviewHasAttachmentUri(uri)) return '生成综述'
   return kind === 'pdf' ? '下载 PDF' : '下载 Word'
+}
+
+function litReviewViewCanDownloadKind(
+  item: PaperLiteratureReviewItem,
+  kind: 'pdf' | 'docx',
+): boolean {
+  const uri = kind === 'pdf' ? item.pdf_uri : item.word_uri
+  return literatureReviewHasAttachmentUri(uri)
 }
 
 function onLitReviewViewPrimaryAction() {
   const item = litReviewViewItem.value
   const kind = litReviewViewDownloadKind.value
-  if (!item || !kind) return
-  const uri = kind === 'pdf' ? item.pdf_uri : item.word_uri
-  if (!literatureReviewHasAttachmentUri(uri)) {
-    aiGenerateLitReviewBundleDocuments()
-    return
-  }
+  if (!item || !kind || !litReviewViewCanDownloadKind(item, kind)) return
   const name = literatureReviewAttachmentFileName(item, kind)
   ElMessage.info(`下载「${name}」功能即将接入`)
 }
 
 function onLitReviewAttachmentPreviewPrimary() {
   const ctx = litReviewAttachmentPreview.value
-  if (!ctx) return
-  if (ctx.kind === 'ppt' && !literatureReviewCanDownloadPpt(ctx.item)) {
-    aiGenerateLitReviewBundlePpt()
-    return
-  }
+  if (!ctx || !literatureReviewCanDownloadPpt(ctx.item)) return
   const name = literatureReviewAttachmentFileName(ctx.item, ctx.kind)
   ElMessage.info(`下载「${name}」功能即将接入`)
 }
 
-async function openExpPlanView(item: PaperExperimentPlanItem) {
+function patchExpPlanItemInList(updated: PaperExperimentPlanItem) {
+  const idx = expPlanItems.value.findIndex((it) => it.id === updated.id)
+  if (idx >= 0) {
+    expPlanItems.value = [
+      ...expPlanItems.value.slice(0, idx),
+      updated,
+      ...expPlanItems.value.slice(idx + 1),
+    ]
+  }
+  const ctx = expPlanBundleView.value
+  if (ctx?.item.id === updated.id) {
+    expPlanBundleView.value = { ...ctx, item: updated, loading: false }
+  }
+}
+
+function resetExpPlanBundleDataInput() {
+  expPlanBundleDataFile.value = null
+  if (expPlanBundleDataInputRef.value) expPlanBundleDataInputRef.value.value = ''
+}
+
+async function openExpPlanBundleView(
+  item: PaperExperimentPlanItem,
+  tab: ExpPlanBundleTabId = 'plan',
+) {
+  resetExpPlanBundleDataInput()
   const ms = manuscriptId.value
-  const needsDetail = !item.content_medium?.trim() && ms && /^\d+$/.test(ms)
-  if (needsDetail) {
-    try {
-      expPlanViewItem.value = { ...item }
-      const detail = await fetchExperimentPlanDetail(ms, item.id)
-      expPlanViewItem.value = detail
-      return
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : '加载实验方案失败'
-      ElMessage.error(msg)
+  const needsDetail =
+    (!item.content_medium?.trim() && !item.summary?.trim()) && ms && /^\d+$/.test(ms)
+  expPlanBundleView.value = { item: { ...item }, tab, loading: needsDetail }
+  if (!needsDetail || !ms) return
+  try {
+    const detail = await fetchExperimentPlanDetail(ms, item.id)
+    const cur = expPlanBundleView.value
+    if (!cur || cur.item.id !== item.id) return
+    expPlanBundleView.value = { ...cur, item: detail, loading: false }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : '加载实验方案失败'
+    ElMessage.error(msg)
+    const cur = expPlanBundleView.value
+    if (cur?.item.id === item.id) {
+      expPlanBundleView.value = { ...cur, loading: false }
     }
   }
-  expPlanViewItem.value = item
 }
 
-function closeExpPlanView() {
-  expPlanViewItem.value = null
+function setExpPlanBundleTab(tab: ExpPlanBundleTabId) {
+  const ctx = expPlanBundleView.value
+  if (!ctx) return
+  expPlanBundleView.value = { ...ctx, tab }
 }
 
-function resetExpPlanUploadInput() {
-  expPlanUploadFile.value = null
-  if (expPlanUploadInputRef.value) expPlanUploadInputRef.value.value = ''
+function closeExpPlanBundleView() {
+  if (expPlanBundleDataSubmitting.value) return
+  expPlanBundleView.value = null
+  resetExpPlanBundleDataInput()
+}
+
+function openExpPlanBundleDataPicker() {
+  if (expPlanBundleDataSubmitting.value) return
+  expPlanBundleDataInputRef.value?.click()
+}
+
+function onExpPlanBundleDataFileChange(ev: Event) {
+  const input = ev.target as HTMLInputElement
+  expPlanBundleDataFile.value = input.files?.[0] ?? null
+}
+
+function onExpPlanBundleDataDrop(ev: DragEvent) {
+  if (expPlanBundleDataSubmitting.value) return
+  const file = ev.dataTransfer?.files?.[0]
+  if (file) expPlanBundleDataFile.value = file
+}
+
+async function submitExpPlanBundleDataUpload() {
+  const ctx = expPlanBundleView.value
+  const file = expPlanBundleDataFile.value
+  const ms = manuscriptId.value
+  if (!ctx || !file || !ms) {
+    ElMessage.warning('请选择实验数据文件')
+    return
+  }
+  expPlanBundleDataSubmitting.value = true
+  try {
+    const updated = await uploadExperimentPlanData(ms, ctx.item.id, file)
+    ElMessage.success('实验数据已上传')
+    patchExpPlanItemInList(updated)
+    resetExpPlanBundleDataInput()
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : '上传失败'
+    ElMessage.error(msg)
+  } finally {
+    expPlanBundleDataSubmitting.value = false
+  }
+}
+
+async function runExpPlanBundleCode() {
+  if (!expPlanBundleView.value) return
+  expPlanCodeRunning.value = true
+  try {
+    await new Promise((r) => setTimeout(r, 500))
+    ElMessage.info('代码运行功能即将接入')
+  } finally {
+    expPlanCodeRunning.value = false
+  }
+}
+
+async function runExpPlanBundleAudit() {
+  if (!expPlanBundleView.value) return
+  expPlanAuditRunning.value = true
+  try {
+    await new Promise((r) => setTimeout(r, 500))
+    ElMessage.info('实验审计功能即将接入')
+  } finally {
+    expPlanAuditRunning.value = false
+  }
 }
 
 const expPlanUploadPlanOptions = computed(() =>
@@ -756,7 +990,7 @@ function resetExpPlanUploadPlanInput() {
 async function openExpPlanUploadPlanDialog() {
   await reloadExperimentPlans({ page: expPlanListPage.value })
   if (!expPlanItems.value.length) {
-    ElMessage.warning('暂无实验方案，请先在「文献综述」等待生成完成后点击「查看实验方案」')
+    ElMessage.warning('暂无实验方案，请先在「文献综述」等待生成完成')
     return
   }
   expPlanUploadPlanId.value = expPlanItems.value[0]?.id ?? ''
@@ -804,62 +1038,6 @@ async function submitExpPlanUploadPlan() {
   }
 }
 
-function openExpPlanUploadDialog(item: PaperExperimentPlanItem) {
-  expPlanUploadPending.value = item
-  resetExpPlanUploadInput()
-}
-
-function closeExpPlanUploadDialog() {
-  if (expPlanUploadSubmitting.value) return
-  expPlanUploadPending.value = null
-  resetExpPlanUploadInput()
-}
-
-function openExpPlanUploadPicker() {
-  if (expPlanUploadSubmitting.value) return
-  expPlanUploadInputRef.value?.click()
-}
-
-function onExpPlanUploadFileChange(ev: Event) {
-  const input = ev.target as HTMLInputElement
-  expPlanUploadFile.value = input.files?.[0] ?? null
-}
-
-function onExpPlanUploadDrop(ev: DragEvent) {
-  if (expPlanUploadSubmitting.value) return
-  const file = ev.dataTransfer?.files?.[0]
-  if (file) expPlanUploadFile.value = file
-}
-
-async function submitExpPlanUpload() {
-  const item = expPlanUploadPending.value
-  const file = expPlanUploadFile.value
-  const ms = manuscriptId.value
-  if (!item || !file || !ms) {
-    ElMessage.warning('请选择文件')
-    return
-  }
-  expPlanUploadSubmitting.value = true
-  try {
-    const updated = await uploadExperimentPlanData(ms, item.id, file)
-    ElMessage.success('实验数据已上传')
-    const idx = expPlanItems.value.findIndex((it) => it.id === item.id)
-    if (idx >= 0) {
-      expPlanItems.value = [
-        ...expPlanItems.value.slice(0, idx),
-        updated,
-        ...expPlanItems.value.slice(idx + 1),
-      ]
-    }
-    closeExpPlanUploadDialog()
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : '上传失败'
-    ElMessage.error(msg)
-  } finally {
-    expPlanUploadSubmitting.value = false
-  }
-}
-
 function experimentDataFileLabel(item: PaperExperimentPlanItem): string {
   const uri = item.experiment_data_uri?.trim()
   if (!uri) return ''
@@ -867,22 +1045,26 @@ function experimentDataFileLabel(item: PaperExperimentPlanItem): string {
   return parts[parts.length - 1] ?? uri
 }
 
-async function openLinkedLiteratureReviewFromExpPlan(item: PaperExperimentPlanItem) {
-  const lrId = item.literature_review_id?.trim()
-  const ms = manuscriptId.value
-  if (!lrId || !ms) {
-    ElMessage.warning('未关联文献综述')
-    return
-  }
-  expPlanLitReviewLoading.value = true
+function openDeleteExpPlanConfirm(item: PaperExperimentPlanItem) {
+  expPlanDeletePending.value = item
+}
+
+function closeDeleteExpPlanConfirm() {
+  if (expPlanDeleteSubmitting.value) return
+  expPlanDeletePending.value = null
+}
+
+async function submitDeleteExpPlanConfirm() {
+  const item = expPlanDeletePending.value
+  if (!item) return
+  expPlanDeleteSubmitting.value = true
   try {
-    const detail = await fetchLiteratureReviewDetail(ms, lrId)
-    openLitReviewView(detail)
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : '加载文献综述失败'
-    ElMessage.error(msg)
+    await new Promise((r) => setTimeout(r, 300))
+    ElMessage.info('删除实验方案功能即将接入')
+    expPlanDeletePending.value = null
+    if (expPlanBundleView.value?.item.id === item.id) closeExpPlanBundleView()
   } finally {
-    expPlanLitReviewLoading.value = false
+    expPlanDeleteSubmitting.value = false
   }
 }
 
@@ -927,12 +1109,13 @@ async function runModule(id: PaperModuleId): Promise<boolean> {
   if (id === 'experiment-planning') {
     await reloadExperimentPlans({ page: expPlanListPage.value })
     if (!expPlanListTotal.value) {
-      ElMessage.warning('暂无实验方案，请先在「文献综述」等待生成完成后点击「查看实验方案」')
+      ElMessage.warning('暂无实验方案，请先在「文献综述」等待生成完成')
       return false
     }
     return true
   }
   if (id === 'paper-writing') {
+    await runPaperWriteFullPipeline()
     return true
   }
   if (id === 'figure-generation' && figureForm.chartTypes.length === 0) {
@@ -991,9 +1174,9 @@ defineExpose({
                     type="button"
                     tabindex="-1"
                     aria-hidden="true"
-                    class="paper-btn-primary paper-btn--compact wf-lit-width-ruler"
+                    class="paper-btn-generate paper-btn--compact wf-lit-width-ruler"
                   >
-                    管理
+                    生成
                   </button>
                   <span class="wf-lit-col-head-label">操作</span>
                 </span>
@@ -1035,10 +1218,15 @@ defineExpose({
               <div class="wf-lit-actions">
                 <button
                   type="button"
-                  class="paper-btn-primary paper-btn--compact"
-                  @click="openLitReviewBundleView(item)"
+                  class="paper-btn--compact"
+                  :class="
+                    literatureReviewNeedsGenerateRun(item)
+                      ? 'paper-btn-generate'
+                      : 'paper-btn-primary'
+                  "
+                  @click="onLitReviewRowPrimaryAction(item)"
                 >
-                  管理
+                  {{ literatureReviewNeedsGenerateRun(item) ? '生成' : '管理' }}
                 </button>
                 <button
                   type="button"
@@ -1149,6 +1337,152 @@ defineExpose({
 
     <Teleport to="body">
       <div
+        v-if="litReviewGeneratePending"
+        class="paper-modal-overlay wf-lit-generate-overlay"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="wf-lit-generate-run-title"
+        @click.self="closeLitReviewGenerateDialog"
+        @keydown.escape="closeLitReviewGenerateDialog"
+      >
+        <div
+          class="paper-message-box paper-message-box--default paper-modal-panel wf-lit-generate-panel wf-lit-run-panel"
+          @click.stop
+        >
+          <header class="paper-modal-header">
+            <h2 id="wf-lit-generate-run-title" class="paper-modal-title">生成文献综述</h2>
+            <button
+              type="button"
+              class="paper-modal-close"
+              aria-label="关闭"
+              :disabled="litReviewGenerateSubmitting"
+              @click="closeLitReviewGenerateDialog"
+            >
+              ×
+            </button>
+          </header>
+          <div class="paper-modal-body wf-lit-run-body">
+            <p class="wf-meta wf-lit-run-meta">
+              {{ litReviewRowTitle(litReviewGeneratePending) }}
+            </p>
+            <div class="paper-message-box__form wf-lit-run-form">
+              <div class="paper-field paper-field--block">
+                <span class="paper-label">文献来源 <em class="req">*</em></span>
+                <div class="paper-check-group wf-lit-run-check-group">
+                  <label
+                    v-for="src in LITERATURE_SOURCE_OPTIONS"
+                    :key="src.code"
+                    class="paper-check paper-check--inline wf-lit-run-check"
+                  >
+                    <input
+                      type="checkbox"
+                      :checked="isLitReviewGenerateSourceChecked(src.code)"
+                      :disabled="litReviewGenerateSubmitting"
+                      @change="
+                        toggleLitReviewGenerateSource(
+                          src.code,
+                          ($event.target as HTMLInputElement).checked,
+                        )
+                      "
+                    />
+                    <span>{{ src.label }}</span>
+                  </label>
+                </div>
+                <label class="paper-check paper-check--nested wf-lit-run-check">
+                  <input
+                    v-model="litReviewGenerateForm.randomReferences"
+                    type="checkbox"
+                    :disabled="litReviewGenerateSubmitting"
+                  />
+                  <span class="paper-check-row">
+                    <span>每次运行随机参考文献</span>
+                    <ElTooltip
+                      content="勾选后，每次运行随机获取第三方论文，否则会顺序获取第三方论文多次可能是一样的"
+                      placement="top"
+                    >
+                      <button
+                        type="button"
+                        class="paper-field-help wf-lit-run-field-help"
+                        aria-label="随机参考文献说明"
+                        @click.prevent
+                      >
+                        ?
+                      </button>
+                    </ElTooltip>
+                  </span>
+                </label>
+
+                <div class="paper-my-literature-block wf-lit-run-my-lit">
+                  <span class="paper-label">我的文献</span>
+                  <div class="paper-my-literature-row">
+                    <button
+                      type="button"
+                      class="paper-my-literature-btn"
+                      :disabled="litReviewGenerateSubmitting"
+                      @click="openLitReviewGenerateUserLiteraturePicker"
+                    >
+                      选择文献
+                    </button>
+                    <span
+                      v-if="litReviewGenerateForm.userLiteratureIds.length"
+                      class="paper-hint paper-my-literature-summary wf-lit-run-hint"
+                    >
+                      已选 {{ litReviewGenerateForm.userLiteratureIds.length }} 篇文献
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="paper-field paper-field--block wf-lit-run-checkpoint-block">
+                <span class="paper-label">人工检查</span>
+                <div class="paper-check-group wf-lit-run-check-group">
+                  <label class="paper-check paper-check--inline wf-lit-run-check">
+                    <input
+                      v-model="litReviewGenerateForm.humanCheckpoint"
+                      type="checkbox"
+                      :disabled="litReviewGenerateSubmitting"
+                    />
+                    <span>人工检查点</span>
+                  </label>
+                </div>
+                <span class="paper-hint wf-lit-run-hint">
+                  开启后三步各暂停一次：检索入库 → 脑暴（含新颖性） → 审计，每步需确认并继续
+                </span>
+              </div>
+            </div>
+          </div>
+          <footer class="paper-message-box__btns">
+            <button
+              type="button"
+              class="paper-btn-primary wf-lit-delete-dialog-btn"
+              :disabled="litReviewGenerateSubmitting || !litReviewGenerateForm.sourceCodes.length"
+              @click="submitLitReviewGenerateRun"
+            >
+              {{ litReviewGenerateSubmitting ? '运行中…' : '运行' }}
+            </button>
+            <button
+              type="button"
+              class="paper-btn-primary wf-lit-delete-dialog-btn"
+              :disabled="litReviewGenerateSubmitting"
+              @click="closeLitReviewGenerateDialog"
+            >
+              取消
+            </button>
+          </footer>
+        </div>
+      </div>
+    </Teleport>
+
+    <PaperTopicUserLiteraturePickDialog
+      :open="litReviewGenerateUserLitOpen"
+      :initial-selected-ids="litReviewGenerateForm.userLiteratureIds"
+      :disabled="litReviewGenerateSubmitting"
+      @close="closeLitReviewGenerateUserLiteraturePicker"
+      @confirm="onLitReviewGenerateUserLiteraturePicked"
+    />
+
+    <Teleport to="body">
+      <div
         v-if="litReviewDeletePending"
         class="paper-modal-overlay wf-lit-delete-overlay"
         role="dialog"
@@ -1211,7 +1545,7 @@ defineExpose({
     <section v-else-if="expPlanListTotal === 0" class="wf-panel">
       <h2 class="wf-title wf-title--module-head">实验方案</h2>
       <p class="wf-lead">
-        当前论文尚无实验方案。请在「文献综述」中等待方案生成后，点击「查看实验方案」进入。
+        当前论文尚无实验方案。请在「文献综述」中等待方案生成完成后在此管理。
       </p>
     </section>
 
@@ -1231,7 +1565,7 @@ defineExpose({
                     aria-hidden="true"
                     class="paper-btn-primary paper-btn--compact wf-lit-width-ruler"
                   >
-                    上传实验数据
+                    管理
                   </button>
                   <span class="wf-lit-col-head-label">操作</span>
                 </span>
@@ -1239,17 +1573,9 @@ defineExpose({
                   type="button"
                   tabindex="-1"
                   aria-hidden="true"
-                  class="paper-btn-primary paper-btn--compact wf-lit-width-ruler"
+                  class="paper-btn-danger paper-btn--compact wf-lit-width-ruler"
                 >
-                  查看实验方案
-                </button>
-                <button
-                  type="button"
-                  tabindex="-1"
-                  aria-hidden="true"
-                  class="paper-btn-primary paper-btn--compact wf-lit-width-ruler"
-                >
-                  查看文献综述
+                  删除
                 </button>
               </div>
             </th>
@@ -1272,24 +1598,16 @@ defineExpose({
                 <button
                   type="button"
                   class="paper-btn-primary paper-btn--compact"
-                  @click="openExpPlanUploadDialog(item)"
+                  @click="openExpPlanBundleView(item)"
                 >
-                  上传实验数据
+                  管理
                 </button>
                 <button
                   type="button"
-                  class="paper-btn-primary paper-btn--compact"
-                  @click="openExpPlanView(item)"
+                  class="paper-btn-danger paper-btn--compact"
+                  @click="openDeleteExpPlanConfirm(item)"
                 >
-                  查看实验方案
-                </button>
-                <button
-                  type="button"
-                  class="paper-btn-primary paper-btn--compact"
-                  :disabled="expPlanLitReviewLoading || !item.literature_review_id?.trim()"
-                  @click="openLinkedLiteratureReviewFromExpPlan(item)"
-                >
-                  查看文献综述
+                  删除
                 </button>
               </div>
             </td>
@@ -1393,76 +1711,49 @@ defineExpose({
 
     <Teleport to="body">
       <div
-        v-if="expPlanUploadPending"
-        class="paper-modal-overlay wf-lit-generate-overlay"
+        v-if="expPlanDeletePending"
+        class="paper-modal-overlay wf-lit-delete-overlay"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="wf-exp-plan-upload-title"
-        @click.self="closeExpPlanUploadDialog"
-        @keydown.escape="closeExpPlanUploadDialog"
+        aria-labelledby="wf-exp-plan-delete-title"
+        @click.self="closeDeleteExpPlanConfirm"
+        @keydown.escape="closeDeleteExpPlanConfirm"
       >
         <div
-          class="paper-message-box paper-message-box--default paper-modal-panel wf-lit-generate-panel"
+          class="paper-message-box paper-message-box--danger paper-modal-panel wf-lit-delete-panel"
           @click.stop
         >
           <header class="paper-modal-header">
-            <h2 id="wf-exp-plan-upload-title" class="paper-modal-title">上传实验数据</h2>
+            <h2 id="wf-exp-plan-delete-title" class="paper-modal-title">删除实验方案</h2>
             <button
               type="button"
               class="paper-modal-close"
               aria-label="关闭"
-              :disabled="expPlanUploadSubmitting"
-              @click="closeExpPlanUploadDialog"
+              :disabled="expPlanDeleteSubmitting"
+              @click="closeDeleteExpPlanConfirm"
             >
               ×
             </button>
           </header>
           <div class="paper-modal-body">
             <p class="wf-lit-delete-lead">
-              「{{ experimentPlanRowTitle(expPlanUploadPending) }}」
+              确定删除「{{ experimentPlanRowTitle(expPlanDeletePending) }}」？
             </p>
-            <p v-if="experimentDataFileLabel(expPlanUploadPending)" class="wf-meta">
-              已上传：{{ experimentDataFileLabel(expPlanUploadPending) }}（再次上传将覆盖）
-            </p>
-            <div
-              class="wf-exp-data-drop"
-              :class="{
-                'wf-exp-data-drop--has-file': !!expPlanUploadFile,
-                'wf-exp-data-drop--disabled': expPlanUploadSubmitting,
-              }"
-              role="button"
-              tabindex="0"
-              @click="openExpPlanUploadPicker"
-              @keydown.enter.prevent="openExpPlanUploadPicker"
-              @keydown.space.prevent="openExpPlanUploadPicker"
-              @dragover.prevent
-              @drop.prevent="onExpPlanUploadDrop"
-            >
-              <input
-                ref="expPlanUploadInputRef"
-                type="file"
-                class="wf-exp-data-file-input"
-                :disabled="expPlanUploadSubmitting"
-                @change="onExpPlanUploadFileChange"
-              />
-              <p v-if="!expPlanUploadFile" class="wf-exp-data-drop-hint">点击或拖拽文件到此处</p>
-              <p v-else class="wf-exp-data-drop-name">{{ expPlanUploadFile.name }}</p>
-            </div>
           </div>
           <footer class="paper-message-box__btns">
             <button
               type="button"
-              class="paper-btn-primary wf-lit-delete-dialog-btn"
-              :disabled="expPlanUploadSubmitting || !expPlanUploadFile"
-              @click="submitExpPlanUpload"
+              class="paper-btn-danger wf-lit-delete-dialog-btn"
+              :disabled="expPlanDeleteSubmitting"
+              @click="submitDeleteExpPlanConfirm"
             >
-              {{ expPlanUploadSubmitting ? '上传中…' : '上传' }}
+              {{ expPlanDeleteSubmitting ? '删除中…' : '删除' }}
             </button>
             <button
               type="button"
               class="paper-btn-primary wf-lit-delete-dialog-btn"
-              :disabled="expPlanUploadSubmitting"
-              @click="closeExpPlanUploadDialog"
+              :disabled="expPlanDeleteSubmitting"
+              @click="closeDeleteExpPlanConfirm"
             >
               取消
             </button>
@@ -1472,57 +1763,343 @@ defineExpose({
     </Teleport>
   </div>
 
-  <!-- 论文撰写：draft / paper-writing 工作流 -->
-  <div v-else-if="moduleId === 'paper-writing'" class="wf-stack">
-    <section class="wf-panel">
-      <h2 class="wf-title wf-title--module-head">论文撰写</h2>
-      <p class="wf-lead">
-        在当前论文「{{ manuscriptTitle }}」下，基于文献综述、实验方案与图表资产生成稿件正文；完整流程将对接
-        ARIS <code class="wf-inline-code">/paper-writing</code>（plan → write → compile → audit）。
-      </p>
-      <ul class="wf-paper-write-checklist">
-        <li>综述与引用：参考文献门禁通过后再写入正文</li>
-        <li>实验：方案与实验数据/图表已就绪</li>
-        <li>输出：LaTeX / PDF（演示阶段为本地预览）</li>
-      </ul>
-      <p v-if="!resultVisible['paper-writing']" class="wf-meta">
-        点击顶栏「运行」开始演示撰写（占位，接入 Agent 后替换为真实流水线）。
-      </p>
+  <!-- 论文写作：ARIS Workflow 3（plan → write → compile → polish → audit） -->
+  <div v-else-if="moduleId === 'paper-writing'" class="wf-stack wf-paper-write-stack">
+    <section class="wf-panel wf-paper-write-head">
+      <div class="wf-paper-write-head-row">
+        <div class="wf-paper-write-head-main">
+          <h2 class="wf-title wf-title--module-head">当前论文 · {{ manuscriptTitle }}</h2>
+          <p class="wf-meta wf-paper-write-sub">
+            {{ DEMO_MANUSCRIPT.title }} · 引用 {{ DEMO_MANUSCRIPT.cites }} 条（已验证
+            {{ DEMO_MANUSCRIPT.verifiedCites }}）
+          </p>
+        </div>
+        <div class="wf-paper-write-head-actions">
+          <span class="wf-meta">{{ paperWriteVenueLabel }}</span>
+          <span
+            class="wf-status-pill wf-status-pill--inline"
+            :class="
+              paperWriteRunStatus === 'running'
+                ? 'wf-status-pill--progress'
+                : 'wf-status-pill--muted'
+            "
+          >
+            {{ paperWriteRunStatus === 'running' ? 'running' : 'idle' }}
+          </span>
+          <button
+            type="button"
+            class="paper-btn-generate"
+            :disabled="paperWriteRunStatus === 'running'"
+            @click="runPaperWriteFullPipeline"
+          >
+            {{ paperWriteRunStatus === 'running' ? '运行中…' : '运行全流程' }}
+          </button>
+        </div>
+      </div>
+
+      <p v-if="paperWriteDepsLoading" class="wf-meta">正在检查前置门禁…</p>
+      <div v-else class="wf-paper-write-gates">
+        <div
+          class="wf-paper-write-gate"
+          :class="paperWriteLitGateOk ? 'wf-paper-write-gate--ok' : 'wf-paper-write-gate--warn'"
+        >
+          <h3 class="wf-paper-write-gate-title">文献综述 · 引用门禁</h3>
+          <p class="wf-paper-write-gate-body">
+            {{
+              paperWriteLitGateOk
+                ? '已满足，可写入正文'
+                : '需 PDF/Word 就绪后再写 cite'
+            }}
+          </p>
+          <button
+            v-if="!paperWriteLitGateOk"
+            type="button"
+            class="wf-paper-write-gate-link"
+            @click="goToLiteratureReviewModule"
+          >
+            前往文献综述
+          </button>
+        </div>
+        <div
+          class="wf-paper-write-gate"
+          :class="paperWriteExpGateOk ? 'wf-paper-write-gate--ok' : 'wf-paper-write-gate--warn'"
+        >
+          <h3 class="wf-paper-write-gate-title">实验方案 · 结果/审计</h3>
+          <p class="wf-paper-write-gate-body">
+            {{ paperWriteExpGateOk ? '已满足' : '暂无实验方案，请先完成文献综述链路' }}
+          </p>
+          <button
+            v-if="!paperWriteExpGateOk"
+            type="button"
+            class="wf-paper-write-gate-link"
+            @click="goToExperimentPlanningModule"
+          >
+            前往实验方案
+          </button>
+        </div>
+        <div
+          class="wf-paper-write-gate"
+          :class="paperWriteFigureGateOk ? 'wf-paper-write-gate--ok' : 'wf-paper-write-gate--warn'"
+        >
+          <h3 class="wf-paper-write-gate-title">
+            图表资产 · {{ paperWriteFigureReadyCount }}/{{ paperWriteFigureTargetCount }} 就绪
+          </h3>
+          <p class="wf-paper-write-gate-body">
+            {{
+              paperWriteFigureGateOk
+                ? '图表已齐，可插入正文'
+                : `缺 ${paperWriteFigureTargetCount - paperWriteFigureReadyCount} 张图`
+            }}
+          </p>
+          <button type="button" class="wf-paper-write-gate-link" @click="goToFigureManagement">
+            跳转图表管理
+          </button>
+        </div>
+      </div>
     </section>
 
-    <section v-if="resultVisible['paper-writing']" class="wf-panel">
-      <h2 class="wf-title">稿件预览（演示）</h2>
-      <p class="wf-lead wf-paper-write-demo-title">{{ DEMO_MANUSCRIPT.title }}</p>
-      <p class="wf-meta">
-        引用 {{ DEMO_MANUSCRIPT.cites }} 条 · 已验证 {{ DEMO_MANUSCRIPT.verifiedCites }} 条
-      </p>
-      <table class="wf-table wf-table--compact wf-paper-write-sections">
-        <thead>
-          <tr>
-            <th>章节</th>
-            <th>字数</th>
-            <th>状态</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="sec in DEMO_MANUSCRIPT.sections" :key="sec.name">
-            <td>{{ sec.name }}</td>
-            <td>{{ sec.words }}</td>
-            <td>
-              <span
-                class="wf-status-pill"
-                :class="
-                  sec.status === 'done' ? 'wf-status-pill--success' : 'wf-status-pill--draft'
-                "
-              >
-                {{ sec.status === 'done' ? '已完成' : '草稿' }}
+    <div class="wf-paper-write-layout">
+      <aside class="wf-paper-write-sidebar">
+        <section class="wf-panel wf-paper-write-sidebar-panel">
+          <h3 class="wf-paper-write-sidebar-title">写作阶段</h3>
+          <nav class="wf-paper-write-phase-nav" aria-label="写作阶段">
+            <button
+              v-for="(p, i) in PAPER_WRITE_PHASES"
+              :key="p.id"
+              type="button"
+              class="wf-paper-write-phase-btn"
+              :class="{ 'wf-paper-write-phase-btn--active': paperWritePhase === p.id }"
+              @click="setPaperWritePhase(p.id)"
+            >
+              <span class="wf-paper-write-phase-index">{{ i + 1 }}</span>
+              <span class="wf-paper-write-phase-text">
+                {{ p.label }}
+                <span class="wf-paper-write-phase-skill">{{ p.skill }}</span>
               </span>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      <pre class="wf-paper-write-excerpt">{{ DEMO_MANUSCRIPT.excerpt }}</pre>
-    </section>
+            </button>
+          </nav>
+          <p class="wf-meta wf-paper-write-flow-hint">
+            全流程：plan → 图表模块 → write → compile → polish → audit
+          </p>
+        </section>
+
+        <section class="wf-panel wf-paper-write-sidebar-panel">
+          <h3 class="wf-paper-write-sidebar-title">人工检查点</h3>
+          <ul class="wf-paper-write-checklist">
+            <li class="wf-paper-write-checklist-item wf-paper-write-checklist-item--done">
+              大纲冻结后再写 Method
+            </li>
+            <li class="wf-paper-write-checklist-item">编译通过后再开润色循环</li>
+          </ul>
+        </section>
+      </aside>
+
+      <section class="wf-panel wf-paper-write-main">
+        <header class="wf-paper-write-main-head">
+          <h3 class="wf-title">{{ paperWritePhaseHeading }}</h3>
+          <button
+            type="button"
+            class="paper-btn-primary"
+            :disabled="paperWriteRunStatus === 'running'"
+            @click="runPaperWritePhasePrimary"
+          >
+            {{ paperWritePhasePrimaryLabel }}
+          </button>
+        </header>
+
+        <div class="wf-paper-write-main-body">
+          <template v-if="paperWritePhase === 'plan'">
+            <div class="wf-paper-write-stats">
+              <div class="wf-paper-write-stat">
+                <span class="wf-paper-write-stat-label">主 claim</span>
+                <strong class="wf-paper-write-stat-value">2</strong>
+              </div>
+              <div class="wf-paper-write-stat">
+                <span class="wf-paper-write-stat-label">计划页数</span>
+                <strong class="wf-paper-write-stat-value">9</strong>
+              </div>
+              <div class="wf-paper-write-stat">
+                <span class="wf-paper-write-stat-label">计划图数</span>
+                <strong class="wf-paper-write-stat-value">6</strong>
+              </div>
+            </div>
+            <table class="wf-table wf-table--compact wf-paper-write-outline-table">
+              <thead>
+                <tr>
+                  <th>章节</th>
+                  <th>支撑 claim</th>
+                  <th>图表</th>
+                  <th>页预算</th>
+                  <th>状态</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in PAPER_WRITE_OUTLINE_ROWS" :key="row.section">
+                  <td>{{ row.section }}</td>
+                  <td>{{ row.claim }}</td>
+                  <td>{{ row.figures }}</td>
+                  <td>{{ row.pages }}</td>
+                  <td>
+                    <span
+                      class="wf-status-pill wf-status-pill--inline"
+                      :class="`wf-status-pill--${row.statusTone}`"
+                    >
+                      {{ row.status }}
+                    </span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            <p class="wf-meta wf-paper-write-hero">
+              Hero：在固定 KV 预算下，训练-free 动态路由不低于专用稀疏基线（NARRATIVE_REPORT）
+            </p>
+          </template>
+
+          <template v-else-if="paperWritePhase === 'write'">
+            <div class="wf-paper-write-progress">
+              <div class="wf-paper-write-progress-labels">
+                <span>章节进度</span>
+                <span>{{ paperWriteSectionsDone }} / {{ DEMO_MANUSCRIPT.sections.length }} 完成</span>
+              </div>
+              <div class="wf-paper-write-progress-track" aria-hidden="true">
+                <span
+                  class="wf-paper-write-progress-seg wf-paper-write-progress-seg--done"
+                  :style="{
+                    flex: paperWriteSectionsDone,
+                  }"
+                />
+                <span
+                  class="wf-paper-write-progress-seg wf-paper-write-progress-seg--draft"
+                  :style="{
+                    flex: DEMO_MANUSCRIPT.sections.filter((s) => s.status === 'draft').length,
+                  }"
+                />
+                <span
+                  class="wf-paper-write-progress-seg wf-paper-write-progress-seg--todo"
+                  :style="{
+                    flex: Math.max(
+                      0,
+                      DEMO_MANUSCRIPT.sections.length -
+                        paperWriteSectionsDone -
+                        DEMO_MANUSCRIPT.sections.filter((s) => s.status === 'draft').length,
+                    ),
+                  }"
+                />
+              </div>
+            </div>
+            <div class="wf-paper-write-write-grid">
+              <div class="wf-paper-write-write-col">
+                <h4 class="wf-paper-write-subhead">章节列表</h4>
+                <ul class="wf-paper-write-section-list">
+                  <li v-for="sec in DEMO_MANUSCRIPT.sections" :key="sec.name">
+                    <button
+                      type="button"
+                      class="wf-paper-write-section-btn"
+                      :class="{
+                        'wf-paper-write-section-btn--active': paperWriteSelectedSection === sec.name,
+                      }"
+                      @click="paperWriteSelectedSection = sec.name"
+                    >
+                      <span>{{ sec.name }}</span>
+                      <span
+                        class="wf-status-pill wf-status-pill--inline"
+                        :class="
+                          sec.status === 'done' ? 'wf-status-pill--success' : 'wf-status-pill--draft'
+                        "
+                      >
+                        {{ sec.status === 'done' ? '完成' : '草稿' }}
+                      </span>
+                    </button>
+                  </li>
+                </ul>
+              </div>
+              <div class="wf-paper-write-write-col">
+                <h4 class="wf-paper-write-subhead">{{ paperWriteSelectedSection }} 预览</h4>
+                <pre class="wf-paper-write-excerpt">{{ paperWriteSectionPreview }}</pre>
+              </div>
+            </div>
+            <p class="wf-meta wf-paper-write-callout">
+              引用：DBLP 拉 BibTeX；禁止凭空编造 cite key
+            </p>
+          </template>
+
+          <template v-else-if="paperWritePhase === 'compile'">
+            <div class="wf-paper-write-compile-grid">
+              <div class="wf-paper-write-pdf-preview">
+                <p class="wf-meta">main.pdf · 9 pages</p>
+                <p v-if="resultVisible['paper-writing']" class="wf-paper-write-demo-title">
+                  {{ DEMO_MANUSCRIPT.title }}
+                </p>
+                <p v-else class="wf-meta">编译后将在此预览 PDF</p>
+              </div>
+              <div class="wf-paper-write-compile-side">
+                <h4 class="wf-paper-write-subhead">编译日志</h4>
+                <pre class="wf-paper-write-log">latexmk -pdf main.tex</pre>
+                <p class="wf-meta">R1/R2 pass — 9 pages (limit 9)</p>
+                <p class="wf-meta">Warning: Figure 4 float wide</p>
+                <label class="wf-paper-write-checkbox">
+                  <input v-model="paperWriteCompileAnonymous" type="checkbox" />
+                  匿名投稿（ANONYMOUS）
+                </label>
+              </div>
+            </div>
+          </template>
+
+          <template v-else-if="paperWritePhase === 'polish'">
+            <div class="wf-paper-write-stats">
+              <div class="wf-paper-write-stat">
+                <span class="wf-paper-write-stat-label">轮次</span>
+                <strong class="wf-paper-write-stat-value">0 / 2</strong>
+              </div>
+              <div class="wf-paper-write-stat">
+                <span class="wf-paper-write-stat-label">上次评分</span>
+                <strong class="wf-paper-write-stat-value">—</strong>
+              </div>
+            </div>
+            <table class="wf-table wf-table--compact">
+              <thead>
+                <tr>
+                  <th>轮次</th>
+                  <th>外审摘要</th>
+                  <th>已改项</th>
+                  <th>PDF</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>R1</td>
+                  <td>（待运行）</td>
+                  <td>—</td>
+                  <td>—</td>
+                </tr>
+              </tbody>
+            </table>
+          </template>
+
+          <template v-else-if="paperWritePhase === 'audit'">
+            <p class="wf-meta wf-paper-write-audit-note">
+              与 experiment-audit 区分：核对正文数字 ↔ 原始结果文件（paper-claim-audit，零上下文）
+            </p>
+            <table class="wf-table wf-table--compact">
+              <thead>
+                <tr>
+                  <th>正文表述</th>
+                  <th>证据文件</th>
+                  <th>结论</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(row, idx) in PAPER_WRITE_CLAIM_AUDIT_ROWS" :key="idx">
+                  <td>{{ row.claim }}</td>
+                  <td>{{ row.evidence }}</td>
+                  <td>{{ row.verdict }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </template>
+        </div>
+      </section>
+    </div>
   </div>
 
   <!-- 图表管理 -->
@@ -1679,45 +2256,6 @@ defineExpose({
             <p v-else class="wf-artifact-empty">暂无正文（content_medium 为空）</p>
           </template>
 
-          <template v-else-if="litReviewBundleView.tab === 'experiment-plan'">
-            <p v-if="litReviewBundleView.expPlanLoading" class="wf-meta">正在加载实验方案…</p>
-            <p v-else-if="litReviewBundleView.expPlanError" class="wf-artifact-empty">
-              {{ litReviewBundleView.expPlanError }}
-            </p>
-            <p
-              v-else-if="isLiteratureReviewGeneratingExperimentPlan(litReviewBundleView.item.status)"
-              class="wf-artifact-empty"
-            >
-              实验方案生成中，请稍候刷新
-            </p>
-            <p
-              v-else-if="!literatureReviewHasExperimentPlan(litReviewBundleView.item)"
-              class="wf-artifact-empty"
-            >
-              暂无关联实验方案
-            </p>
-            <template v-else-if="litReviewBundleView.expPlan">
-              <p class="wf-meta wf-lit-meta">
-                <span>{{ formatLitReviewCreatedAt(litReviewBundleView.expPlan.created_at) }}</span>
-                <span>·</span>
-                <span
-                  class="wf-status-pill wf-status-pill--inline"
-                  :class="`wf-status-pill--${experimentPlanStatusTone(litReviewBundleView.expPlan.status)}`"
-                >
-                  {{ formatExperimentPlanStatus(litReviewBundleView.expPlan.status) }}
-                </span>
-              </p>
-              <p v-if="litReviewBundleView.expPlan.summary?.trim()" class="wf-lit-summary">
-                {{ litReviewBundleView.expPlan.summary }}
-              </p>
-              <pre
-                v-if="litReviewBundleView.expPlan.content_medium?.trim()"
-                class="wf-pre wf-pre--lit"
-              >{{ litReviewBundleView.expPlan.content_medium }}</pre>
-              <p v-else class="wf-artifact-empty">暂无正文（content_medium 为空）</p>
-            </template>
-          </template>
-
           <template v-else-if="litReviewBundleView.tab === 'ppt'">
             <p class="wf-meta wf-lit-meta">
               {{ literatureReviewPptFileName(litReviewBundleView.item) }}
@@ -1727,43 +2265,6 @@ defineExpose({
                 幻灯片预览区域（接入存储 URL 后将在此嵌入 PPT/PDF 预览）
               </p>
             </div>
-          </template>
-
-          <template v-else-if="litReviewBundleView.tab === 'paper'">
-            <p
-              v-if="!literatureReviewHasPaperManuscript(litReviewBundleView.item)"
-              class="wf-artifact-empty"
-            >
-              暂无论文稿件
-            </p>
-            <template v-else>
-              <p class="wf-kv wf-lit-bundle-paper-title">
-                <span>标题</span>{{ DEMO_MANUSCRIPT.title }}
-              </p>
-              <table class="wf-table wf-table--compact wf-lit-bundle-paper-table">
-                <thead>
-                  <tr>
-                    <th>章节</th>
-                    <th>字数</th>
-                    <th>状态</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="s in DEMO_MANUSCRIPT.sections" :key="s.name">
-                    <td>{{ s.name }}</td>
-                    <td>{{ s.words }}</td>
-                    <td>{{ s.status === 'done' ? '已完成' : '草稿' }}</td>
-                  </tr>
-                </tbody>
-              </table>
-              <p class="wf-meta">
-                引用 {{ DEMO_MANUSCRIPT.cites }} · 已验证 {{ DEMO_MANUSCRIPT.verifiedCites }}
-              </p>
-              <pre class="wf-pre wf-pre--lit">{{ DEMO_MANUSCRIPT.excerpt }}</pre>
-              <p class="wf-artifact-empty wf-lit-bundle-paper-hint">
-                论文正文接入后将展示当前论文稿件
-              </p>
-            </template>
           </template>
 
           <template v-else-if="litReviewBundleView.tab === 'references'">
@@ -1813,66 +2314,31 @@ defineExpose({
             </p>
           </template>
         </div>
-        <footer class="paper-message-box__btns wf-lit-view-btns">
+        <footer
+          v-if="litReviewBundleHasDownloadAction(litReviewBundleView.tab)"
+          class="paper-message-box__btns wf-lit-view-btns"
+        >
           <button
-            v-if="litReviewBundleView.tab === 'literature-review'"
-            type="button"
-            class="paper-btn-primary"
-            @click="onLitReviewBundleLiteratureReviewPrimary"
-          >
-            {{
+            v-if="
+              litReviewBundleView.tab === 'literature-review' &&
               literatureReviewCanDownloadDocuments(litReviewBundleView.item)
-                ? '下载'
-                : '生成综述'
-            }}
-          </button>
-          <button
-            v-if="litReviewBundleView.tab === 'ppt'"
+            "
             type="button"
             class="paper-btn-primary"
-            @click="onLitReviewBundlePptPrimary"
+            @click="downloadLitReviewBundleLiteratureReview"
           >
-            {{
-              literatureReviewCanDownloadPpt(litReviewBundleView.item)
-                ? '下载 PPT'
-                : '生成 PPT'
-            }}
+            下载
           </button>
           <button
             v-if="
-              litReviewBundleView.tab === 'experiment-plan' &&
-              litReviewBundleShowExperimentPlanPrimary(litReviewBundleView)
+              litReviewBundleView.tab === 'ppt' &&
+              literatureReviewCanDownloadPpt(litReviewBundleView.item)
             "
             type="button"
             class="paper-btn-primary"
-            @click="onLitReviewBundleExperimentPlanPrimary"
+            @click="downloadLitReviewBundlePpt"
           >
-            {{
-              litReviewBundleCanDownloadExperimentPlan(litReviewBundleView)
-                ? '下载'
-                : '生成实验方案'
-            }}
-          </button>
-          <button
-            v-if="litReviewBundleView.tab === 'paper'"
-            type="button"
-            class="paper-btn-primary"
-            @click="onLitReviewBundlePaperPrimary"
-          >
-            {{
-              litReviewBundleCanDownloadPaper(litReviewBundleView) ? '下载' : '生成论文'
-            }}
-          </button>
-          <button
-            type="button"
-            :class="
-              litReviewBundleHasDownloadAction(litReviewBundleView.tab)
-                ? 'paper-btn-secondary'
-                : 'paper-btn-primary'
-            "
-            @click="closeLitReviewBundleView"
-          >
-            关闭
+            下载 PPT
           </button>
         </footer>
       </div>
@@ -1976,18 +2442,24 @@ defineExpose({
         </div>
         <footer class="paper-message-box__btns wf-lit-view-btns">
           <button
-            v-if="litReviewViewDownloadKind"
+            v-if="
+              litReviewViewDownloadKind &&
+              litReviewViewCanDownloadKind(litReviewViewItem, litReviewViewDownloadKind)
+            "
             type="button"
             class="paper-btn-primary"
             @click="onLitReviewViewPrimaryAction"
           >
-            {{
-              litReviewViewDownloadLabel(litReviewViewItem, litReviewViewDownloadKind)
-            }}
+            {{ litReviewViewDownloadLabel(litReviewViewItem, litReviewViewDownloadKind) }}
           </button>
           <button
             type="button"
-            :class="litReviewViewDownloadKind ? 'paper-btn-secondary' : 'paper-btn-primary'"
+            :class="
+              litReviewViewDownloadKind &&
+              litReviewViewCanDownloadKind(litReviewViewItem, litReviewViewDownloadKind)
+                ? 'paper-btn-secondary'
+                : 'paper-btn-primary'
+            "
             @click="closeLitReviewView"
           >
             关闭
@@ -2042,14 +2514,23 @@ defineExpose({
           </div>
         </div>
         <footer class="paper-message-box__btns wf-lit-view-btns">
-          <button type="button" class="paper-btn-primary" @click="onLitReviewAttachmentPreviewPrimary">
-            {{
-              literatureReviewCanDownloadPpt(litReviewAttachmentPreview.item)
-                ? '下载 PPT'
-                : '生成 PPT'
-            }}
+          <button
+            v-if="literatureReviewCanDownloadPpt(litReviewAttachmentPreview.item)"
+            type="button"
+            class="paper-btn-primary"
+            @click="onLitReviewAttachmentPreviewPrimary"
+          >
+            下载 PPT
           </button>
-          <button type="button" class="paper-btn-secondary" @click="closeLitReviewAttachmentPreview">
+          <button
+            type="button"
+            :class="
+              literatureReviewCanDownloadPpt(litReviewAttachmentPreview.item)
+                ? 'paper-btn-secondary'
+                : 'paper-btn-primary'
+            "
+            @click="closeLitReviewAttachmentPreview"
+          >
             关闭
           </button>
         </footer>
@@ -2059,47 +2540,195 @@ defineExpose({
 
   <Teleport to="body">
     <div
-      v-if="expPlanViewItem"
+      v-if="expPlanBundleView"
       class="paper-modal-overlay wf-lit-view-overlay"
       role="dialog"
       aria-modal="true"
-      aria-labelledby="wf-exp-plan-view-title"
-      @click.self="closeExpPlanView"
-      @keydown.escape="closeExpPlanView"
+      aria-labelledby="wf-exp-plan-bundle-title"
+      @click.self="closeExpPlanBundleView"
+      @keydown.escape="closeExpPlanBundleView"
     >
-      <div class="paper-message-box paper-message-box--default paper-modal-panel wf-lit-view-panel" @click.stop>
-        <header class="paper-modal-header wf-lit-view-header">
+      <div
+        class="paper-message-box paper-message-box--default paper-modal-panel wf-lit-view-panel wf-lit-bundle-panel"
+        @click.stop
+      >
+        <header class="paper-modal-header wf-lit-view-header wf-lit-bundle-header">
           <div class="wf-lit-view-heading">
-            <p class="wf-lit-view-kind">实验方案</p>
-            <h2 id="wf-exp-plan-view-title" class="paper-modal-title wf-lit-view-title">
-              {{ experimentPlanRowTitle(expPlanViewItem) }}
+            <h2 id="wf-exp-plan-bundle-title" class="paper-modal-title wf-lit-view-title">
+              {{ experimentPlanRowTitle(expPlanBundleView.item) }}
             </h2>
           </div>
-          <button type="button" class="paper-modal-close" aria-label="关闭" @click="closeExpPlanView">
+          <button
+            type="button"
+            class="paper-modal-close"
+            aria-label="关闭"
+            :disabled="expPlanBundleDataSubmitting"
+            @click="closeExpPlanBundleView"
+          >
             ×
           </button>
         </header>
-        <div class="paper-modal-body wf-lit-view-body">
-          <p class="wf-meta wf-lit-meta">
-            <span>{{ formatLitReviewCreatedAt(expPlanViewItem.created_at) }}</span>
-            <span>·</span>
-            <span
-              class="wf-status-pill wf-status-pill--inline"
-              :class="`wf-status-pill--${experimentPlanStatusTone(expPlanViewItem.status)}`"
-            >
-              {{ formatExperimentPlanStatus(expPlanViewItem.status) }}
-            </span>
-          </p>
-          <p v-if="expPlanViewItem.summary?.trim()" class="wf-lit-summary">
-            {{ expPlanViewItem.summary }}
-          </p>
-          <pre v-if="expPlanViewItem.content_medium?.trim()" class="wf-pre wf-pre--lit">{{
-            expPlanViewItem.content_medium
-          }}</pre>
-          <p v-else class="wf-artifact-empty">暂无正文（content_medium 为空）</p>
+        <nav class="wf-lit-bundle-tabs" role="tablist" aria-label="实验方案管理">
+          <button
+            v-for="t in EXP_PLAN_BUNDLE_TABS"
+            :key="t.id"
+            type="button"
+            role="tab"
+            class="wf-lit-bundle-tab"
+            :class="{ 'wf-lit-bundle-tab--active': expPlanBundleView.tab === t.id }"
+            :aria-selected="expPlanBundleView.tab === t.id"
+            @click="setExpPlanBundleTab(t.id)"
+          >
+            {{ t.label }}
+          </button>
+        </nav>
+        <div class="paper-modal-body wf-lit-view-body wf-lit-bundle-body">
+          <template v-if="expPlanBundleView.tab === 'plan'">
+            <p v-if="expPlanBundleView.loading" class="wf-meta">正在加载方案…</p>
+            <template v-else>
+              <p class="wf-meta wf-lit-meta">
+                <span>{{ formatLitReviewCreatedAt(expPlanBundleView.item.created_at) }}</span>
+                <span>·</span>
+                <span
+                  class="wf-status-pill wf-status-pill--inline"
+                  :class="`wf-status-pill--${experimentPlanStatusTone(expPlanBundleView.item.status)}`"
+                >
+                  {{ formatExperimentPlanStatus(expPlanBundleView.item.status) }}
+                </span>
+              </p>
+              <p v-if="expPlanBundleView.item.summary?.trim()" class="wf-lit-summary">
+                {{ expPlanBundleView.item.summary }}
+              </p>
+              <pre
+                v-if="expPlanBundleView.item.content_medium?.trim()"
+                class="wf-pre wf-pre--lit"
+              >{{ expPlanBundleView.item.content_medium }}</pre>
+              <p v-else class="wf-artifact-empty">暂无正文（content_medium 为空）</p>
+            </template>
+          </template>
+
+          <template v-else-if="expPlanBundleView.tab === 'data'">
+            <section class="wf-exp-plan-data-section" aria-label="已有实验数据">
+              <h3 class="wf-exp-plan-data-subhead">已有数据</h3>
+              <div
+                v-if="experimentDataFileLabel(expPlanBundleView.item)"
+                class="wf-exp-plan-data-current"
+              >
+                <p class="wf-exp-plan-data-name">
+                  {{ experimentDataFileLabel(expPlanBundleView.item) }}
+                </p>
+                <p
+                  v-if="expPlanBundleView.item.experiment_data_uri?.trim()"
+                  class="wf-meta wf-exp-plan-data-uri"
+                >
+                  {{ expPlanBundleView.item.experiment_data_uri.trim() }}
+                </p>
+              </div>
+              <p v-else class="wf-artifact-empty">暂无已上传的实验数据</p>
+            </section>
+            <section class="wf-exp-plan-data-section" aria-label="上传实验数据">
+              <h3 class="wf-exp-plan-data-subhead">上传数据</h3>
+              <p class="wf-meta wf-exp-plan-results-hint">
+                支持 CSV、ZIP、原始记录等；再次上传将覆盖当前数据文件。
+              </p>
+              <div
+                class="wf-exp-data-drop"
+                :class="{
+                  'wf-exp-data-drop--has-file': !!expPlanBundleDataFile,
+                  'wf-exp-data-drop--disabled': expPlanBundleDataSubmitting,
+                }"
+                role="button"
+                tabindex="0"
+                @click="openExpPlanBundleDataPicker"
+                @keydown.enter.prevent="openExpPlanBundleDataPicker"
+                @keydown.space.prevent="openExpPlanBundleDataPicker"
+                @dragover.prevent
+                @drop.prevent="onExpPlanBundleDataDrop"
+              >
+                <input
+                  ref="expPlanBundleDataInputRef"
+                  type="file"
+                  class="wf-exp-data-file-input"
+                  :disabled="expPlanBundleDataSubmitting"
+                  @change="onExpPlanBundleDataFileChange"
+                />
+                <p v-if="!expPlanBundleDataFile" class="wf-exp-data-drop-hint">
+                  点击或拖拽实验数据文件到此处
+                </p>
+                <p v-else class="wf-exp-data-drop-name">{{ expPlanBundleDataFile.name }}</p>
+              </div>
+            </section>
+          </template>
+
+          <template v-else-if="expPlanBundleView.tab === 'code'">
+            <p class="wf-meta wf-lit-meta">可复现实验脚本（接入后将绑定方案 storage_uri）</p>
+            <pre class="wf-pre wf-pre--lit wf-exp-plan-code">{{ EXP_PLAN_CODE_PLACEHOLDER }}</pre>
+          </template>
+
+          <template v-else-if="expPlanBundleView.tab === 'results'">
+            <p v-if="experimentDataFileLabel(expPlanBundleView.item)" class="wf-meta">
+              关联数据：{{ experimentDataFileLabel(expPlanBundleView.item) }}
+            </p>
+            <p v-else class="wf-artifact-empty">
+              请先在「数据」Tab 上传实验数据，或在「代码」Tab 运行产出结果
+            </p>
+            <p class="wf-meta wf-exp-plan-results-hint">
+              接入后将在此预览指标、表格与图表摘要（由运行日志或结果文件解析）。
+            </p>
+          </template>
+
+          <template v-else-if="expPlanBundleView.tab === 'audit'">
+            <p class="wf-meta wf-lit-meta">
+              对照方案 claim 与结果，检查诚信与证据是否充分（对齐 experiment-audit / result-to-claim）。
+            </p>
+            <p class="wf-artifact-empty">暂无审计结论</p>
+            <p class="wf-meta wf-exp-plan-results-hint">
+              接入后将展示 issues、off-manifold 风险、claim 支撑度与建议补实验项。
+            </p>
+          </template>
         </div>
-        <footer class="paper-message-box__btns wf-lit-view-btns">
-          <button type="button" class="paper-btn-primary" @click="closeExpPlanView">关闭</button>
+        <footer
+          v-if="
+            expPlanBundleView.tab === 'data' ||
+            expPlanBundleView.tab === 'code' ||
+            expPlanBundleView.tab === 'results' ||
+            expPlanBundleView.tab === 'audit'
+          "
+          class="paper-message-box__btns wf-lit-view-btns"
+        >
+          <button
+            v-if="expPlanBundleView.tab === 'data'"
+            type="button"
+            class="paper-btn-primary"
+            :disabled="expPlanBundleDataSubmitting || !expPlanBundleDataFile"
+            @click="submitExpPlanBundleDataUpload"
+          >
+            {{ expPlanBundleDataSubmitting ? '上传中…' : '上传' }}
+          </button>
+          <button
+            v-if="expPlanBundleView.tab === 'code'"
+            type="button"
+            class="paper-btn-primary"
+            :disabled="expPlanCodeRunning"
+            @click="runExpPlanBundleCode"
+          >
+            {{ expPlanCodeRunning ? '运行中…' : '运行' }}
+          </button>
+          <button
+            v-if="expPlanBundleView.tab === 'results' || expPlanBundleView.tab === 'audit'"
+            type="button"
+            class="paper-btn-primary"
+            :disabled="expPlanAuditRunning"
+            @click="runExpPlanBundleAudit"
+          >
+            {{
+              expPlanAuditRunning
+                ? '审计中…'
+                : expPlanBundleView.tab === 'audit'
+                  ? '开始审计'
+                  : '审计'
+            }}
+          </button>
         </footer>
       </div>
     </div>
@@ -2478,6 +3107,7 @@ defineExpose({
 }
 
 .wf-lit-list-panel .wf-lit-actions .paper-btn-primary.paper-btn--compact,
+.wf-lit-list-panel .wf-lit-actions .paper-btn-generate.paper-btn--compact,
 .wf-lit-list-panel .wf-lit-actions .paper-btn-danger.paper-btn--compact {
   padding: 5px 10px;
   font-size: 13px;
@@ -2528,6 +3158,132 @@ defineExpose({
   width: min(420px, calc(100vw - 32px));
 }
 
+.wf-lit-run-panel {
+  width: min(520px, calc(100vw - 32px));
+}
+
+.wf-lit-run-meta {
+  margin: 0 0 4px;
+}
+
+.wf-lit-run-form .paper-field--block {
+  margin: 0;
+}
+
+.wf-lit-run-form .paper-label .req {
+  color: #e53935;
+  font-style: normal;
+}
+
+.wf-lit-run-check-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 20px;
+  margin-top: 8px;
+}
+
+.wf-lit-run-check {
+  display: inline-flex;
+  gap: 10px;
+  align-items: center;
+  margin: 0;
+  font-size: 14px;
+  color: var(--atm-text, #1e1b4b);
+  cursor: pointer;
+}
+
+.wf-lit-run-check input[type='checkbox'] {
+  margin: 0;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  accent-color: var(--atm-primary, #7c3aed);
+}
+
+.wf-lit-run-check--nested {
+  margin-top: 12px;
+}
+
+.wf-lit-run-my-lit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 16px;
+}
+
+.wf-lit-run-my-lit .paper-my-literature-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  align-items: center;
+}
+
+.wf-lit-run-my-lit .paper-my-literature-btn {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: #6366f1;
+  cursor: pointer;
+  background: #fff;
+  border: 1px solid #c7d2fe;
+  border-radius: 7px;
+}
+
+.wf-lit-run-my-lit .paper-my-literature-btn:hover:not(:disabled) {
+  color: #4f46e5;
+  background: #eef2ff;
+  border-color: #a5b4fc;
+}
+
+.wf-lit-run-my-lit .paper-my-literature-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.wf-lit-run-hint {
+  display: block;
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--atm-text-muted, #64748b);
+}
+
+.wf-lit-run-checkpoint-block {
+  margin-top: 20px;
+}
+
+.wf-lit-run-field-help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  color: #64748b;
+  cursor: help;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 50%;
+}
+
+.wf-lit-run-field-help:hover {
+  color: #475569;
+  background: #e2e8f0;
+}
+
+.paper-check-row {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.4;
+}
+
 .wf-lit-delete-panel {
   width: min(420px, calc(100vw - 32px));
 }
@@ -2556,6 +3312,51 @@ defineExpose({
   height: 0;
   opacity: 0;
   pointer-events: none;
+}
+
+.wf-exp-plan-data-section + .wf-exp-plan-data-section {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid #e8eaf0;
+}
+
+.wf-exp-plan-data-subhead {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--atm-text, #1e1b4b);
+}
+
+.wf-exp-plan-data-current {
+  padding: 12px 14px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.wf-exp-plan-data-name {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--atm-text, #1e1b4b);
+  word-break: break-all;
+}
+
+.wf-exp-plan-data-uri {
+  margin: 8px 0 0;
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.wf-exp-plan-results-hint {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--atm-text-muted, #64748b);
+}
+
+.wf-exp-plan-code {
+  max-height: min(360px, 45vh);
 }
 
 .wf-exp-data-drop {
@@ -3310,28 +4111,419 @@ defineExpose({
   border-radius: 4px;
 }
 
-.wf-paper-write-checklist {
-  margin: 12px 0 0;
-  padding-left: 20px;
-  font-size: 14px;
-  line-height: 1.65;
-  color: #475569;
+.wf-paper-write-stack {
+  gap: 16px;
 }
 
-.wf-paper-write-demo-title {
-  margin-bottom: 4px;
+.wf-paper-write-head-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.wf-paper-write-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.wf-paper-write-sub {
+  margin-top: 6px;
+}
+
+.wf-paper-write-gates {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+@media (max-width: 900px) {
+  .wf-paper-write-gates {
+    grid-template-columns: 1fr;
+  }
+}
+
+.wf-paper-write-gate {
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+}
+
+.wf-paper-write-gate--ok {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+}
+
+.wf-paper-write-gate--warn {
+  background: #fffbeb;
+  border-color: #fde68a;
+}
+
+.wf-paper-write-gate-title {
+  margin: 0 0 6px;
+  font-size: 13px;
   font-weight: 700;
   color: #1e1b4b;
 }
 
-.wf-paper-write-sections {
-  margin-top: 16px;
+.wf-paper-write-gate-body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #475569;
+}
+
+.wf-paper-write-gate-link {
+  margin-top: 8px;
+  padding: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #4338ca;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.wf-paper-write-layout {
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  .wf-paper-write-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.wf-paper-write-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wf-paper-write-sidebar-panel {
+  padding: 16px;
+}
+
+.wf-paper-write-sidebar-title {
+  margin: 0 0 12px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e1b4b;
+}
+
+.wf-paper-write-phase-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.wf-paper-write-phase-btn {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  width: 100%;
+  padding: 10px 12px;
+  text-align: left;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+
+.wf-paper-write-phase-btn:hover {
+  border-color: #c7d2fe;
+  background: #f8fafc;
+}
+
+.wf-paper-write-phase-btn--active {
+  border-color: #818cf8;
+  background: #eef2ff;
+}
+
+.wf-paper-write-phase-index {
+  flex-shrink: 0;
+  width: 22px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 22px;
+  color: #4338ca;
+  text-align: center;
+  background: #e0e7ff;
+  border-radius: 6px;
+}
+
+.wf-paper-write-phase-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.wf-paper-write-phase-skill {
+  font-size: 11px;
+  font-weight: 500;
+  color: #64748b;
+}
+
+.wf-paper-write-flow-hint {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.wf-paper-write-checklist {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wf-paper-write-checklist-item {
+  position: relative;
+  padding-left: 22px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #475569;
+}
+
+.wf-paper-write-checklist-item + .wf-paper-write-checklist-item {
+  margin-top: 8px;
+}
+
+.wf-paper-write-checklist-item::before {
+  content: '○';
+  position: absolute;
+  left: 0;
+  color: #94a3b8;
+}
+
+.wf-paper-write-checklist-item--done::before {
+  content: '✓';
+  color: #059669;
+  font-weight: 700;
+}
+
+.wf-paper-write-main {
+  display: flex;
+  flex-direction: column;
+  min-height: 420px;
+}
+
+.wf-paper-write-main-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 16px 0;
+}
+
+.wf-paper-write-main-body {
+  padding: 16px;
+}
+
+.wf-paper-write-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.wf-paper-write-stat {
+  min-width: 100px;
+  padding: 12px 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.wf-paper-write-stat-label {
+  display: block;
+  font-size: 11px;
+  color: #64748b;
+}
+
+.wf-paper-write-stat-value {
+  display: block;
+  margin-top: 4px;
+  font-size: 20px;
+  color: #1e1b4b;
+}
+
+.wf-paper-write-outline-table {
+  margin-top: 4px;
+}
+
+.wf-paper-write-hero {
+  margin-top: 14px;
+  padding: 12px 14px;
+  background: #f8fafc;
+  border-radius: 8px;
+}
+
+.wf-paper-write-progress {
+  margin-bottom: 16px;
+}
+
+.wf-paper-write-progress-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.wf-paper-write-progress-track {
+  display: flex;
+  height: 8px;
+  overflow: hidden;
+  background: #e2e8f0;
+  border-radius: 999px;
+}
+
+.wf-paper-write-progress-seg--done {
+  background: #22c55e;
+}
+
+.wf-paper-write-progress-seg--draft {
+  background: #f59e0b;
+}
+
+.wf-paper-write-progress-seg--todo {
+  background: #cbd5e1;
+}
+
+.wf-paper-write-write-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: 16px;
+}
+
+@media (max-width: 720px) {
+  .wf-paper-write-write-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.wf-paper-write-subhead {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.wf-paper-write-section-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.wf-paper-write-section-btn {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  margin-bottom: 4px;
+  padding: 8px 10px;
+  font-size: 13px;
+  text-align: left;
+  color: #334155;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.wf-paper-write-section-btn--active {
+  border-color: #818cf8;
+  background: #eef2ff;
+}
+
+.wf-paper-write-callout {
+  margin-top: 14px;
+  padding: 10px 12px;
+  background: #eff6ff;
+  border-radius: 8px;
+}
+
+.wf-paper-write-compile-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 16px;
+}
+
+@media (max-width: 720px) {
+  .wf-paper-write-compile-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.wf-paper-write-pdf-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  min-height: 280px;
+  padding: 24px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  background: #fafafa;
+}
+
+.wf-paper-write-log {
+  margin: 0 0 8px;
+  padding: 10px 12px;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: #475569;
+  background: #f1f5f9;
+  border-radius: 8px;
+}
+
+.wf-paper-write-checkbox {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 12px;
+  font-size: 13px;
+  color: #475569;
+  cursor: pointer;
+}
+
+.wf-paper-write-audit-note {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+}
+
+.wf-paper-write-demo-title {
+  margin: 0;
+  font-weight: 700;
+  color: #1e1b4b;
+  text-align: center;
 }
 
 .wf-paper-write-excerpt {
-  margin: 16px 0 0;
+  margin: 0;
   padding: 14px 16px;
   overflow: auto;
+  max-height: 320px;
   font-size: 13px;
   line-height: 1.55;
   color: #334155;
