@@ -13,6 +13,10 @@ type PaperManuscript struct {
 	Status           string  `gorm:"column:status;size:16;not null;default:active"`
 	IsCurrent    bool      `gorm:"column:is_current;not null;default:0"`
 	DraftVersion uint      `gorm:"column:draft_version;not null;default:0"`
+	DraftStatus  string    `gorm:"column:draft_status;size:16;not null;default:writing"`
+	SubmissionStatus   string     `gorm:"column:submission_status;size:24;not null;default:not_submitted"`
+	SubmissionLabel    *string    `gorm:"column:submission_label;size:128"`
+	SubmissionDeadline *time.Time `gorm:"column:submission_deadline"`
 	CreatedAt time.Time `gorm:"column:created_at"`
 	UpdatedAt time.Time `gorm:"column:updated_at"`
 }

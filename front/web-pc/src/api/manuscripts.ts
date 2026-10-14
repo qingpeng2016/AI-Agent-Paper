@@ -8,6 +8,18 @@ export type ManuscriptContentLanguage = 'zh' | 'en'
 
 export const PAPER_LIST_PAGE_SIZE = 20
 
+export type ManuscriptDraftStatus = 'writing' | 'ready' | 'frozen'
+
+export type ManuscriptSubmissionStatus =
+  | 'not_submitted'
+  | 'submitted'
+  | 'under_review'
+  | 'revision'
+  | 'rebuttal'
+  | 'resubmitted'
+  | 'accepted'
+  | 'rejected'
+
 export type PaperManuscriptApiItem = {
   id: string
   title: string
@@ -18,6 +30,82 @@ export type PaperManuscriptApiItem = {
   discipline_label?: string
   created_at?: string
   draft_version?: number
+  draft_status?: ManuscriptDraftStatus
+  submission_status?: ManuscriptSubmissionStatus
+  submission_label?: string
+  submission_deadline?: string
+}
+
+const DRAFT_STATUS_LABEL: Record<ManuscriptDraftStatus, string> = {
+  writing: '撰写中',
+  ready: '可投递',
+  frozen: '已定稿',
+}
+
+const SUBMISSION_STATUS_LABEL: Record<ManuscriptSubmissionStatus, string> = {
+  not_submitted: '未投递',
+  submitted: '已提交',
+  under_review: '审稿中',
+  revision: '待改稿',
+  rebuttal: 'Rebuttal',
+  resubmitted: '已修回',
+  accepted: '录用',
+  rejected: '拒稿',
+}
+
+export type ManuscriptDraftStatusTone = 'default' | 'ready' | 'frozen'
+
+export function formatManuscriptDraftStatus(
+  status?: string,
+  draftVersion?: number,
+): { label: string; tone: ManuscriptDraftStatusTone } {
+  const key = (status ?? 'writing') as ManuscriptDraftStatus
+  const base = DRAFT_STATUS_LABEL[key] ?? DRAFT_STATUS_LABEL.writing
+  const ver = formatManuscriptDraftVersion(draftVersion)
+  const label = ver !== '—' ? `${base} · ${ver}` : base
+  const tone: ManuscriptDraftStatusTone =
+    key === 'frozen' ? 'frozen' : key === 'ready' ? 'ready' : 'default'
+  return { label, tone }
+}
+
+export type ManuscriptSubmissionStatusTone = 'default' | 'progress' | 'warn' | 'success' | 'muted'
+
+export function formatManuscriptSubmissionDisplay(item: PaperManuscriptApiItem): {
+  primary: string
+  secondary?: string
+  tone: ManuscriptSubmissionStatusTone
+} {
+  const st = (item.submission_status ?? 'not_submitted') as ManuscriptSubmissionStatus
+  const tone: ManuscriptSubmissionStatusTone =
+    st === 'accepted'
+      ? 'success'
+      : st === 'not_submitted' || st === 'rejected'
+        ? 'muted'
+        : st === 'revision' || st === 'rebuttal'
+          ? 'warn'
+          : 'progress'
+  const label = item.submission_label?.trim()
+  if (label) {
+    return {
+      primary: label,
+      secondary: SUBMISSION_STATUS_LABEL[st] ?? st,
+      tone,
+    }
+  }
+  return {
+    primary: SUBMISSION_STATUS_LABEL[st] ?? '未投递',
+    secondary: undefined,
+    tone,
+  }
+}
+
+export function formatSubmissionDeadline(iso?: string): string {
+  if (!iso?.trim()) return ''
+  try {
+    return new Date(iso).toLocaleString('zh-CN', { dateStyle: 'short', timeStyle: 'short' })
+  } catch {
+    return iso
+  }
 }
 
 export function formatManuscriptDraftVersion(draftVersion?: number): string {

@@ -3,7 +3,10 @@ import { ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
   fetchPaperManuscripts,
+  formatManuscriptDraftStatus,
   formatManuscriptDraftVersion,
+  formatManuscriptSubmissionDisplay,
+  formatSubmissionDeadline,
   PAPER_LIST_PAGE_SIZE,
   type PaperManuscriptApiItem,
 } from '@/api/manuscripts'
@@ -119,7 +122,8 @@ void loadPage(1)
           <col class="ms-col-title" />
           <col class="ms-col-created" />
           <col class="ms-col-disc" />
-          <col class="ms-col-status" />
+          <col class="ms-col-draft" />
+          <col class="ms-col-submission" />
           <col class="ms-col-actions" />
         </colgroup>
         <thead>
@@ -127,7 +131,8 @@ void loadPage(1)
             <th>标题</th>
             <th>创建时间</th>
             <th>学科</th>
-            <th>状态</th>
+            <th>定稿</th>
+            <th>投递</th>
             <th class="ms-col-actions ul-col-actions">
               <PaperTableActionsHead tip="进入写作或投稿流程" />
             </th>
@@ -135,14 +140,40 @@ void loadPage(1)
         </thead>
         <tbody>
           <tr v-for="item in items" :key="item.id">
-            <td class="ms-col-title">{{ item.title }}</td>
+            <td class="ms-col-title">
+              <span v-if="item.is_current" class="ms-pill ms-pill--current">当前</span>
+              <span class="ms-col-title-text">{{ item.title }}</span>
+            </td>
             <td class="ms-col-created">{{ formatCreatedAt(item.created_at) }}</td>
             <td class="ms-col-disc">
               {{ item.discipline_label || item.discipline_code || '—' }}
             </td>
-            <td class="ms-col-status">
-              <span v-if="item.is_current" class="ms-pill ms-pill--current">当前</span>
-              <span v-else class="ms-muted">—</span>
+            <td class="ms-col-draft">
+              <span
+                class="ms-pill"
+                :class="`ms-pill--draft-${formatManuscriptDraftStatus(item.draft_status, item.draft_version).tone}`"
+              >
+                {{ formatManuscriptDraftStatus(item.draft_status, item.draft_version).label }}
+              </span>
+            </td>
+            <td class="ms-col-submission">
+              <div class="ms-submission-cell">
+                <span
+                  class="ms-pill"
+                  :class="`ms-pill--sub-${formatManuscriptSubmissionDisplay(item).tone}`"
+                >
+                  {{ formatManuscriptSubmissionDisplay(item).primary }}
+                </span>
+                <span
+                  v-if="formatManuscriptSubmissionDisplay(item).secondary"
+                  class="ms-submission-sub"
+                >
+                  {{ formatManuscriptSubmissionDisplay(item).secondary }}
+                </span>
+                <span v-if="item.submission_deadline" class="ms-submission-deadline">
+                  截止 {{ formatSubmissionDeadline(item.submission_deadline) }}
+                </span>
+              </div>
             </td>
             <td class="ms-col-actions ul-col-actions">
               <button
@@ -311,23 +342,27 @@ void loadPage(1)
 }
 
 .ms-table col.ms-col-title {
-  width: 40%;
+  width: 26%;
 }
 
 .ms-table col.ms-col-created {
-  width: 18%;
+  width: 14%;
 }
 
 .ms-table col.ms-col-disc {
-  width: 12%;
+  width: 10%;
 }
 
-.ms-table col.ms-col-status {
-  width: 12%;
+.ms-table col.ms-col-draft {
+  width: 14%;
+}
+
+.ms-table col.ms-col-submission {
+  width: 22%;
 }
 
 .ms-table col.ms-col-actions {
-  width: 18%;
+  width: 14%;
 }
 
 .ms-table th,
@@ -350,6 +385,69 @@ void loadPage(1)
   color: #1e1b4b;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.ms-col-title-text {
+  vertical-align: middle;
+}
+
+.ms-col-title .ms-pill--current {
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+.ms-col-draft,
+.ms-col-submission {
+  vertical-align: middle;
+}
+
+.ms-submission-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+}
+
+.ms-submission-sub,
+.ms-submission-deadline {
+  font-size: 12px;
+  line-height: 1.4;
+  color: #64748b;
+}
+
+.ms-pill--draft-default {
+  color: #475569;
+  background: #f1f5f9;
+}
+
+.ms-pill--draft-ready {
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
+.ms-pill--draft-frozen {
+  color: #047857;
+  background: #d1fae5;
+}
+
+.ms-pill--sub-muted {
+  color: #64748b;
+  background: #f1f5f9;
+}
+
+.ms-pill--sub-progress {
+  color: #4338ca;
+  background: #e0e7ff;
+}
+
+.ms-pill--sub-warn {
+  color: #b45309;
+  background: #fef3c7;
+}
+
+.ms-pill--sub-success {
+  color: #047857;
+  background: #d1fae5;
 }
 
 .ms-col-created {

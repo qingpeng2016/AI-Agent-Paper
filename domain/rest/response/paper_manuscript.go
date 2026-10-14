@@ -10,6 +10,10 @@ type PaperManuscriptItemView struct {
 	DisciplineLabel string `json:"discipline_label,omitempty"`
 	CreatedAt       string `json:"created_at,omitempty"`
 	DraftVersion    uint   `json:"draft_version,omitempty"`
+	DraftStatus     string `json:"draft_status,omitempty"`
+	SubmissionStatus string `json:"submission_status,omitempty"`
+	SubmissionLabel  string `json:"submission_label,omitempty"`
+	SubmissionDeadline string `json:"submission_deadline,omitempty"`
 }
 
 type PaperManuscriptListView struct {

@@ -22,7 +22,7 @@
 }
 
 .ul-btn-link:hover:not(:disabled) {
-  background: #eef2ff;
+  background: transparent;
   text-decoration-thickness: 1.5px;
 }
 
@@ -33,7 +33,7 @@
 }
 
 .ul-btn-link--generate:hover:not(:disabled) {
-  background: #d1fae5;
+  background: transparent;
 }
 
 .ul-btn-link:disabled {
