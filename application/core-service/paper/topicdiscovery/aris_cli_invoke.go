@@ -56,10 +56,13 @@ func buildHeadlessPrompt(capability, behavior string) string {
 Execute research skill /%s in this workspace.
 
 1. Read structured input: .paper/invoke/request.json (context, options, behavior_key).
-2. Read literature corpus if present: .paper/corpus.json.
-3. Follow the skill workflow where practical, but **your final assistant message must be ONLY one valid JSON object**
+2. Read literature metadata: .paper/corpus.json (ref_id, title, abstract).
+3. If .paper/literature_staging.json exists: PDFs are under literature/*.pdf (platform retrieve).
+   Apply /research-lit local-PDF workflow on those files first; **platform override: read each staged PDF in full**
+   (not limited to research-lit's default 3-page skim). Ground ideas, novelty, literature_review, and citations on PDF text + corpus.
+4. Follow the skill workflow where practical, but **your final assistant message must be ONLY one valid JSON object**
    matching the platform schema described in .paper/invoke/platform_schema.json.
-4. behavior_key=%s
+5. behavior_key=%s
 Do not wrap JSON in markdown fences.
 `, capability, behavior)
 }
@@ -325,12 +328,17 @@ func runLocalStrategyInvoke(ctx context.Context, req StrategyInvokeRequest, plat
 		return nil, err
 	}
 
+	corpusDir := filepath.Join(paperRoot, ".paper")
 	if len(req.Context.Corpus) > 0 && string(req.Context.Corpus) != "null" {
-		corpusDir := filepath.Join(paperRoot, ".paper")
 		if err := os.MkdirAll(corpusDir, 0o755); err != nil {
 			return nil, err
 		}
 		if err := os.WriteFile(filepath.Join(corpusDir, "corpus.json"), req.Context.Corpus, 0o644); err != nil {
+			return nil, err
+		}
+		if staged, err := stageRetrieveLiteraturePDFs(paperRoot, req.Context.Corpus); err != nil {
+			return nil, err
+		} else if err := writeLiteratureStagingManifest(paperRoot, staged); err != nil {
 			return nil, err
 		}
 	}

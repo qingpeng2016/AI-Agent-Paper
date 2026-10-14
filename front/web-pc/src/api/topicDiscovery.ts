@@ -92,7 +92,7 @@ export type TopicDiscoveryLiteratureLink = {
 export type TopicDiscoveryStepDTO = {
   stage_code: string
   status: string
-  /** 0-100，topic_discovery 多轮 LLM 执行进度 */
+  /** 0-100，retrieve PDF 下载 / topic_discovery 多轮 LLM */
   exec_progress_pct?: number
   summary_text?: string
   input_params?: Record<string, unknown>

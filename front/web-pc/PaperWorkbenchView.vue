@@ -1181,8 +1181,7 @@ const TOPIC_STEP_RUNNING_HINT: Record<string, string> = {
 
 function topicStepRunningHint(stageCode: string) {
   const base = TOPIC_STEP_RUNNING_HINT[stageCode] ?? 'AI 模型运行中…'
-  if (stageCode !== 'topic_discovery') return base
-  const dto = topicDiscoveryApiRun.value?.steps.find((s) => s.stage_code === 'topic_discovery')
+  const dto = topicDiscoveryApiRun.value?.steps.find((s) => s.stage_code === stageCode)
   const pct = dto?.exec_progress_pct
   if (typeof pct === 'number' && pct > 0) {
     return `${base} ${pct}%`

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -568,10 +567,11 @@ func (s *TopicDiscoveryRunService) stageRetrieve(ctx context.Context, step *enti
 			SourceCode:  h.SourceCode,
 		})
 		pdfURL := literature.ResolveLiteraturePDFURLWithPMC(h.SourceCode, h.ExternalKey, h.URL, h.DOI, literature.PmcidFromHitMeta(h.Meta))
+		localRel := literature.LiteratureLocalRelPath(h.ExternalKey)
 		downloads = append(downloads, literature.LiteratureDownloadItem{
 			ExternalKey: h.ExternalKey,
 			PdfURL:      pdfURL,
-			LocalPath:   relIfExists(pdfURL, h.ExternalKey),
+			LocalPath:   localRel,
 		})
 	}
 
@@ -599,31 +599,18 @@ func (s *TopicDiscoveryRunService) stageRetrieve(ctx context.Context, step *enti
 		step.SummaryText = jsonx.PtrString(fmt.Sprintf("检索到 %d 篇，但来源无 PDF 下载链接，未落盘", len(hits)))
 		return fmt.Errorf("无可用 PDF 下载链接")
 	}
-	step.SummaryText = jsonx.PtrString(fmt.Sprintf("检索完成，共 %d 篇文献，PDF 下载中…", len(hits)))
+	plannedPDF := literature.CountPlannedPDFDownloads(downloads)
+	onDisk := literature.CountLiteraturePDFsOnDisk(downloads)
 	if literature.LiteratureRetrieveCorpusReady(downloads) {
-		n := literature.CountLiteraturePDFsOnDisk(downloads)
-		step.SummaryText = jsonx.PtrString(literature.FormatRetrievePDFSummary(len(hits), n))
+		step.SummaryText = jsonx.PtrString(literature.FormatRetrievePDFSummary(len(hits), onDisk))
 		step.Status = "completed"
+		step.ExecProgressPct = 100
 	} else {
+		step.SummaryText = jsonx.PtrString(fmt.Sprintf("检索完成，共 %d 篇文献，PDF 下载中…", len(hits)))
 		step.Status = "running"
+		step.ExecProgressPct = literature.ExecProgressPct(onDisk, plannedPDF, onDisk == 0 && plannedPDF > 0)
 	}
 	return nil
-}
-
-func fileExistsNonEmpty(path string) bool {
-	st, err := os.Stat(path)
-	return err == nil && st.Size() > 0
-}
-
-func relIfExists(pdfURL, externalKey string) string {
-	if strings.TrimSpace(pdfURL) == "" {
-		return ""
-	}
-	rel := literature.LiteratureLocalRelPath(externalKey)
-	if fileExistsNonEmpty(literature.LiteratureLocalAbsPath(rel)) {
-		return rel
-	}
-	return ""
 }
 
 func (s *TopicDiscoveryRunService) stageContext(ctx context.Context, userID uint, runVersion int) (string, error) {

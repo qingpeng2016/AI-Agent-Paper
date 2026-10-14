@@ -105,7 +105,7 @@ func (s *TopicDiscoveryRunService) buildTopicStrategyInvokeContext(
 ) StrategyInvokeContext {
 	var corpus json.RawMessage
 	if ret, err := s.steps.GetStep(ctx, uint64(userID), runVersion, "retrieve"); err == nil && ret != nil && len(ret.Result) > 0 {
-		corpus = json.RawMessage(ret.Result)
+		corpus = enrichCorpusWithRetrieveExtra(json.RawMessage(ret.Result), ret.Extra)
 	}
 	return StrategyInvokeContext{
 		ManuscriptID:    step.ManuscriptID,

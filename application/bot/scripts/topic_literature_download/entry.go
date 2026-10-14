@@ -90,6 +90,10 @@ func (j *TopicLiteratureDownloadJob) processOne(ctx context.Context, step *entit
 		return "failed"
 	}
 
+	planned := papersvc.CountPlannedPDFDownloads(items)
+	done := 0
+	_ = j.saveRetrieveDownloadProgress(ctx, step, items, done, planned, planned > 0)
+
 	for idx := range items {
 		it := &items[idx]
 		pdfURL := strings.TrimSpace(it.PdfURL)
@@ -104,13 +108,13 @@ func (j *TopicLiteratureDownloadJob) processOne(ctx context.Context, step *entit
 		abs := papersvc.LiteratureLocalAbsPath(rel)
 		if st, err := os.Stat(abs); err == nil && st.Size() > 0 {
 			it.DownloadError = ""
-			continue
-		}
-		if err := downloadPDFWithRetry(ctx, pdfURL, abs, it.ExternalKey); err != nil {
+		} else if err := downloadPDFWithRetry(ctx, pdfURL, abs, it.ExternalKey); err != nil {
 			it.DownloadError = err.Error()
-			continue
+		} else {
+			it.DownloadError = ""
 		}
-		it.DownloadError = ""
+		done++
+		_ = j.saveRetrieveDownloadProgress(ctx, step, items, done, planned, false)
 	}
 
 	_ = j.mergeExtra(ctx, step, items, "")
@@ -177,6 +181,24 @@ func (j *TopicLiteratureDownloadJob) syncUserLiterature(ctx context.Context, ste
 	}
 }
 
+func (j *TopicLiteratureDownloadJob) saveRetrieveDownloadProgress(
+	ctx context.Context,
+	step *entity.PaperOutputTopicStep,
+	items []papersvc.LiteratureDownloadItem,
+	done, planned int,
+	beforeFirst bool,
+) error {
+	step.ExecProgressPct = papersvc.ExecProgressPct(done, planned, beforeFirst)
+	meta := papersvc.LoadStepExtra(step)
+	meta["exec_progress_planned_downloads"] = planned
+	meta["exec_progress_completed_downloads"] = done
+	step.Extra = mustJSON(papersvc.MergeStepExtra(meta, map[string]any{
+		"literature_downloads": items,
+	}))
+	papersvc.SyncStepFilesAppend(step, items)
+	return j.steps.SaveStep(ctx, step)
+}
+
 func (j *TopicLiteratureDownloadJob) finishSuccess(ctx context.Context, step *entity.PaperOutputTopicStep, items []papersvc.LiteratureDownloadItem) string {
 	j.syncUserLiterature(ctx, step, items)
 	meta := papersvc.LoadStepExtra(step)
@@ -200,6 +222,7 @@ func (j *TopicLiteratureDownloadJob) finishSuccess(ctx context.Context, step *en
 	}
 	sum := papersvc.FormatRetrievePDFSummary(hitCount, pdfN)
 	step.SummaryText = &sum
+	step.ExecProgressPct = 100
 	if pdfN < hitCount {
 		meta = papersvc.MergeStepExtra(meta, map[string]any{
 			"pdf_partial": true,

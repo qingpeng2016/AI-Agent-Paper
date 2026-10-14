@@ -49,6 +49,9 @@ var (
 	DownloadLiteraturePDF              = literature.DownloadLiteraturePDF
 	SyncDownloadedUserLiterature       = literature.SyncDownloadedUserLiterature
 	CountLiteraturePDFsOnDisk          = literature.CountLiteraturePDFsOnDisk
+	CountPlannedPDFDownloads           = literature.CountPlannedPDFDownloads
+	ExecProgressPct                    = literature.ExecProgressPct
+	LiteraturePDFOnDiskForKey          = literature.LiteraturePDFOnDiskForKey
 	FormatRetrievePDFSummary           = literature.FormatRetrievePDFSummary
 	ParseFigureListFilter              = figure.ParseFigureListFilter
 )

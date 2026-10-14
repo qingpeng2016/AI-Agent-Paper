@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/lang"
@@ -135,8 +136,8 @@ func (s *TopicDiscoveryRunService) formatRetrieveCorpusFilesBlock(ctx context.Co
 			continue
 		}
 		seen[key] = struct{}{}
-		lines = append(lines, fmt.Sprintf("- external_key: %s\n  local_path: %s",
-			strings.TrimSpace(f.ExternalKey), strings.TrimSpace(f.Path)))
+		lines = append(lines, fmt.Sprintf("- external_key: %s\n  local_path: %s\n  invoke_workspace: literature/%s",
+			strings.TrimSpace(f.ExternalKey), strings.TrimSpace(f.Path), filepath.Base(f.Path)))
 	}
 	if len(lines) == 0 {
 		items := literature.ParseLiteratureDownloads(st.Extra)
@@ -150,8 +151,8 @@ func (s *TopicDiscoveryRunService) formatRetrieveCorpusFilesBlock(ctx context.Co
 				continue
 			}
 			seen[key] = struct{}{}
-			lines = append(lines, fmt.Sprintf("- external_key: %s\n  local_path: %s",
-				strings.TrimSpace(it.ExternalKey), rel))
+			lines = append(lines, fmt.Sprintf("- external_key: %s\n  local_path: %s\n  invoke_workspace: literature/%s",
+				strings.TrimSpace(it.ExternalKey), rel, filepath.Base(rel)))
 		}
 	}
 	if len(lines) == 0 {
