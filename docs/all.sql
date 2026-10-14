@@ -737,7 +737,7 @@ INSERT INTO `bot_schedule_config` (
   ),
   (
     'ai_agent_paper',
-    'topic_discovery_llm',
+    'llm_topic_discovery',
     2,
     '选题 topic_discovery=running：生成包↔三门禁审计迭代，写入综述与实验方案',
     1,

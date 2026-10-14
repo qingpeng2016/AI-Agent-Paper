@@ -238,7 +238,7 @@
 
 | 设计 | 现状简述 |
 |------|----------|
-| 两步 UI：检索 + 选题发现 | `retrieve` + `topic_discovery`（bot `topic_discovery_llm`） |
+| 两步 UI：检索 + 选题发现 | `retrieve` + `topic_discovery`（bot `llm_topic_discovery`） |
 | 生成包 ↔ 审计迭代 | `exec_rounds` 驱动；修订轮带上一版 bundle + audit_report |
 | 实验计划 | 含于生成包；不再单独 `experiment_plan_llm` bot |
 | 三门禁强度 | DB 有字段，**未**接入 audit prompt/规则 |

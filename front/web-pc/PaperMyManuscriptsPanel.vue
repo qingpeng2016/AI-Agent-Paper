@@ -6,6 +6,7 @@ import {
   formatManuscriptDraftStatus,
   formatManuscriptSubmissionDisplay,
   formatSubmissionDeadline,
+  submissionDeadlineIsUrgent,
   PAPER_LIST_PAGE_SIZE,
   type PaperManuscriptApiItem,
 } from '@/api/manuscripts'
@@ -36,6 +37,14 @@ const items = ref<PaperManuscriptApiItem[]>([])
 const total = ref(0)
 const page = ref(1)
 const loading = ref(false)
+
+function draftDisplay(item: PaperManuscriptApiItem) {
+  return formatManuscriptDraftStatus(item.draft_status, item.draft_version)
+}
+
+function submissionDisplay(item: PaperManuscriptApiItem) {
+  return formatManuscriptSubmissionDisplay(item)
+}
 
 function formatCreatedAt(iso?: string): string {
   if (!iso?.trim()) return '—'
@@ -121,30 +130,35 @@ void loadPage(1)
               {{ item.discipline_label || item.discipline_code || '—' }}
             </td>
             <td class="ms-col-draft">
-              <span
-                class="ms-pill"
-                :class="`ms-pill--draft-${formatManuscriptDraftStatus(item.draft_status, item.draft_version).tone}`"
-              >
-                {{ formatManuscriptDraftStatus(item.draft_status, item.draft_version).label }}
-              </span>
+              <div class="ms-draft-chip" :class="`ms-draft-chip--${draftDisplay(item).tone}`">
+                <span class="ms-draft-chip__status">{{ draftDisplay(item).statusLabel }}</span>
+                <span v-if="draftDisplay(item).versionLabel" class="ms-draft-chip__ver">
+                  {{ draftDisplay(item).versionLabel }}
+                </span>
+              </div>
             </td>
             <td class="ms-col-submission">
-              <div class="ms-submission-cell">
-                <span
-                  class="ms-pill"
-                  :class="`ms-pill--sub-${formatManuscriptSubmissionDisplay(item).tone}`"
+              <div
+                class="ms-submission-card"
+                :class="`ms-submission-card--${submissionDisplay(item).tone}`"
+              >
+                <p class="ms-submission-card__venue">{{ submissionDisplay(item).primary }}</p>
+                <div
+                  v-if="submissionDisplay(item).secondary || item.submission_deadline"
+                  class="ms-submission-card__meta"
                 >
-                  {{ formatManuscriptSubmissionDisplay(item).primary }}
-                </span>
-                <span
-                  v-if="formatManuscriptSubmissionDisplay(item).secondary"
-                  class="ms-submission-sub"
-                >
-                  {{ formatManuscriptSubmissionDisplay(item).secondary }}
-                </span>
-                <span v-if="item.submission_deadline" class="ms-submission-deadline">
-                  截止 {{ formatSubmissionDeadline(item.submission_deadline) }}
-                </span>
+                  <span v-if="submissionDisplay(item).secondary" class="ms-submission-card__status">
+                    {{ submissionDisplay(item).secondary }}
+                  </span>
+                  <span
+                    v-if="item.submission_deadline"
+                    class="ms-submission-card__deadline"
+                    :class="{ 'ms-submission-card__deadline--urgent': submissionDeadlineIsUrgent(item) }"
+                  >
+                    <span class="ms-submission-card__deadline-label">截止</span>
+                    {{ formatSubmissionDeadline(item.submission_deadline) }}
+                  </span>
+                </div>
               </div>
             </td>
             <td class="ms-col-actions ul-col-actions">
@@ -270,53 +284,179 @@ void loadPage(1)
   vertical-align: middle;
 }
 
-.ms-submission-cell {
+/* 定稿：状态 + 版本分开展示 */
+.ms-draft-chip {
+  display: inline-flex;
+  gap: 0;
+  align-items: stretch;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.ms-draft-chip__status {
+  padding: 6px 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.ms-draft-chip__ver {
+  padding: 6px 9px;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  border-left: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.ms-draft-chip--default {
+  color: #475569;
+  background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+  border-color: #e2e8f0;
+}
+
+.ms-draft-chip--default .ms-draft-chip__ver {
+  color: #64748b;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.ms-draft-chip--ready {
+  color: #1d4ed8;
+  background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%);
+  border-color: #bfdbfe;
+}
+
+.ms-draft-chip--ready .ms-draft-chip__ver {
+  color: #2563eb;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.ms-draft-chip--frozen {
+  color: #047857;
+  background: linear-gradient(180deg, #ecfdf5 0%, #d1fae5 100%);
+  border-color: #a7f3d0;
+}
+
+.ms-draft-chip--frozen .ms-draft-chip__ver {
+  color: #059669;
+  background: rgba(255, 255, 255, 0.45);
+}
+
+/* 投递：venue 一行 + 状态/截止一行 */
+.ms-submission-card {
   display: flex;
   flex-direction: column;
+  gap: 6px;
+  max-width: 100%;
+  padding: 8px 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+}
+
+.ms-submission-card__venue {
+  margin: 0;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.35;
+  color: #1e293b;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ms-submission-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.ms-submission-card__status {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+  border-radius: 6px;
+}
+
+.ms-submission-card__deadline {
+  display: inline-flex;
   gap: 4px;
-  align-items: flex-start;
-}
-
-.ms-submission-sub,
-.ms-submission-deadline {
-  font-size: 12px;
-  line-height: 1.4;
+  align-items: center;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.3;
   color: #64748b;
+  font-variant-numeric: tabular-nums;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
 }
 
-.ms-pill--draft-default {
-  color: #475569;
-  background: #f1f5f9;
+.ms-submission-card__deadline-label {
+  font-weight: 600;
+  color: #94a3b8;
 }
 
-.ms-pill--draft-ready {
-  color: #1d4ed8;
-  background: #dbeafe;
-}
-
-.ms-pill--draft-frozen {
-  color: #047857;
-  background: #d1fae5;
-}
-
-.ms-pill--sub-muted {
-  color: #64748b;
-  background: #f1f5f9;
-}
-
-.ms-pill--sub-progress {
-  color: #4338ca;
-  background: #e0e7ff;
-}
-
-.ms-pill--sub-warn {
+.ms-submission-card__deadline--urgent {
   color: #b45309;
-  background: #fef3c7;
+  background: #fffbeb;
+  border-color: #fcd34d;
 }
 
-.ms-pill--sub-success {
+.ms-submission-card__deadline--urgent .ms-submission-card__deadline-label {
+  color: #d97706;
+}
+
+.ms-submission-card--muted {
+  background: #fafafa;
+  border-color: #e5e7eb;
+}
+
+.ms-submission-card--muted .ms-submission-card__venue {
+  font-weight: 500;
+  color: #64748b;
+}
+
+.ms-submission-card--muted .ms-submission-card__status {
+  color: #64748b;
+  background: #f1f5f9;
+}
+
+.ms-submission-card--progress {
+  background: linear-gradient(135deg, #f5f3ff 0%, #eef2ff 100%);
+  border-color: #c7d2fe;
+}
+
+.ms-submission-card--progress .ms-submission-card__status {
+  color: #4338ca;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.ms-submission-card--warn {
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+  border-color: #fcd34d;
+}
+
+.ms-submission-card--warn .ms-submission-card__status {
+  color: #b45309;
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.ms-submission-card--success {
+  background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+  border-color: #6ee7b7;
+}
+
+.ms-submission-card--success .ms-submission-card__status {
   color: #047857;
-  background: #d1fae5;
+  background: rgba(255, 255, 255, 0.65);
 }
 
 .ms-col-created {

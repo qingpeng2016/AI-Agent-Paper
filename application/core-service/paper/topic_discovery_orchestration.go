@@ -57,6 +57,15 @@ func (s *TopicDiscoveryRunService) RunTopicDiscoveryLLM(
 		maxRounds = 1
 	}
 
+	genRoute, err := s.requireTopicStrategyRoute(ctx, BehaviorTopicGenerate)
+	if err != nil {
+		return err
+	}
+	auditRoute, err := s.requireTopicStrategyRoute(ctx, BehaviorTopicAudit)
+	if err != nil {
+		return err
+	}
+
 	ctxBlock, _ := s.stageContextCompact(ctx, userID, runVersion, "retrieve")
 	filesBlock := s.formatRetrieveCorpusFilesBlock(ctx, userID, runVersion)
 	locale := s.contentLocaleForStep(ctx, step)
@@ -64,6 +73,8 @@ func (s *TopicDiscoveryRunService) RunTopicDiscoveryLLM(
 	var (
 		prevBundle     map[string]any
 		prevAudit      map[string]any
+		prevBundleRaw  json.RawMessage
+		prevAuditRaw   json.RawMessage
 		iterations     []map[string]any
 		totalUsage     LLMUsage
 		finalBundle    map[string]any
@@ -72,8 +83,12 @@ func (s *TopicDiscoveryRunService) RunTopicDiscoveryLLM(
 	)
 
 	for round := 1; round <= maxRounds; round++ {
+		invokeCtx := s.buildTopicStrategyInvokeContext(
+			ctx, userID, runVersion, step, input, round, maxRounds, prevBundleRaw, prevAuditRaw,
+		)
 		genUser := buildTopicGenerateBundleUserMessage(input, ctxBlock, filesBlock, locale, round, maxRounds, prevBundle, prevAudit)
-		genText, genUsage, err := s.callStageLLM(ctx, step, topicLLMStageGenerate, map[string]string{
+		genReq := BuildTopicDiscoveryInvokeRequest(genRoute.BehaviorKey, genRoute.CapabilityID, input, invokeCtx)
+		bundleRaw, genUsage, err := s.invokeTopicDiscoveryBehavior(ctx, step, genReq, map[string]string{
 			"direction": input.Direction,
 			"venue":     input.Venue,
 			"max_ideas": fmt.Sprintf("%d", input.MaxIdeas),
@@ -84,11 +99,16 @@ func (s *TopicDiscoveryRunService) RunTopicDiscoveryLLM(
 		totalUsage.PromptTokens += genUsage.PromptTokens
 		totalUsage.CompletionTokens += genUsage.CompletionTokens
 
-		bundle := parseTopicGenerateBundleResponse(genText)
-		bundleJSON, _ := json.Marshal(bundle)
+		bundle := map[string]any{}
+		if err := json.Unmarshal(bundleRaw, &bundle); err != nil || len(bundle) == 0 {
+			bundle = parseTopicGenerateBundleResponse(string(bundleRaw))
+		}
+		bundleJSON := bundleRaw
 
+		invokeCtx.PrevBundle = bundleJSON
 		auditUser := s.buildTopicAuditOnlyUserExtra(ctx, userID, runVersion, input, round, maxRounds, locale, string(bundleJSON))
-		auditText, auditUsage, err := s.callStageLLM(ctx, step, topicLLMStageAudit, map[string]string{
+		auditReq := BuildTopicDiscoveryInvokeRequest(auditRoute.BehaviorKey, auditRoute.CapabilityID, input, invokeCtx)
+		auditRaw, auditUsage, err := s.invokeTopicDiscoveryBehavior(ctx, step, auditReq, map[string]string{
 			"direction": compactDirectionForPrompt(input),
 			"venue":     input.Venue,
 		}, auditUser)
@@ -98,7 +118,10 @@ func (s *TopicDiscoveryRunService) RunTopicDiscoveryLLM(
 		totalUsage.PromptTokens += auditUsage.PromptTokens
 		totalUsage.CompletionTokens += auditUsage.CompletionTokens
 
-		auditRoot := parseTopicAuditOnlyResponse(auditText)
+		auditRoot := map[string]any{}
+		if err := json.Unmarshal(auditRaw, &auditRoot); err != nil || len(auditRoot) == 0 {
+			auditRoot = parseTopicAuditOnlyResponse(string(auditRaw))
+		}
 		auditBlock, _ := auditRoot["audit"].(map[string]any)
 		if auditBlock == nil {
 			auditBlock = auditRoot
@@ -117,6 +140,10 @@ func (s *TopicDiscoveryRunService) RunTopicDiscoveryLLM(
 		passed = roundPassed
 		prevBundle = bundle
 		prevAudit = auditBlock
+		prevBundleRaw = bundleJSON
+		if auditBlock != nil {
+			prevAuditRaw = json.RawMessage(mustJSON(auditBlock))
+		}
 
 		if passed {
 			break
@@ -173,6 +200,10 @@ func (s *TopicDiscoveryRunService) RunTopicDiscoveryLLM(
 	step.SummaryText = ptrString(summary)
 	appendUsageMeta(step, totalUsage)
 	meta := LoadStepExtra(step)
+	meta["strategy_routes"] = map[string]any{
+		"topic_generate": strategyRouteMeta(genRoute),
+		"topic_audit":    strategyRouteMeta(auditRoute),
+	}
 	meta["revision_rounds"] = len(iterations)
 	meta["gate_passed"] = passed
 	if litReviewID > 0 {

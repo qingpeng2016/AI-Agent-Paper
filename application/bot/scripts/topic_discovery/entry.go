@@ -14,7 +14,7 @@ import (
 
 const (
 	ModuleAIAgentPaper      = "ai_agent_paper"
-	TaskTopicDiscoveryLLM   = "topic_discovery_llm"
+	TaskTopicDiscoveryLLM   = "llm_topic_discovery"
 	scanLimit               = 20
 )
 
@@ -30,7 +30,8 @@ func NewTopicDiscoveryJob(
 	return &TopicDiscoveryJob{steps: steps, runs: runs}
 }
 
-// Run 扫描 topic_discovery=running，执行生成包↔审计迭代。
+// Run 扫描 paper_output_topic_step 第二步（stage_code=topic_discovery, status=running），
+// 经 paper_llm_strategy_route / paper_llm_strategy_package 调用生成包与审计，结果写入该步 result。
 func (j *TopicDiscoveryJob) Run(ctx context.Context) {
 	rows, err := j.steps.ListByStatusAndStage(ctx, "running", "topic_discovery", scanLimit)
 	if err != nil {

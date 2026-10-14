@@ -58,14 +58,27 @@ export type ManuscriptDraftStatusTone = 'default' | 'ready' | 'frozen'
 export function formatManuscriptDraftStatus(
   status?: string,
   draftVersion?: number,
-): { label: string; tone: ManuscriptDraftStatusTone } {
+): {
+  label: string
+  statusLabel: string
+  versionLabel?: string
+  tone: ManuscriptDraftStatusTone
+} {
   const key = (status ?? 'writing') as ManuscriptDraftStatus
-  const base = DRAFT_STATUS_LABEL[key] ?? DRAFT_STATUS_LABEL.writing
+  const statusLabel = DRAFT_STATUS_LABEL[key] ?? DRAFT_STATUS_LABEL.writing
   const ver = formatManuscriptDraftVersion(draftVersion)
-  const label = ver !== '—' ? `${base} · ${ver}` : base
+  const versionLabel = ver !== '—' ? ver : undefined
+  const label = versionLabel ? `${statusLabel} · ${versionLabel}` : statusLabel
   const tone: ManuscriptDraftStatusTone =
     key === 'frozen' ? 'frozen' : key === 'ready' ? 'ready' : 'default'
-  return { label, tone }
+  return { label, statusLabel, versionLabel, tone }
+}
+
+/** 修回 / rebuttal 且存在截止日时用于强调样式 */
+export function submissionDeadlineIsUrgent(item: PaperManuscriptApiItem): boolean {
+  const st = item.submission_status
+  if (st !== 'revision' && st !== 'rebuttal') return false
+  return Boolean(item.submission_deadline?.trim())
 }
 
 export type ManuscriptSubmissionStatusTone = 'default' | 'progress' | 'warn' | 'success' | 'muted'
