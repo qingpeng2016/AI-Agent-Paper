@@ -23,7 +23,7 @@ import (
 	"go.uber.org/zap"
 )
 
-var topicDiscoveryStages = []string{"retrieve", "topic_discovery"}
+var topicDiscoveryStages = []string{"retrieve", "topic_discovery", "topic_confirm"}
 
 type topicRunInput struct {
 	DisciplineCode  string   `json:"discipline_code"`
@@ -392,6 +392,9 @@ func (s *TopicDiscoveryRunService) loadRunInput(ctx context.Context, userID uint
 
 func (s *TopicDiscoveryRunService) nextPendingIndex(ctx context.Context, userID uint, runVersion int) int {
 	for i, stage := range topicDiscoveryStages {
+		if stage == "topic_confirm" {
+			continue
+		}
 		step, err := s.steps.GetStep(ctx, uint64(userID), runVersion, stage)
 		if err != nil || step == nil {
 			continue
@@ -455,6 +458,11 @@ func (s *TopicDiscoveryRunService) executeStage(ctx context.Context, userID uint
 		execErr = s.stageRetrieve(ctx, step, input)
 	case "topic_discovery":
 		execErr = s.stageBeginTopicDiscoveryAsync(ctx, userID, runVersion, step)
+	case "topic_confirm":
+		if step.Status == "completed" {
+			return nil
+		}
+		return nil
 	default:
 		execErr = errorx.ErrTopicStepInvalid
 	}
@@ -755,6 +763,21 @@ func (s *TopicDiscoveryRunService) buildRunView(manuscriptID uint64, runVersion 
 				runStatus = "checkpoint"
 				break
 			}
+		}
+	}
+	if runStatus != "failed" {
+		discDone, confirmPending := false, false
+		for _, r := range rows {
+			switch r.StageCode {
+			case "topic_discovery":
+				discDone = strings.TrimSpace(r.Status) == "completed"
+			case "topic_confirm":
+				confirmPending = strings.TrimSpace(r.Status) == "pending"
+			}
+		}
+		if discDone && confirmPending {
+			view.PauseAfterStage = "topic_confirm"
+			runStatus = "checkpoint"
 		}
 	}
 	view.RunStatus = runStatus

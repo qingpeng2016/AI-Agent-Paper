@@ -1033,13 +1033,13 @@ SET @paper_llm_model_id := (
 INSERT INTO `paper_llm_strategy_route` (
   `behavior_key`, `module`, `action`, `strategy_package_id`, `capability_id`, `default_model_config_id`, `status`
 ) VALUES
-  ('topic.stage.default', 'topic_discovery', 'default', @pkg_aris, 'idea-creator', IFNULL(@paper_llm_model_id, 0), 'active'),
   ('topic.stage.topic_generate', 'topic_discovery', 'topic_generate', @pkg_aris, 'idea-creator', IFNULL(@paper_llm_model_id, 0), 'active'),
   ('topic.stage.topic_audit', 'topic_discovery', 'topic_audit', @pkg_aris, 'research-review', IFNULL(@paper_llm_model_id, 0), 'active'),
   ('topic.stage.experiment_plan', 'experiment_plan', 'experiment_plan', @pkg_aris, 'experiment-bridge', IFNULL(@paper_llm_model_id, 0), 'active'),
   ('topic.discovery.run', 'topic_discovery', 'run', @pkg_aris, 'idea-discovery', IFNULL(@paper_llm_model_id, 0), 'active')
 ON DUPLICATE KEY UPDATE
   `strategy_package_id` = VALUES(`strategy_package_id`),
+  `capability_id` = VALUES(`capability_id`),
   `default_model_config_id` = VALUES(`default_model_config_id`),
   `status` = VALUES(`status`);
 

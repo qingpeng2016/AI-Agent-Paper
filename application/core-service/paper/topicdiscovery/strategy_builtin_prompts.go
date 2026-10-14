@@ -51,8 +51,6 @@ func normalizeBuiltinStage(stageCode string) string {
 
 func behaviorKeyForTopicStage(stageCode string) string {
 	switch normalizeBuiltinStage(stageCode) {
-	case "default":
-		return "topic.stage.default"
 	case "topic_generate":
 		return "topic.stage.topic_generate"
 	case "topic_audit":

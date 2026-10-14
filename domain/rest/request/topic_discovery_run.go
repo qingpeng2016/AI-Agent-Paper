@@ -34,3 +34,9 @@ type TopicDiscoveryCancelRequest struct {
 type TopicDiscoveryCommitManuscriptRequest struct {
 	ManuscriptTitle string `json:"manuscript_title"`
 }
+
+type TopicDiscoveryConfirmRoundRequest struct {
+	ManuscriptID  uint64 `json:"manuscript_id" binding:"required"`
+	RunVersion    int    `json:"run_version"`
+	SelectedRound int    `json:"selected_round" binding:"required"`
+}

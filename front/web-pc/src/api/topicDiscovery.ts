@@ -309,6 +309,31 @@ export async function fetchCurrentTopicDiscoveryRun(
   return envelope.data ?? null
 }
 
+export type TopicDiscoveryConfirmRoundRequest = {
+  manuscript_id: number
+  run_version?: number
+  selected_round: number
+}
+
+export async function postTopicDiscoveryConfirmRound(
+  body: TopicDiscoveryConfirmRoundRequest,
+): Promise<TopicDiscoveryRunResponse> {
+  const res = await fetch('/api/v1/paper/topic-discovery/confirm-round', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    throw new Error(`topic-discovery confirm-round http ${res.status}`)
+  }
+  const envelope = (await res.json()) as ApiEnvelope<TopicDiscoveryRunResponse>
+  if (envelope.code !== 200 || !envelope.data) {
+    throw new Error(envelope.message ?? 'topic-discovery confirm-round failed')
+  }
+  return envelope.data
+}
+
 export async function commitTopicDiscoveryManuscript(title?: string): Promise<TopicDiscoveryRunResponse> {
   const res = await fetch('/api/v1/paper/topic-discovery/commit-manuscript', {
     method: 'POST',

@@ -153,43 +153,15 @@ func (s *TopicDiscoveryRunService) RunTopicDiscoveryLLM(
 	}
 	planPayload, _ := finalBundle["experiment_plan"].(map[string]any)
 
-	var litReviewID uint64
-	if s.litReviews != nil && len(litPayload) > 0 {
-		id, saveErr := s.persistLiteratureReviewFromLLM(ctx, step, input, userID, runVersion, litPayload)
-		if saveErr != nil {
-			return saveErr
-		}
-		litReviewID = id
-	}
-
-	var planID uint64
-	if s.expPlans != nil && len(planPayload) > 0 {
-		planRow, planErr := s.persistTopicExperimentPlan(ctx, userID, step, input, litReviewID, planPayload)
-		if planErr != nil {
-			return planErr
-		}
-		if planRow != nil {
-			planID = planRow.ID
-		}
-	}
-	if litReviewID > 0 && planID > 0 && s.litReviews != nil {
-		_ = s.litReviews.LinkExperimentPlan(ctx, litReviewID, planID, uint64(userID), step.ManuscriptID)
-	}
-
 	result := map[string]any{
-		"passed":              passed,
-		"iterations":          iterations,
-		"ideas":               finalBundle["ideas"],
-		"novelty":             finalBundle["novelty"],
-		"literature_review":   litPayload,
-		"experiment_plan":     planPayload,
-		"final_audit":         finalAudit,
-	}
-	if litReviewID > 0 {
-		result["literature_review_id"] = litReviewID
-	}
-	if planID > 0 {
-		result["experiment_plan_id"] = planID
+		"passed":            passed,
+		"iterations":        iterations,
+		"ideas":             finalBundle["ideas"],
+		"novelty":           finalBundle["novelty"],
+		"literature_review": litPayload,
+		"experiment_plan":   planPayload,
+		"final_audit":       finalAudit,
+		"exec_rounds":       maxRounds,
 	}
 
 	step.Result = jsonx.MustJSON(result)
@@ -203,21 +175,10 @@ func (s *TopicDiscoveryRunService) RunTopicDiscoveryLLM(
 	}
 	meta["revision_rounds"] = len(iterations)
 	meta["gate_passed"] = passed
-	if litReviewID > 0 {
-		meta["literature_review_id"] = litReviewID
-	}
-	if planID > 0 {
-		meta["experiment_plan_id"] = planID
-	}
+	meta["awaiting_user_confirm"] = true
 	delete(meta, "async_llm")
 	meta["async_llm_done"] = true
 	step.Extra = jsonx.MustJSON(meta)
-
-	if step.ManuscriptID > 0 {
-		if err := s.manuscripts.SetCurrentForUser(ctx, userID, uint(step.ManuscriptID)); err != nil {
-			return err
-		}
-	}
 
 	done := time.Now()
 	step.Status = "completed"

@@ -87,6 +87,26 @@ func (h *PaperTopicDiscoveryHandler) PostCancelRun(c *gin.Context) {
 	response.ResponseSuccess(c, nil)
 }
 
+// PostConfirmRound POST /api/v1/paper/topic-discovery/confirm-round
+func (h *PaperTopicDiscoveryHandler) PostConfirmRound(c *gin.Context) {
+	userID, ok := middleware.UserIDFromContext(c)
+	if !ok {
+		response.ResponseErr(c, errorx.ErrParamsError)
+		return
+	}
+	var req request.TopicDiscoveryConfirmRoundRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.ResponseErr(c, errorx.ErrParamsError)
+		return
+	}
+	data, err := h.run.ConfirmTopicRound(c.Request.Context(), userID, req)
+	if err != nil {
+		response.ResponseErr(c, err)
+		return
+	}
+	response.ResponseSuccess(c, data)
+}
+
 // PostCommitManuscript POST /api/v1/paper/topic-discovery/commit-manuscript
 func (h *PaperTopicDiscoveryHandler) PostCommitManuscript(c *gin.Context) {
 	userID, ok := middleware.UserIDFromContext(c)

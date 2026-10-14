@@ -7,6 +7,7 @@ import {
 } from '@/composables/useTopicDiscoveryFormOptions'
 import {
   postTopicDiscoveryRun,
+  postTopicDiscoveryConfirmRound,
   fetchCurrentTopicDiscoveryRun,
   cancelTopicDiscoveryRun,
   commitTopicDiscoveryManuscript,
@@ -104,9 +105,13 @@ const CHECKPOINT_COPY: Record<TopicCheckpointKey, Omit<TopicCheckpointView, 'key
     title: '选题发现产出',
     lines: [
       'idea + 新颖性 + 文献综述 + 实验计划（可无）',
-      '生成↔三门禁审计迭代直至通过或达轮数上限',
-      '综述与实验方案已写入对应产出表（演示）',
+      '生成↔门禁审计迭代直至通过或达轮数上限',
+      '请在下一步选择要采用的轮次（尚未写入综述/实验表）',
     ],
+  },
+  topic_confirm_ready: {
+    title: '选择迭代轮次',
+    lines: ['对比各轮审计结果、综述与实验方案后确认一轮写入产出表'],
   },
 }
 
@@ -231,6 +236,8 @@ const topicRunToken = ref(0)
 const topicRunStartInFlight = ref(false)
 /** 检查点「确认并继续」请求进行中 */
 const topicContinueLoading = ref(false)
+const topicConfirmRoundLoading = ref(false)
+const topicSelectedRound = ref<number | null>(null)
 /** continue 后乐观标 running 的阶段，避免 POST/轮询仍返回 checkpoint 把转圈打掉 */
 const topicContinueOptimisticStage = ref<string | null>(null)
 /** 本轮选题 run 由用户启动/继续，完成后弹窗引导去文献综述 */
@@ -844,6 +851,11 @@ function topicStepsCompletedThenPending(
 function topicPauseStageFromApi(data: TopicDiscoveryRunResponse): string {
   const fromApi = data.pause_after_stage?.trim()
   if (fromApi) return fromApi
+  const disc = data.steps.find((s) => s.stage_code === 'topic_discovery')
+  const conf = data.steps.find((s) => s.stage_code === 'topic_confirm')
+  if (disc?.status === 'completed' && conf?.status === 'pending') {
+    return 'topic_confirm'
+  }
   if (!data.human_checkpoint) return ''
   const ordered = TOPIC_DISCOVERY_FLOW_STEPS.map((def) => {
     const st = data.steps.find((s) => s.stage_code === def.stageCode)
@@ -893,12 +905,84 @@ const topicShowFailedPanel = computed(
   () => topicHasFailedStep.value || currentTopicRun.value.status === 'failed',
 )
 
+/** 第二步完成、等待用户选轮（第三步） */
+const topicAwaitingRoundConfirm = computed(() => {
+  const raw = topicDiscoveryApiRun.value
+  if (!raw) return false
+  const disc = raw.steps.find((s) => s.stage_code === 'topic_discovery')
+  const conf = raw.steps.find((s) => s.stage_code === 'topic_confirm')
+  return disc?.status === 'completed' && conf?.status === 'pending'
+})
+
+type TopicDiscoveryIterationView = {
+  round: number
+  passed: boolean
+  auditSummary: string
+  litTitle: string
+  litSummary: string
+  planTitle: string
+  planSummary: string
+  ideaTitles: string[]
+}
+
+const topicDiscoveryIterations = computed((): TopicDiscoveryIterationView[] => {
+  const raw = topicDiscoveryApiRun.value
+  const disc = raw?.steps.find((s) => s.stage_code === 'topic_discovery')
+  const result = disc?.result as Record<string, unknown> | undefined
+  const iters = (result?.iterations as unknown[]) ?? []
+  const out: TopicDiscoveryIterationView[] = []
+  for (const item of iters) {
+    if (!item || typeof item !== 'object') continue
+    const m = item as Record<string, unknown>
+    const round = typeof m.round === 'number' ? m.round : Number(m.round)
+    if (!Number.isFinite(round) || round < 1) continue
+    const passed = m.passed === true
+    const audit = (m.audit ?? {}) as Record<string, unknown>
+    const gen = (m.generate ?? {}) as Record<string, unknown>
+    const lr = (gen.literature_review ?? {}) as Record<string, unknown>
+    const plan = (gen.experiment_plan ?? {}) as Record<string, unknown>
+    const ideas = (gen.ideas as Array<{ title?: string }>) ?? []
+    out.push({
+      round,
+      passed,
+      auditSummary: String(audit.summary ?? '').trim(),
+      litTitle: String(lr.title ?? '').trim(),
+      litSummary: String(lr.summary ?? '').trim(),
+      planTitle: String(plan.title ?? '').trim(),
+      planSummary: String(plan.summary ?? '').trim(),
+      ideaTitles: ideas.map((i) => String(i.title ?? '').trim()).filter(Boolean),
+    })
+  }
+  out.sort((a, b) => a.round - b.round)
+  return out
+})
+
+watch(topicDiscoveryIterations, (rows) => {
+  if (!rows.length) {
+    topicSelectedRound.value = null
+    return
+  }
+  if (topicSelectedRound.value != null && rows.some((r) => r.round === topicSelectedRound.value)) {
+    return
+  }
+  const passedLast = [...rows].reverse().find((r) => r.passed)
+  topicSelectedRound.value = passedLast?.round ?? rows[rows.length - 1].round
+})
+
 /** 非失败且在人工暂停点：「终止并返回」+「确认并继续」 */
 const topicShowCheckpointPanel = computed(() => {
+  if (topicAwaitingRoundConfirm.value) return false
   if (currentTopicRun.value.steps.some((s) => s.status === 'running')) return false
   if (topicDiscoveryApiRun.value?.steps.some((s) => s.status === 'running')) return false
   return topicAtHumanPause.value
 })
+
+const topicShowRoundConfirmPanel = computed(
+  () =>
+    topicAwaitingRoundConfirm.value &&
+    !currentTopicRun.value.steps.some((s) => s.status === 'running') &&
+    !topicDiscoveryApiRun.value?.steps.some((s) => s.status === 'running'),
+)
 
 function buildTopicCheckpointView(
   pauseStage: string,
@@ -1073,6 +1157,7 @@ function stepStatusFromApi(raw: string): TopicFlowStepStatus {
 const TOPIC_STEP_RUNNING_HINT: Record<string, string> = {
   retrieve: '文献 PDF 下载与入库中…',
   topic_discovery: 'AI 选题发现（生成与门禁迭代）…',
+  topic_confirm: '等待确认所选轮次…',
   generate_ideas: 'AI 脑暴选题与新颖性分析中…',
   audit: 'AI 审查结论与文献综述生成中…',
 }
@@ -1704,6 +1789,39 @@ async function startTopicDiscoveryRun() {
   } finally {
     if (token === topicRunToken.value) {
       topicRunStartInFlight.value = false
+      syncRunningFlagFromServer(msId)
+    }
+  }
+}
+
+async function confirmTopicSelectedRound() {
+  const msId = activeManuscriptId.value
+  if (!msId || !topicShowRoundConfirmPanel.value) return
+  const round = topicSelectedRound.value
+  if (round == null || round < 1) {
+    ElMessage.warning('请先选择一轮迭代结果')
+    return
+  }
+  if (topicConfirmRoundLoading.value) return
+  const token = topicRunToken.value
+  topicConfirmRoundLoading.value = true
+  markTopicRunForCompletionPrompt()
+  try {
+    const data = await postTopicDiscoveryConfirmRound({
+      manuscript_id: Number(msId),
+      run_version: topicDiscoveryApiRun.value?.run_version,
+      selected_round: round,
+    })
+    if (token !== topicRunToken.value) return
+    syncTopicRunUiAfterServer(msId, data)
+    ElMessage.success(`已确认第 ${round} 轮并写入产出表`)
+  } catch (e) {
+    if (token !== topicRunToken.value) return
+    const msg = e instanceof Error ? e.message : '确认失败'
+    ElMessage.error(msg.includes('401') ? '请先登录' : msg)
+  } finally {
+    if (token === topicRunToken.value) {
+      topicConfirmRoundLoading.value = false
       syncRunningFlagFromServer(msId)
     }
   }
@@ -2590,7 +2708,89 @@ watch(
           </ul>
         </div>
 
-        <div v-if="topicShowCheckpointPanel" class="paper-checkpoint">
+        <div v-if="topicShowRoundConfirmPanel" class="paper-checkpoint paper-round-confirm">
+          <div class="paper-checkpoint-head">
+            <span class="paper-checkpoint-pause" aria-hidden="true">⏸</span>
+            <div>
+              <h3 class="paper-checkpoint-title">第三步 · 选择迭代轮次</h3>
+              <p class="paper-checkpoint-sub">
+                各轮含生成包与门禁审计；确认后将写入文献综述与实验方案表。
+              </p>
+            </div>
+          </div>
+          <div v-if="!topicDiscoveryIterations.length" class="paper-checkpoint-note">
+            暂无迭代结果，请刷新或重新运行选题发现。
+          </div>
+          <ul v-else class="paper-round-list">
+            <li
+              v-for="item in topicDiscoveryIterations"
+              :key="item.round"
+              class="paper-round-card"
+              :class="{ 'paper-round-card--selected': topicSelectedRound === item.round }"
+            >
+              <label class="paper-round-card-label">
+                <input
+                  v-model="topicSelectedRound"
+                  type="radio"
+                  name="topic-round"
+                  :value="item.round"
+                />
+                <span class="paper-round-card-title">
+                  第 {{ item.round }} 轮
+                  <span
+                    class="paper-round-badge"
+                    :class="item.passed ? 'paper-round-badge--ok' : 'paper-round-badge--warn'"
+                  >
+                    {{ item.passed ? '门禁通过' : '未完全通过' }}
+                  </span>
+                </span>
+              </label>
+              <p v-if="item.auditSummary" class="paper-round-line">
+                <strong>审计：</strong>{{ item.auditSummary }}
+              </p>
+              <p v-if="item.litTitle || item.litSummary" class="paper-round-line">
+                <strong>综述：</strong>
+                {{ item.litTitle || '（无标题）' }}
+                <span v-if="item.litSummary"> — {{ item.litSummary.slice(0, 160) }}</span>
+              </p>
+              <p v-if="item.planTitle || item.planSummary" class="paper-round-line">
+                <strong>实验：</strong>
+                {{ item.planTitle || '（无标题）' }}
+                <span v-if="item.planSummary"> — {{ item.planSummary.slice(0, 120) }}</span>
+              </p>
+              <p v-else-if="!item.planTitle && !item.planSummary" class="paper-round-line paper-round-muted">
+                实验：本方向无需实验或未生成方案
+              </p>
+              <ul v-if="item.ideaTitles.length" class="paper-round-ideas">
+                <li v-for="(t, j) in item.ideaTitles.slice(0, 4)" :key="j">{{ t }}</li>
+              </ul>
+            </li>
+          </ul>
+          <div class="paper-checkpoint-actions">
+            <button
+              type="button"
+              class="paper-btn-secondary"
+              :disabled="topicTerminateLoading || topicConfirmRoundLoading"
+              @click="rejectTopicCheckpoint"
+            >
+              {{ topicTerminateLoading ? '终止中…' : '终止并返回' }}
+            </button>
+            <button
+              type="button"
+              class="paper-btn-primary"
+              :disabled="
+                topicTerminateLoading ||
+                topicConfirmRoundLoading ||
+                !topicDiscoveryIterations.length
+              "
+              @click="confirmTopicSelectedRound"
+            >
+              {{ topicConfirmRoundLoading ? '写入中…' : '确认所选轮次并入库' }}
+            </button>
+          </div>
+        </div>
+
+        <div v-else-if="topicShowCheckpointPanel" class="paper-checkpoint">
           <div v-if="topicCheckpointPanel" class="paper-checkpoint-head">
             <span class="paper-checkpoint-pause" aria-hidden="true">⏸</span>
             <div>
@@ -2658,8 +2858,8 @@ watch(
         </div>
 
         <div v-else-if="currentTopicRun.status === 'completed'" class="paper-flow-done">
-          产出已写入当前论文（入库语料、候选 idea、新颖性结论 · 演示）。下一步请点顶栏
-          <strong>「生成文献综述」</strong>；实验方案请在「实验方案」模块查看或生成。
+          三步已完成：语料已入库，所选轮次的文献综述与实验方案已写入产出表。下一步请点顶栏
+          <strong>「生成文献综述」</strong>；实验方案请在「实验方案」模块查看。
         </div>
       </section>
       </template>
@@ -3352,6 +3552,75 @@ watch(
   line-height: 1.45;
   color: #991b1b;
   word-break: break-word;
+}
+
+.paper-round-list {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.paper-round-card {
+  border: 1px solid var(--paper-border, #e5e7eb);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  background: var(--paper-surface, #fff);
+}
+
+.paper-round-card--selected {
+  border-color: var(--el-color-primary, #409eff);
+  box-shadow: 0 0 0 1px var(--el-color-primary-light-7, #c6e2ff);
+}
+
+.paper-round-card-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.paper-round-card-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.paper-round-badge {
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 0.1rem 0.45rem;
+  border-radius: 4px;
+}
+
+.paper-round-badge--ok {
+  background: #ecfdf5;
+  color: #047857;
+}
+
+.paper-round-badge--warn {
+  background: #fffbeb;
+  color: #b45309;
+}
+
+.paper-round-line {
+  margin: 0.35rem 0 0;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.paper-round-muted {
+  color: var(--paper-text-muted, #6b7280);
+}
+
+.paper-round-ideas {
+  margin: 0.35rem 0 0;
+  padding-left: 1.25rem;
+  font-size: 0.8125rem;
 }
 
 .paper-checkpoint-actions {

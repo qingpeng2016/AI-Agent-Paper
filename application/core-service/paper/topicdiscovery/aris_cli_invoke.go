@@ -35,10 +35,16 @@ func resolveCapability(req StrategyInvokeRequest) string {
 	if strings.Contains(behavior, "topic_generate") || strings.HasSuffix(behavior, "topic_generate") {
 		return "idea-creator"
 	}
-	if cap != "" {
+	if strings.Contains(behavior, "experiment_plan") || strings.HasSuffix(behavior, "experiment_plan") {
+		return "experiment-bridge"
+	}
+	if strings.Contains(behavior, "discovery.run") || strings.HasSuffix(behavior, "discovery.run") {
+		return "idea-discovery"
+	}
+	if cap != "" && !strings.HasPrefix(cap, "topic.") {
 		return strings.TrimPrefix(cap, "/")
 	}
-	return "idea-creator"
+	return ""
 }
 
 func buildHeadlessPrompt(capability, behavior string) string {
@@ -246,6 +252,9 @@ func arisInvokeSessionDir(req StrategyInvokeRequest) (sessionDir string, cleanup
 func runLocalStrategyInvoke(ctx context.Context, req StrategyInvokeRequest, platformUser string) (*localARISInvokeResult, error) {
 	behavior := strings.TrimSpace(req.BehaviorKey)
 	capability := resolveCapability(req)
+	if capability == "" {
+		return nil, fmt.Errorf("无法解析 skill：capability_id=%q behavior_key=%q（请在 paper_llm_strategy_route 配置 ARIS skill 名，如 idea-creator）", req.CapabilityID, req.BehaviorKey)
+	}
 
 	sessionDir, cleanup, err := arisInvokeSessionDir(req)
 	if err != nil {

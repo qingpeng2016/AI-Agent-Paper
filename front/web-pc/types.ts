@@ -379,7 +379,7 @@ export type TopicDiscoveryForm = {
 }
 
 /** 选题发现每步完成后的人工确认点（与 stage 一一对应） */
-export type TopicCheckpointKey = 'retrieve_ready' | 'topic_discovery_ready'
+export type TopicCheckpointKey = 'retrieve_ready' | 'topic_discovery_ready' | 'topic_confirm_ready'
 
 export type TopicFlowStepDef = {
   stageCode: string
@@ -397,6 +397,11 @@ export const TOPIC_DISCOVERY_FLOW_STEPS: TopicFlowStepDef[] = [
     stageCode: 'topic_discovery',
     label: '选题发现（生成与门禁迭代）',
     checkpointKey: 'topic_discovery_ready',
+  },
+  {
+    stageCode: 'topic_confirm',
+    label: '确认选题轮次',
+    checkpointKey: 'topic_confirm_ready',
   },
 ]
 

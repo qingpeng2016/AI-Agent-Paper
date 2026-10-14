@@ -10,7 +10,7 @@ import (
 	"gorm.io/gorm"
 )
 
-var topicDiscoveryStageOrder = []string{"retrieve", "topic_discovery"}
+var topicDiscoveryStageOrder = []string{"retrieve", "topic_discovery", "topic_confirm"}
 
 type PaperOutputTopicStepImpl struct {
 	db *gorm.DB
@@ -65,7 +65,7 @@ func (r *PaperOutputTopicStepImpl) ListByUserRun(ctx context.Context, userID uin
 	var rows []entity.PaperOutputTopicStep
 	err := r.db.WithContext(ctx).
 		Where("user_id = ? AND run_version = ?", userID, runVersion).
-		Order("FIELD(stage_code, 'retrieve', 'topic_discovery', 'generate_ideas', 'audit', 'novelty')").
+		Order("FIELD(stage_code, 'retrieve', 'topic_discovery', 'topic_confirm', 'generate_ideas', 'audit', 'novelty')").
 		Find(&rows).Error
 	return rows, err
 }
