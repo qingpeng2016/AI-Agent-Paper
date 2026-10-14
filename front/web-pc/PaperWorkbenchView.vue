@@ -1156,7 +1156,7 @@ function stepStatusFromApi(raw: string): TopicFlowStepStatus {
 
 const TOPIC_STEP_RUNNING_HINT: Record<string, string> = {
   retrieve: '文献 PDF 下载与入库中…',
-  topic_discovery: 'AI 选题发现（生成与门禁迭代）…',
+  topic_discovery: 'AI 生成文献综述、实验方案…',
   topic_confirm: '等待确认所选轮次…',
   generate_ideas: 'AI 脑暴选题与新颖性分析中…',
   audit: 'AI 审查结论与文献综述生成中…',
@@ -2490,7 +2490,7 @@ watch(
           <input
             v-model="topicForm.keywords"
             type="text"
-            class="paper-input paper-input--like-discipline"
+            class="paper-input"
             placeholder="多个关键词用逗号分隔"
           />
         </label>
@@ -2499,7 +2499,7 @@ watch(
           <span class="paper-label">详细描述 <em class="req">*</em></span>
           <textarea
             v-model="topicForm.description"
-            class="paper-textarea paper-input--like-discipline"
+            class="paper-textarea"
             rows="5"
             placeholder="研究的背景，研究的内容"
           />
@@ -3748,10 +3748,21 @@ watch(
   padding: 10px 12px;
   font-size: 14px;
   color: var(--atm-text, #1e1b4b);
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: #fff;
+  border: 1px solid var(--paper-field-border, #e2e8f0);
   border-radius: 10px;
-  transition: border-color 0.12s;
+  transition: border-color 0.12s, background-color 0.12s;
+}
+
+.paper-input:-webkit-autofill,
+.paper-input:-webkit-autofill:focus,
+.paper-textarea:-webkit-autofill,
+.paper-textarea:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--atm-text, #1e1b4b);
+  box-shadow: 0 0 0 1000px #fff inset;
+  transition: background-color 99999s ease-out 0s;
 }
 
 .paper-textarea {
@@ -3768,10 +3779,9 @@ watch(
   box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.22);
 }
 
-.paper-input--readonly,
-.paper-input--like-discipline {
-  background: #eef2f6;
-  border-color: #e2e8f0;
+.paper-input--readonly.paper-input--like-discipline {
+  background-color: var(--paper-discipline-field-bg, #eef2f6);
+  border-color: var(--paper-field-border, #e2e8f0);
 }
 
 .paper-input--readonly {
@@ -3783,14 +3793,13 @@ watch(
   color: var(--atm-text, #1e1b4b);
 }
 
-.paper-input--like-discipline::placeholder,
 .paper-input--discipline-unset {
   color: #94a3b8;
 }
 
-.paper-input--like-discipline:focus {
-  color: var(--atm-text, #1e1b4b);
-  background: #f8fafc;
+.paper-panel :deep(.paper-select-trigger) {
+  background-color: #fff;
+  border-color: var(--paper-field-border, #e2e8f0);
 }
 
 .paper-hint {

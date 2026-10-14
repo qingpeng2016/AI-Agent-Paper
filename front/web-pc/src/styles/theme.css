@@ -13,6 +13,9 @@
   --atm-shadow: 0 4px 24px rgba(124, 58, 237, 0.08);
   --atm-shadow-lg: 0 12px 40px rgba(30, 27, 75, 0.1);
   --atm-border: rgba(124, 58, 237, 0.12);
+  --paper-field-bg: #ffffff;
+  --paper-discipline-field-bg: #eef2f6;
+  --paper-field-border: #e2e8f0;
 }
 
 body {

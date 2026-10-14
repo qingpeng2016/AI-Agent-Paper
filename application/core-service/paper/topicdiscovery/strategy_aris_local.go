@@ -48,12 +48,12 @@ func (s *TopicDiscoveryRunService) invokeLocalARIS(
 	out, err := runLocalStrategyInvoke(ctx, req, userExtra)
 	latencyMs := int(time.Since(start).Milliseconds())
 	if err != nil {
-		s.persistARISInvokeLog(ctx, step, route, req, string(reqJSON), "", latencyMs, err)
+		s.persistARISInvokeLog(ctx, step, route, req, string(reqJSON), "", latencyMs, llm.LLMUsage{}, nil, err)
 		return nil, llm.LLMUsage{}, errorx.ErrLLMCallFailed.WithDetail(err.Error())
 	}
 	if out == nil || len(out.ResultJSON) == 0 {
 		err = fmt.Errorf("ARIS 未返回 result_json")
-		s.persistARISInvokeLog(ctx, step, route, req, string(reqJSON), "", latencyMs, err)
+		s.persistARISInvokeLog(ctx, step, route, req, string(reqJSON), "", latencyMs, llm.LLMUsage{}, nil, err)
 		return nil, llm.LLMUsage{}, errorx.ErrLLMCallFailed.WithDetail(err.Error())
 	}
 
@@ -64,8 +64,21 @@ func (s *TopicDiscoveryRunService) invokeLocalARIS(
 	})
 	stageCode := topicStageCodeFromBehaviorKey(req.BehaviorKey)
 	result := stageResultJSONFromObject(stageCode, out.ResultJSON, out.RawText)
-	s.persistARISInvokeLog(ctx, step, route, req, string(reqJSON), string(respJSON), latencyMs, nil)
-	return result, llm.LLMUsage{}, nil
+	s.persistARISInvokeLog(ctx, step, route, req, string(reqJSON), string(respJSON), latencyMs, out.Usage, out, nil)
+	return result, out.Usage, nil
+}
+
+func (s *TopicDiscoveryRunService) resolveModelConfigForRoute(
+	ctx context.Context,
+	route *entity.PaperStrategyRoute,
+) (*entity.PaperLLMModelConfig, error) {
+	if s == nil || s.llmRepo == nil || route == nil {
+		return nil, nil
+	}
+	if route.DefaultModelConfigID > 0 {
+		return s.llmRepo.GetActiveModelByID(ctx, uint(route.DefaultModelConfigID))
+	}
+	return s.llmRepo.ResolveActiveModel(ctx, 0)
 }
 
 func stageResultJSONFromObject(stageCode string, raw json.RawMessage, rawText string) json.RawMessage {
@@ -100,6 +113,8 @@ func (s *TopicDiscoveryRunService) persistARISInvokeLog(
 	req StrategyInvokeRequest,
 	requestJSON, responseJSON string,
 	latencyMs int,
+	usage llm.LLMUsage,
+	invokeOut *localARISInvokeResult,
 	callErr error,
 ) {
 	if s == nil || s.llmRepo == nil || route == nil {
@@ -120,18 +135,59 @@ func (s *TopicDiscoveryRunService) persistARISInvokeLog(
 		id := route.StrategyPackageID
 		pkgID = &id
 	}
+
+	modelName := "local-aris-cli"
+	var modelConfigID *uint
+	if cfg, _ := s.resolveModelConfigForRoute(ctx, route); cfg != nil {
+		modelName = cfg.ModelName
+		mid := cfg.ID
+		modelConfigID = &mid
+	} else if invokeOut != nil {
+		if invokeOut.CLIModel != "" {
+			modelName = invokeOut.CLIModel
+		}
+		if invokeOut.CLIExecutor != "" {
+			modelName = invokeOut.CLIExecutor + ":" + modelName
+		}
+	}
+
+	var promptTok, completionTok *int
+	if usage.PromptTokens > 0 {
+		p := usage.PromptTokens
+		promptTok = &p
+	}
+	if usage.CompletionTokens > 0 {
+		c := usage.CompletionTokens
+		completionTok = &c
+	}
+
+	var traceID *string
+	if invokeOut != nil && strings.TrimSpace(invokeOut.ExternalTraceID) != "" {
+		t := invokeOut.ExternalTraceID
+		traceID = &t
+	}
+
 	row := &entity.PaperLLMCallLog{
 		ManuscriptID:      step.ManuscriptID,
 		StageCode:         &stage,
 		BehaviorKey:       &bk,
 		StrategyPackageID: pkgID,
 		CapabilityID:      &capID,
-		ModelName:         "local-aris-cli",
+		ExternalTraceID:   traceID,
+		ModelConfigID:      modelConfigID,
+		ModelName:         modelName,
 		RequestJSON:       datatypes.JSON(requestJSON),
 		ResponseJSON:      datatypes.JSON(responseJSON),
+		PromptTokens:      promptTok,
+		CompletionTokens:  completionTok,
 		LatencyMs:         latencyMs,
 		Status:            status,
 		CreatedAt:         time.Now(),
 	}
-	_ = s.llmRepo.InsertCallLog(ctx, row)
+	if err := s.llmRepo.InsertCallLog(ctx, row); err != nil {
+		return
+	}
+	if modelConfigID != nil && usage.TotalTokens() > 0 {
+		_ = s.llmRepo.AddTokensUsedTotal(ctx, *modelConfigID, usage.TotalTokens())
+	}
 }

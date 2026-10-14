@@ -33,7 +33,7 @@ func (s *TopicDiscoveryRunService) stageBeginTopicDiscoveryAsync(
 	if len(step.Result) > 0 && strings.TrimSpace(step.Status) == "completed" {
 		return nil
 	}
-	sum := "选题发现：生成与门禁审计迭代中…"
+	sum := "生成文献综述、实验方案中…"
 	step.SummaryText = &sum
 	step.Status = "running"
 	step.CompletedAt = nil

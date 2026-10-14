@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/llm"
 	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/storage"
 )
 
@@ -21,6 +22,9 @@ type localARISInvokeResult struct {
 	ResultJSON      json.RawMessage
 	ExternalTraceID string
 	RawText         string
+	Usage           llm.LLMUsage
+	CLIExecutor     string
+	CLIModel        string
 }
 
 func resolveCapability(req StrategyInvokeRequest) string {
@@ -106,6 +110,44 @@ func extractJSONObject(text string) (map[string]any, error) {
 		}
 	}
 	return nil, fmt.Errorf("no json object")
+}
+
+func parseLLMUsageFromCLIJSON(payload map[string]any) llm.LLMUsage {
+	if payload == nil {
+		return llm.LLMUsage{}
+	}
+	var usage llm.LLMUsage
+	if u, ok := payload["usage"].(map[string]any); ok {
+		usage.PromptTokens = intFromAnyUsage(u["prompt_tokens"], u["input_tokens"])
+		usage.CompletionTokens = intFromAnyUsage(u["completion_tokens"], u["output_tokens"])
+	}
+	if usage.TotalTokens() == 0 {
+		if u, ok := payload["metrics"].(map[string]any); ok {
+			usage.PromptTokens = intFromAnyUsage(u["prompt_tokens"], u["input_tokens"])
+			usage.CompletionTokens = intFromAnyUsage(u["completion_tokens"], u["output_tokens"])
+		}
+	}
+	return usage
+}
+
+func intFromAnyUsage(primary, fallback any) int {
+	if n := intFromAnyUsageVal(primary); n > 0 {
+		return n
+	}
+	return intFromAnyUsageVal(fallback)
+}
+
+func intFromAnyUsageVal(v any) int {
+	switch t := v.(type) {
+	case float64:
+		return int(t)
+	case int:
+		return t
+	case int64:
+		return int(t)
+	default:
+		return 0
+	}
 }
 
 func claudeResultText(payload map[string]any) string {
@@ -311,12 +353,15 @@ func runLocalStrategyInvoke(ctx context.Context, req StrategyInvokeRequest, plat
 	}
 
 	var rawText string
+	var cliUsage llm.LLMUsage
 	if cliJSON, _ := extractJSONObject(stdout); cliJSON != nil {
 		rawText = claudeResultText(cliJSON)
+		cliUsage = parseLLMUsageFromCLIJSON(cliJSON)
 	}
 	if rawText == "" {
 		rawText = stdout
 	}
+	execLabel, cliModel := arisCLIExecutorModel()
 
 	resultObj, err := extractJSONObject(rawText)
 	var resultBytes json.RawMessage
@@ -343,5 +388,23 @@ func runLocalStrategyInvoke(ctx context.Context, req StrategyInvokeRequest, plat
 		ResultJSON:      resultBytes,
 		ExternalTraceID: trace,
 		RawText:         rt,
+		Usage:           cliUsage,
+		CLIExecutor:     execLabel,
+		CLIModel:        cliModel,
 	}, nil
+}
+
+func arisCLIExecutorModel() (executor, model string) {
+	executor = strings.ToLower(strings.TrimSpace(os.Getenv("PAPER_ARIS_EXECUTOR")))
+	if executor == "" {
+		executor = "claude"
+	}
+	model = strings.TrimSpace(os.Getenv("PAPER_ARIS_CLI_MODEL"))
+	if model == "" {
+		model = "claude-cli"
+		if executor == "codex" || executor == "aris" {
+			model = "codex-cli"
+		}
+	}
+	return executor, model
 }

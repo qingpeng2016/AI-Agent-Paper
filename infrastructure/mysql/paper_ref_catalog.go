@@ -57,7 +57,7 @@ func (r *PaperRefCatalogImpl) ListActiveDisciplines(ctx context.Context) ([]enti
 func (r *PaperRefCatalogImpl) ListExecutionIntensities(ctx context.Context) ([]entity.PaperExecIntensityTopic, error) {
 	var rows []entity.PaperExecIntensityTopic
 	err := r.db.WithContext(ctx).
-		Order("FIELD(code, 'fast', 'balanced', 'deep'), code ASC").
+		Order("FIELD(code, 'fast', 'balanced', 'deep'), code ASC, id ASC").
 		Find(&rows).Error
 	return rows, err
 }

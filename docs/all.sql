@@ -292,21 +292,25 @@ CREATE TABLE IF NOT EXISTS `paper_literature_platform` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='文献检索平台（API 配置）';
 
 CREATE TABLE IF NOT EXISTS `paper_exec_intensity_topic` (
+  `id`           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键',
   `code`         VARCHAR(16)  NOT NULL COMMENT '档位键 fast|balanced|deep',
   `name`         VARCHAR(64)  NOT NULL COMMENT '展示名',
   `exec_rounds`  TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '选题生成↔审计迭代轮数（Corpus 冻结）',
   `max_papers`   INT UNSIGNED NOT NULL DEFAULT 80 COMMENT '检索文献上限（选题发现）',
   `max_ideas`    INT UNSIGNED NOT NULL DEFAULT 12 COMMENT '选题候选 idea 上限',
   `is_default`   TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '前端默认选中项，仅一条应为 1',
-  PRIMARY KEY (`code`)
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_paper_exec_intensity_topic_code` (`code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='选题发现·执行强度档位';
 
 CREATE TABLE IF NOT EXISTS `paper_exec_intensity_write_paper` (
+  `id`           BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '主键',
   `code`         VARCHAR(16)  NOT NULL COMMENT '档位键 fast|balanced|deep',
   `name`         VARCHAR(64)  NOT NULL COMMENT '展示名',
   `exec_rounds`  TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '选题生成↔审计迭代轮数（Corpus 冻结）',
   `is_default`   TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '前端默认选中项，仅一条应为 1',
-  PRIMARY KEY (`code`)
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_paper_exec_intensity_write_paper_code` (`code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='论文写作·执行强度档位';
 
 CREATE TABLE IF NOT EXISTS `paper_llm_constraint_gate` (
@@ -1017,24 +1021,48 @@ INSERT INTO `paper_llm_model_config` (
   'active'
 );
 
+INSERT INTO `paper_llm_model_config` (
+  `label`, `scope`, `provider_code`, `model_name`, `api_base_url`, `api_key`,
+  `timeout_ms`, `max_retries`, `supports_vision`, `context_window_hint`, `extra`, `status`
+) VALUES (
+  'Codex GPT-5.4（审计 reviewer）',
+  'platform_delegate',
+  'openai',
+  'gpt-5.4',
+  'https://api.openai.com',
+  NULL,
+  3600000,
+  1,
+  0,
+  200000,
+  JSON_OBJECT('executor', 'codex', 'notes', '本地 codex / MCP research-review'),
+  'active'
+);
+
 INSERT INTO `paper_llm_strategy_package` (`code`, `name`, `status`)
 VALUES
   ('aris', 'ARIS 本地 CLI', 'active')
 ON DUPLICATE KEY UPDATE `name` = VALUES(`name`), `status` = VALUES(`status`);
 
 SET @pkg_aris := (SELECT `id` FROM `paper_llm_strategy_package` WHERE `code` = 'aris' LIMIT 1);
-SET @paper_llm_model_id := (
+SET @paper_llm_claude_id := (
   SELECT c.`id` FROM `paper_llm_model_config` c
-  WHERE c.`status` = 'active'
-  ORDER BY (c.`provider_code` = 'anthropic') DESC, c.`id` DESC
+  WHERE c.`status` = 'active' AND c.`provider_code` = 'anthropic'
+  ORDER BY c.`id` DESC
+  LIMIT 1
+);
+SET @paper_llm_codex_id := (
+  SELECT c.`id` FROM `paper_llm_model_config` c
+  WHERE c.`status` = 'active' AND c.`provider_code` = 'openai' AND c.`model_name` = 'gpt-5.4'
+  ORDER BY c.`id` DESC
   LIMIT 1
 );
 
 INSERT INTO `paper_llm_strategy_route` (
   `behavior_key`, `module`, `action`, `strategy_package_id`, `capability_id`, `default_model_config_id`, `status`
 ) VALUES
-  ('topic.stage.topic_generate', 'topic_discovery', 'topic_generate', @pkg_aris, 'idea-creator', IFNULL(@paper_llm_model_id, 0), 'active'),
-  ('topic.stage.topic_audit', 'topic_discovery', 'topic_audit', @pkg_aris, 'research-review', IFNULL(@paper_llm_model_id, 0), 'active'),
+  ('topic.stage.topic_generate', 'topic_discovery', 'topic_generate', @pkg_aris, 'idea-creator', IFNULL(@paper_llm_claude_id, 0), 'active'),
+  ('topic.stage.topic_audit', 'topic_discovery', 'topic_audit', @pkg_aris, 'research-review', IFNULL(@paper_llm_codex_id, IFNULL(@paper_llm_claude_id, 0)), 'active'),
   ('topic.stage.experiment_plan', 'experiment_plan', 'experiment_plan', @pkg_aris, 'experiment-bridge', IFNULL(@paper_llm_model_id, 0), 'active'),
   ('topic.discovery.run', 'topic_discovery', 'run', @pkg_aris, 'idea-discovery', IFNULL(@paper_llm_model_id, 0), 'active')
 ON DUPLICATE KEY UPDATE

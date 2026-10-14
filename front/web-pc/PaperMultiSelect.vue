@@ -198,8 +198,8 @@ onUnmounted(() => document.removeEventListener('pointerdown', onDocumentPointerD
   color: #1e1b4b;
   text-align: left;
   cursor: pointer;
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  background-color: var(--paper-field-bg, #fff);
+  border: 1px solid var(--paper-field-border, #e2e8f0);
   border-radius: 10px;
 }
 

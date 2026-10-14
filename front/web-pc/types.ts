@@ -395,7 +395,7 @@ export const TOPIC_DISCOVERY_FLOW_STEPS: TopicFlowStepDef[] = [
   },
   {
     stageCode: 'topic_discovery',
-    label: '选题发现（生成与门禁迭代）',
+    label: '生成文献综述、实验方案',
     checkpointKey: 'topic_discovery_ready',
   },
   {
