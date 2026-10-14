@@ -242,6 +242,7 @@ const experimentPlanDoneByManuscript = ref<Record<string, boolean>>({})
 const workflowPanelsRef = ref<InstanceType<typeof PaperWorkflowPanels> | null>(null)
 const userLiteraturePanelRef = ref<InstanceType<typeof PaperUserLiteraturePanel> | null>(null)
 const figureManagementPanelRef = ref<InstanceType<typeof PaperFigureManagementPanel> | null>(null)
+const paperSubmissionHubRef = ref<InstanceType<typeof PaperSubmissionHubPanel> | null>(null)
 const paperMainRef = ref<HTMLElement | null>(null)
 const topicFlowPanelRef = ref<HTMLElement | null>(null)
 
@@ -652,6 +653,11 @@ async function onStartSubmissionFromMyManuscripts(manuscriptId: string) {
   selectModule('paper-submission')
 }
 
+function onStartRevisionWritingFromSubmission(_payload: { submissionId: string }) {
+  selectModule('paper-writing')
+  ElMessage.info('请在论文写作中修改正文；修回记录仍在「论文投稿」')
+}
+
 function onManuscriptsListUpdate(list: PaperManuscriptItem[]) {
   manuscripts.value = list
   persistManuscripts()
@@ -972,6 +978,7 @@ const showPrimaryAction = computed(() => {
   if (isUtilityModule.value) return false
   if (isLiteratureReviewModule.value) return false
   if (isExperimentPlanningModule.value) return false
+  if (isPaperSubmissionModule.value) return false
   return true
 })
 
@@ -1865,6 +1872,14 @@ function onExpPlanUploadPlanPrimary() {
   void workflowPanelsRef.value?.openExpPlanUploadPlanDialog()
 }
 
+function onPaperSubmissionNewPrimary() {
+  if (!activeManuscriptId.value) {
+    ElMessage.warning('请先在顶栏选择当前论文')
+    return
+  }
+  paperSubmissionHubRef.value?.openWizard()
+}
+
 async function onPrimaryAction() {
   if (activeModule.value === 'topic-discovery') {
     if (parseTopicKeywords(topicForm.keywords).length === 0) {
@@ -2214,6 +2229,27 @@ watch(
             </svg>
           </span>
           上传实验方案
+        </button>
+        <button
+          v-else-if="isPaperSubmissionModule"
+          type="button"
+          class="paper-run-btn"
+          @click="onPaperSubmissionNewPrimary"
+        >
+          <span class="paper-run-icon paper-run-icon--add" aria-hidden="true">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M12 5v14" />
+              <path d="M5 12h14" />
+            </svg>
+          </span>
+          新建投递
         </button>
         <button
           v-else-if="isLiteratureReviewModule"
@@ -2644,11 +2680,13 @@ watch(
 
       <PaperSubmissionHubPanel
         v-else-if="activeModule === 'paper-submission'"
+        ref="paperSubmissionHubRef"
         :key="`paper-submission-${moduleContentKey}`"
         :active-manuscript-id="activeManuscriptId"
         :manuscript-title="currentManuscript?.title ?? '未命名'"
         :draft-version="currentManuscript?.draftVersion"
         @manuscript-summary-changed="void loadManuscriptsFromServer()"
+        @start-revision-writing="onStartRevisionWritingFromSubmission"
       />
 
       <PaperUserLiteraturePanel

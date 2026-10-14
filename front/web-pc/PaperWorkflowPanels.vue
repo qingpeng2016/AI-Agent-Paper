@@ -2695,8 +2695,10 @@ defineExpose({
   font-size: 20px;
 }
 
-.wf-lit-list-panel {
-  padding: 20px 22px 24px;
+.wf-panel.wf-lit-list-panel {
+  display: flow-root;
+  width: 100%;
+  padding: 24px 22px 52px;
 }
 
 .wf-lit-table {

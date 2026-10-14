@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { formatManuscriptDraftVersion, type ManuscriptSubmissionStatus } from '@/api/manuscripts'
+import type { ManuscriptSubmissionStatus } from '@/api/manuscripts'
 import {
   createManuscriptSubmission,
   fetchManuscriptSubmissionDetail,
@@ -27,6 +27,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   manuscriptSummaryChanged: []
+  startRevisionWriting: [payload: { submissionId: string }]
 }>()
 
 const STATUS_LABEL: Record<ManuscriptSubmissionStatus, string> = {
@@ -38,6 +39,24 @@ const STATUS_LABEL: Record<ManuscriptSubmissionStatus, string> = {
   resubmitted: '已修回',
   accepted: '录用',
   rejected: '拒稿',
+}
+
+function submissionStatusTone(status: ManuscriptSubmissionStatus): string {
+  switch (status) {
+    case 'accepted':
+      return 'success'
+    case 'revision':
+    case 'rebuttal':
+      return 'draft'
+    case 'rejected':
+      return 'muted'
+    case 'submitted':
+    case 'under_review':
+    case 'resubmitted':
+      return 'progress'
+    default:
+      return 'default'
+  }
 }
 
 const VENUE_OPTIONS = [
@@ -57,7 +76,7 @@ const SNAPSHOT_OPTIONS = computed(() => {
 
 const screen = ref<HubScreen>('list')
 const wizardStep = ref(1)
-const detailTab = ref<'overview' | 'package' | 'checklist' | 'meta' | 'log'>('overview')
+const detailTab = ref<'overview' | 'package' | 'checklist' | 'log'>('overview')
 const listLoading = ref(false)
 const actionBusy = ref(false)
 const submissions = ref<PaperManuscriptSubmissionItem[]>([])
@@ -87,6 +106,19 @@ const wizardChecklistItems = [
   { id: 'anon', label: 'PDF 匿名化检查', ok: true },
   { id: 'supp', label: '补充材料已打包', ok: false },
 ]
+
+const WIZARD_STEPS = [
+  { id: 1, label: '投稿目标' },
+  { id: 2, label: '稿本绑定' },
+  { id: 3, label: '投稿材料' },
+  { id: 4, label: '确认投递' },
+] as const
+
+function goWizardStep(step: number) {
+  if (step >= 1 && step <= 4 && step <= wizardStep.value) {
+    wizardStep.value = step
+  }
+}
 
 const detailChecklist = computed(() => activeDetail.value?.checklist ?? wizardChecklistItems)
 
@@ -153,21 +185,16 @@ async function loadDetail(id: string) {
   }
 }
 
-async function openDetail(id: string) {
+async function openDetail(id: string, tab: typeof detailTab.value = 'overview') {
   const detail = await loadDetail(id)
   if (!detail) return
   activeDetail.value = detail
-  detailTab.value = 'overview'
+  detailTab.value = tab
   screen.value = 'detail'
 }
 
-async function openRevision(id: string) {
-  const detail = await loadDetail(id)
-  if (!detail) return
-  activeDetail.value = detail
-  revisionForm.decision = detail.decision ?? ''
-  revisionForm.comments = detail.comments_summary ?? ''
-  screen.value = 'revision'
+function openRevision(id: string) {
+  emit('startRevisionWriting', { submissionId: id })
 }
 
 function backToList() {
@@ -242,6 +269,22 @@ async function saveRevisionPlan() {
   }
 }
 
+async function onDetailSubmitAction() {
+  const d = activeDetail.value
+  if (!d) return
+  if (d.status === 'revision' || d.status === 'rebuttal') {
+    await markResubmitted()
+    return
+  }
+  const url = d.portal_url?.trim()
+  if (url) {
+    window.open(url, '_blank', 'noopener,noreferrer')
+    ElMessage.info('已打开投稿系统；修回完成后请保存状态为待改稿/修回后再点「投递」标记已修回')
+  } else {
+    ElMessage.warning('暂无投稿系统链接，请在「概览」中补充 Portal URL')
+  }
+}
+
 async function markResubmitted() {
   const row = activeDetail.value
   const msId = props.activeManuscriptId
@@ -266,290 +309,410 @@ function onWizardPdfChange(e: Event) {
   wizardForm.mainPdfFile = f ?? null
   wizardForm.mainPdfName = f?.name ?? ''
 }
+
+defineExpose({ openWizard })
 </script>
 
 <template>
-  <section class="sub-hub">
-    <header v-if="screen === 'list'" class="sub-hub-head">
-      <div>
-        <h2 class="sub-hub-title">论文投稿</h2>
-        <p class="sub-hub-lead">
-          当前论文「<strong>{{ manuscriptTitle || '未命名' }}</strong>」· 内链版本
-          {{ formatManuscriptDraftVersion(draftVersion) }}
+  <!-- 与文献综述模块相同：wf-stack 直下 wf-panel（wf-root 在 WorkflowPanels 组件层） -->
+  <div class="wf-stack sub-hub">
+    <template v-if="screen === 'list'">
+      <section v-if="!activeManuscriptId" class="wf-panel">
+        <p class="wf-meta">请先在顶栏或「我的论文」选择当前论文。</p>
+      </section>
+
+      <section v-else-if="listLoading" class="wf-panel">
+        <p class="wf-meta">正在加载投递列表…</p>
+      </section>
+
+      <section v-else-if="submissions.length === 0" class="wf-panel">
+        <p class="wf-lead wf-lead--no-head">
+          当前论文尚无对外投递记录。完成写作并冻结稿本后，请点顶栏「新建投递」：选择 venue、绑定 PDF，并标记已在 portal 提交。
         </p>
-      </div>
-      <button type="button" class="paper-btn-primary" :disabled="!activeManuscriptId" @click="openWizard">
-        新建投递
-      </button>
-    </header>
+      </section>
 
-    <p v-if="!activeManuscriptId" class="sub-hub-empty">请先在顶栏或「我的论文」选择当前论文。</p>
-
-    <!-- 列表 -->
-    <template v-else-if="screen === 'list'">
-      <p v-if="listLoading" class="sub-hub-empty-card">正在加载投递列表…</p>
-      <p v-else-if="!listLoading && submissions.length === 0" class="sub-hub-empty-card">
-        暂无对外投递记录。完成写作并冻结稿本后，可「新建投递」选择 venue、绑定 PDF 并标记已在 portal 提交。
-      </p>
-      <table v-else-if="!listLoading && submissions.length > 0" class="sub-table">
-        <colgroup>
-          <col class="sub-col-venue" />
-          <col class="sub-col-round" />
-          <col class="sub-col-status" />
-          <col class="sub-col-snap" />
-          <col class="sub-col-date" />
-          <col class="sub-col-actions" />
-        </colgroup>
-        <thead>
-          <tr>
-            <th>Venue</th>
-            <th>轮次</th>
-            <th>状态</th>
-            <th>稿本</th>
-            <th>提交时间</th>
-            <th class="ul-col-actions">
-              <PaperTableActionsHead tip="查看投递详情或进入改稿中心" />
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="row in submissions" :key="row.id">
-            <td>{{ row.venue_label }} · {{ submissionTrackLabel(row.track) }}</td>
-            <td>R{{ row.round }}</td>
-            <td>
-              <span class="sub-pill" :class="`sub-pill--${row.status}`">{{
-                STATUS_LABEL[row.status]
-              }}</span>
-            </td>
-            <td>{{ submissionSnapshotLabel(row.draft_version) }}</td>
-            <td class="sub-col-date">
-              {{ row.submitted_at ? new Date(row.submitted_at).toLocaleDateString('zh-CN') : '—' }}
-            </td>
-            <td class="ul-col-actions">
-              <button type="button" class="ul-btn-link" @click="openDetail(row.id)">详情</button>
-              <button type="button" class="ul-btn-link" @click="openRevision(row.id)">改稿</button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
+      <section v-else class="wf-panel wf-lit-list-panel sub-hub-list-panel">
+        <table class="wf-table wf-lit-table wf-lit-table--submission">
+          <colgroup>
+            <col class="wf-sub-col-venue-pct" />
+            <col class="wf-sub-col-round-pct" />
+            <col class="wf-sub-col-status-pct" />
+            <col class="wf-sub-col-version-pct" />
+            <col class="wf-sub-col-date-pct" />
+            <col class="wf-sub-col-actions-pct" />
+          </colgroup>
+          <thead>
+            <tr>
+              <th class="wf-lit-col-title">Venue</th>
+              <th class="wf-lit-col-meta wf-sub-col-round">轮次</th>
+              <th class="wf-lit-col-meta wf-sub-col-status">状态</th>
+              <th class="wf-lit-col-meta wf-sub-col-version">稿本</th>
+              <th class="wf-lit-col-meta wf-sub-col-date">提交时间</th>
+              <th class="wf-lit-col-actions ul-col-actions">
+                <PaperTableActionsHead tip="改稿前往论文写作；投递打开投递管理" />
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="row in submissions" :key="row.id">
+              <td class="wf-lit-col-title">
+                {{ row.venue_label }} · {{ submissionTrackLabel(row.track) }}
+              </td>
+              <td class="wf-lit-col-meta wf-sub-col-round">R{{ row.round }}</td>
+              <td class="wf-lit-col-meta wf-sub-col-status">
+                <span
+                  class="wf-status-pill"
+                  :class="`wf-status-pill--${submissionStatusTone(row.status)}`"
+                >
+                  {{ STATUS_LABEL[row.status] }}
+                </span>
+              </td>
+              <td class="wf-lit-col-meta wf-sub-col-version">
+                <span class="wf-output-version">{{ submissionSnapshotLabel(row.draft_version) }}</span>
+              </td>
+              <td class="wf-lit-col-meta wf-sub-col-date wf-lit-created-at">
+                {{ row.submitted_at ? new Date(row.submitted_at).toLocaleDateString('zh-CN') : '—' }}
+              </td>
+              <td class="wf-lit-col-actions ul-col-actions">
+                <button type="button" class="ul-btn-link" @click="openRevision(row.id)">改稿</button>
+                <button type="button" class="ul-btn-link" @click="openDetail(row.id)">投递</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
     </template>
 
-    <!-- 向导 -->
     <template v-else-if="screen === 'wizard'">
-      <nav class="sub-breadcrumb">
+      <nav class="wf-subnav">
         <button type="button" class="ul-btn-link" @click="backToList">← 投递列表</button>
-        <span class="sub-breadcrumb-sep">/</span>
-        <span>新建投递 · 步骤 {{ wizardStep }}/4</span>
+        <span class="wf-subnav-sep">/</span>
+        <span>新建投递</span>
       </nav>
-      <div class="sub-wizard-steps">
-        <span :class="{ 'sub-wizard-step--on': wizardStep >= 1 }">1 投稿目标</span>
-        <span :class="{ 'sub-wizard-step--on': wizardStep >= 2 }">2 稿本绑定</span>
-        <span :class="{ 'sub-wizard-step--on': wizardStep >= 3 }">3 投稿材料</span>
-        <span :class="{ 'sub-wizard-step--on': wizardStep >= 4 }">4 确认投递</span>
-      </div>
 
-      <div v-show="wizardStep === 1" class="sub-card">
-        <h3 class="sub-card-title">目标 venue 与轮次</h3>
-        <label class="sub-field">
-          <span class="sub-label">目标 venue</span>
-          <PaperSelect
-            v-model="wizardForm.venueCode"
-            :options="VENUE_OPTIONS"
-            placeholder="请选择"
-            filterable
-          />
-        </label>
-        <label class="sub-field">
-          <span class="sub-label">Track</span>
-          <select v-model="wizardForm.track" class="sub-input">
-            <option value="main">Main</option>
-            <option value="short">Short</option>
-          </select>
-        </label>
-        <label class="sub-field">
-          <span class="sub-label">投稿系统链接</span>
-          <input v-model="wizardForm.portalUrl" class="sub-input" type="url" placeholder="OpenReview / ScholarOne URL" />
-        </label>
-      </div>
+      <section class="wf-panel sub-wizard-panel">
+        <header class="sub-detail-panel-head sub-wizard-panel-head">
+          <div class="sub-detail-panel-head-text">
+            <h2 class="sub-detail-panel-title">新建投递</h2>
+            <p class="sub-detail-panel-lead">步骤 {{ wizardStep }} / 4 · 先在 Portal 完成提交，再在此记录并同步「我的论文」</p>
+          </div>
+        </header>
 
-      <div v-show="wizardStep === 2" class="sub-card">
-        <h3 class="sub-card-title">稿本与投稿包</h3>
-        <label class="sub-field">
-          <span class="sub-label">绑定写作快照</span>
-          <PaperSelect v-model="wizardForm.snapshot" :options="SNAPSHOT_OPTIONS" placeholder="选择版本" />
-        </label>
-        <label class="sub-check">
-          <input v-model="wizardForm.anonymous" type="checkbox" />
-          双盲投稿（校验 PDF 不含作者信息）
-        </label>
-        <label class="sub-field">
-          <span class="sub-label">主 PDF</span>
-          <input class="sub-input" type="file" accept=".pdf" @change="onWizardPdfChange" />
-          <span v-if="wizardForm.mainPdfName" class="sub-meta">{{ wizardForm.mainPdfName }}</span>
-        </label>
-        <ul class="sub-checklist">
-          <li v-for="c in wizardChecklistItems" :key="c.id">
-            <span :class="c.ok ? 'sub-check-ok' : 'sub-check-warn'">{{ c.ok ? '通过' : '待处理' }}</span>
-            {{ c.label }}
-          </li>
-        </ul>
-      </div>
+        <div class="ul-tabs sub-wizard-step-tabs" role="tablist" aria-label="新建投递步骤">
+          <button
+            v-for="s in WIZARD_STEPS"
+            :key="s.id"
+            type="button"
+            role="tab"
+            class="ul-tab sub-wizard-step-tab"
+            :class="{
+              'ul-tab--active': wizardStep === s.id,
+              'sub-wizard-step-tab--done': wizardStep > s.id,
+            }"
+            :aria-selected="wizardStep === s.id"
+            :disabled="s.id > wizardStep"
+            @click="goWizardStep(s.id)"
+          >
+            <span class="sub-wizard-step-num">{{ s.id }}</span>
+            {{ s.label }}
+          </button>
+        </div>
 
-      <div v-show="wizardStep === 3" class="sub-card">
-        <h3 class="sub-card-title">元数据与声明</h3>
-        <label class="sub-field">
-          <span class="sub-label">标题</span>
-          <input v-model="wizardForm.title" class="sub-input" type="text" />
-        </label>
-        <label class="sub-field">
-          <span class="sub-label">摘要</span>
-          <textarea v-model="wizardForm.abstract" class="sub-textarea" rows="4" placeholder="可与写作快照不一致时在此覆盖" />
-        </label>
-      </div>
+        <div class="ul-tab-pane sub-wizard-pane" role="tabpanel">
+          <template v-if="wizardStep === 1">
+            <p class="sub-pane-lead">选择目标会议/期刊、Track 与投稿系统链接。</p>
+            <div class="sub-wizard-fields">
+              <label class="sub-field">
+                <span class="sub-label">目标 venue</span>
+                <PaperSelect
+                  v-model="wizardForm.venueCode"
+                  :options="VENUE_OPTIONS"
+                  placeholder="请选择"
+                  filterable
+                />
+              </label>
+              <label class="sub-field">
+                <span class="sub-label">Track</span>
+                <select v-model="wizardForm.track" class="sub-input">
+                  <option value="main">Main</option>
+                  <option value="short">Short</option>
+                </select>
+              </label>
+              <label class="sub-field">
+                <span class="sub-label">投稿系统链接</span>
+                <input
+                  v-model="wizardForm.portalUrl"
+                  class="sub-input"
+                  type="url"
+                  placeholder="OpenReview / ScholarOne URL"
+                />
+              </label>
+            </div>
+          </template>
 
-      <div v-show="wizardStep === 4" class="sub-card">
-        <h3 class="sub-card-title">确认并标记已提交</h3>
-        <p class="sub-meta">
-          本系统不替代 OpenReview：请先在 portal 完成提交，再在此记录状态并同步「我的论文」投递列。
-        </p>
-        <dl class="sub-summary">
-          <dt>Venue</dt>
-          <dd>{{ VENUE_OPTIONS.find((v) => v.value === wizardForm.venueCode)?.label || '—' }}</dd>
-          <dt>稿本</dt>
-          <dd>v{{ wizardForm.snapshot }}</dd>
-          <dt>PDF</dt>
-          <dd>{{ wizardForm.mainPdfName || '未选择' }}</dd>
-        </dl>
-        <label class="sub-field">
-          <span class="sub-label">Portal Submission ID（可选）</span>
-          <input v-model="wizardForm.externalId" class="sub-input" type="text" placeholder="OpenReview forum id" />
-        </label>
-        <label class="sub-check">
-          <input v-model="wizardForm.markedSubmitted" type="checkbox" />
-          我已在投稿系统完成本次提交
-        </label>
-      </div>
+          <template v-else-if="wizardStep === 2">
+            <p class="sub-pane-lead">绑定写作快照并上传主 PDF；校验项可在提交前自检。</p>
+            <div class="sub-wizard-fields">
+              <label class="sub-field">
+                <span class="sub-label">绑定写作快照</span>
+                <PaperSelect v-model="wizardForm.snapshot" :options="SNAPSHOT_OPTIONS" placeholder="选择版本" />
+              </label>
+              <label class="sub-check sub-check--block">
+                <input v-model="wizardForm.anonymous" type="checkbox" />
+                双盲投稿（校验 PDF 不含作者信息）
+              </label>
+              <label class="sub-field">
+                <span class="sub-label">主 PDF</span>
+                <input class="sub-input sub-input--file" type="file" accept=".pdf" @change="onWizardPdfChange" />
+                <span v-if="wizardForm.mainPdfName" class="sub-field-hint">{{ wizardForm.mainPdfName }}</span>
+              </label>
+            </div>
+            <ul class="sub-check-rows sub-check-rows--compact">
+              <li v-for="c in wizardChecklistItems" :key="c.id" class="sub-check-row">
+                <span class="sub-check-row-label">{{ c.label }}</span>
+                <span
+                  class="sub-check-row-status"
+                  :class="c.ok ? 'sub-check-row-status--ok' : 'sub-check-row-status--warn'"
+                >
+                  {{ c.ok ? '通过' : '待处理' }}
+                </span>
+              </li>
+            </ul>
+          </template>
 
-      <footer class="sub-wizard-footer">
-        <button v-if="wizardStep > 1" type="button" class="paper-btn-secondary" @click="wizardStep--">
-          上一步
-        </button>
-        <button v-if="wizardStep < 4" type="button" class="paper-btn-primary" @click="wizardStep++">
-          下一步
-        </button>
-        <button v-else type="button" class="paper-btn-primary" :disabled="actionBusy" @click="finishWizard">
-          {{ actionBusy ? '提交中…' : '完成并记录投递' }}
-        </button>
-      </footer>
+          <template v-else-if="wizardStep === 3">
+            <p class="sub-pane-lead">提交用标题与摘要；可与写作快照不一致时在此覆盖。</p>
+            <div class="sub-wizard-fields">
+              <label class="sub-field">
+                <span class="sub-label">标题</span>
+                <input v-model="wizardForm.title" class="sub-input" type="text" />
+              </label>
+              <label class="sub-field">
+                <span class="sub-label">摘要</span>
+                <textarea
+                  v-model="wizardForm.abstract"
+                  class="sub-textarea"
+                  rows="5"
+                  placeholder="可与写作快照不一致时在此覆盖"
+                />
+              </label>
+            </div>
+          </template>
+
+          <template v-else>
+            <p class="sub-pane-lead">确认信息无误后，勾选已在 Portal 完成提交。</p>
+            <dl class="sub-detail-dl sub-wizard-confirm-dl">
+              <dt>Venue</dt>
+              <dd>{{ VENUE_OPTIONS.find((v) => v.value === wizardForm.venueCode)?.label || '—' }}</dd>
+              <dt>Track</dt>
+              <dd>{{ wizardForm.track === 'short' ? 'Short' : 'Main' }}</dd>
+              <dt>稿本</dt>
+              <dd>v{{ wizardForm.snapshot }}</dd>
+              <dt>主 PDF</dt>
+              <dd>{{ wizardForm.mainPdfName || '未选择' }}</dd>
+            </dl>
+            <div class="sub-wizard-fields sub-wizard-fields--after-summary">
+              <label class="sub-field">
+                <span class="sub-label">Portal Submission ID（可选）</span>
+                <input
+                  v-model="wizardForm.externalId"
+                  class="sub-input"
+                  type="text"
+                  placeholder="OpenReview forum id"
+                />
+              </label>
+              <label class="sub-check sub-check--block">
+                <input v-model="wizardForm.markedSubmitted" type="checkbox" />
+                我已在投稿系统完成本次提交
+              </label>
+            </div>
+          </template>
+        </div>
+
+        <footer class="sub-wizard-panel-footer">
+          <button v-if="wizardStep > 1" type="button" class="paper-btn-secondary" @click="wizardStep--">
+            上一步
+          </button>
+          <button v-if="wizardStep < 4" type="button" class="paper-btn-primary" @click="wizardStep++">
+            下一步
+          </button>
+          <button v-else type="button" class="paper-btn-primary" :disabled="actionBusy" @click="finishWizard">
+            {{ actionBusy ? '提交中…' : '完成并记录投递' }}
+          </button>
+        </footer>
+      </section>
     </template>
 
-    <!-- 详情 -->
     <template v-else-if="screen === 'detail' && activeDetail">
-      <nav class="sub-breadcrumb">
+      <nav class="wf-subnav">
         <button type="button" class="ul-btn-link" @click="backToList">← 投递列表</button>
-        <span class="sub-breadcrumb-sep">/</span>
+        <span class="wf-subnav-sep">/</span>
         <span>{{ activeDetail.venue_label }}</span>
       </nav>
-      <header class="sub-detail-head">
-        <div>
-          <h2 class="sub-hub-title">
-            {{ activeDetail.venue_label }} · {{ submissionTrackLabel(activeDetail.track) }}
-          </h2>
-          <p class="sub-hub-lead">
-            R{{ activeDetail.round }} · {{ STATUS_LABEL[activeDetail.status] }} · 稿本
-            {{ submissionSnapshotLabel(activeDetail.draft_version) }}
-          </p>
+
+      <section class="wf-panel sub-detail-panel">
+        <header class="sub-detail-panel-head">
+          <div class="sub-detail-panel-head-text">
+            <h2 class="sub-detail-panel-title">
+              {{ activeDetail.venue_label }} · {{ submissionTrackLabel(activeDetail.track) }}
+            </h2>
+            <p class="sub-detail-panel-lead">
+              <span
+                class="wf-status-pill wf-status-pill--inline"
+                :class="`wf-status-pill--${submissionStatusTone(activeDetail.status)}`"
+              >
+                {{ STATUS_LABEL[activeDetail.status] }}
+              </span>
+              <span class="sub-detail-panel-lead-sep">·</span>
+              轮次 R{{ activeDetail.round }}
+              <span class="sub-detail-panel-lead-sep">·</span>
+              稿本 {{ submissionSnapshotLabel(activeDetail.draft_version) }}
+            </p>
+          </div>
+          <button
+            type="button"
+            class="paper-btn-primary sub-detail-head-action"
+            :disabled="actionBusy"
+            @click="onDetailSubmitAction"
+          >
+            {{ actionBusy ? '处理中…' : '投递' }}
+          </button>
+        </header>
+
+        <div class="ul-tabs" role="tablist" aria-label="投递">
+          <button
+            v-for="t in [
+              { id: 'overview', label: '概览' },
+              { id: 'package', label: '投稿包' },
+              { id: 'checklist', label: '校验' },
+              { id: 'log', label: '日志' },
+            ]"
+            :key="t.id"
+            type="button"
+            role="tab"
+            class="ul-tab"
+            :class="{ 'ul-tab--active': detailTab === t.id }"
+            :aria-selected="detailTab === t.id"
+            @click="detailTab = t.id as typeof detailTab"
+          >
+            {{ t.label }}
+          </button>
         </div>
-        <button type="button" class="paper-btn-secondary" @click="openRevision(activeDetail.id)">
-          改稿中心
-        </button>
-      </header>
-      <nav class="sub-tabs" role="tablist">
-        <button
-          v-for="t in [
-            { id: 'overview', label: '概览' },
-            { id: 'package', label: '投稿包' },
-            { id: 'checklist', label: '校验' },
-            { id: 'meta', label: '元数据' },
-            { id: 'log', label: '日志' },
-          ]"
-          :key="t.id"
-          type="button"
-          class="sub-tab"
-          :class="{ 'sub-tab--active': detailTab === t.id }"
-          @click="detailTab = t.id as typeof detailTab"
-        >
-          {{ t.label }}
-        </button>
-      </nav>
-      <div class="sub-card">
-        <template v-if="detailTab === 'overview'">
-          <dl class="sub-summary">
-            <dt>状态</dt>
-            <dd>{{ STATUS_LABEL[activeDetail.status] }}</dd>
-            <dt>提交时间</dt>
-            <dd>
-              {{
-                activeDetail.submitted_at
-                  ? new Date(activeDetail.submitted_at).toLocaleString('zh-CN')
-                  : '—'
-              }}
-            </dd>
-            <dt>Portal</dt>
-            <dd>{{ activeDetail.portal_url || '—' }}</dd>
-            <dt>External ID</dt>
-            <dd>{{ activeDetail.external_id || '—' }}</dd>
-            <dt v-if="activeDetail.revision_deadline">修回截止</dt>
-            <dd v-if="activeDetail.revision_deadline">
-              {{ new Date(activeDetail.revision_deadline).toLocaleString('zh-CN') }}
-            </dd>
-          </dl>
-        </template>
-        <template v-else-if="detailTab === 'package'">
-          <p class="sub-meta">主 PDF、补充材料、Response letter（修回轮）将在此列出并可重新打包下载。</p>
-          <ul class="sub-file-list">
-            <li>
-              {{
-                activeDetail.main_pdf_filename ||
-                  `main_${submissionSnapshotLabel(activeDetail.draft_version)}.pdf`
-              }}
-            </li>
-            <li>supplementary.zip（占位）</li>
-          </ul>
-        </template>
-        <template v-else-if="detailTab === 'checklist'">
-          <ul class="sub-checklist">
-            <li v-for="c in detailChecklist" :key="c.id">
-              <span :class="c.ok ? 'sub-check-ok' : 'sub-check-warn'">{{ c.ok ? '通过' : '待处理' }}</span>
-              {{ c.label }}
-            </li>
-          </ul>
-        </template>
-        <template v-else-if="detailTab === 'meta'">
-          <p class="sub-meta">提交时锁定的标题与摘要。</p>
-          <p><strong>{{ activeDetail.title || manuscriptTitle }}</strong></p>
-          <p v-if="activeDetail.abstract" class="sub-meta">{{ activeDetail.abstract }}</p>
-        </template>
-        <template v-else>
-          <ul v-if="activeDetail.events?.length" class="sub-log">
-            <li v-for="ev in activeDetail.events" :key="ev.id">
-              {{ new Date(ev.created_at).toLocaleString('zh-CN') }} · {{ ev.message }}
-            </li>
-          </ul>
-          <p v-else class="sub-meta">暂无日志。</p>
-        </template>
-      </div>
+
+        <div class="ul-tab-pane" role="tabpanel">
+          <template v-if="detailTab === 'overview'">
+            <p class="sub-pane-lead">本投递在系统中的状态与 Portal 关联信息。</p>
+            <dl class="sub-detail-dl">
+              <dt>投递状态</dt>
+              <dd>
+                <span
+                  class="wf-status-pill wf-status-pill--inline"
+                  :class="`wf-status-pill--${submissionStatusTone(activeDetail.status)}`"
+                >
+                  {{ STATUS_LABEL[activeDetail.status] }}
+                </span>
+              </dd>
+              <dt>提交时间</dt>
+              <dd>
+                {{
+                  activeDetail.submitted_at
+                    ? new Date(activeDetail.submitted_at).toLocaleString('zh-CN')
+                    : '—'
+                }}
+              </dd>
+              <dt>投稿系统</dt>
+              <dd>
+                <a
+                  v-if="activeDetail.portal_url"
+                  :href="activeDetail.portal_url"
+                  class="sub-detail-link"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  {{ activeDetail.portal_url }}
+                </a>
+                <span v-else class="sub-detail-muted">—</span>
+              </dd>
+              <dt>Submission ID</dt>
+              <dd>
+                <code v-if="activeDetail.external_id" class="sub-detail-code">{{
+                  activeDetail.external_id
+                }}</code>
+                <span v-else class="sub-detail-muted">—</span>
+              </dd>
+              <dt v-if="activeDetail.revision_deadline">修回截止</dt>
+              <dd v-if="activeDetail.revision_deadline">
+                {{ new Date(activeDetail.revision_deadline).toLocaleString('zh-CN') }}
+              </dd>
+              <dt v-if="activeDetail.decision">审稿结论</dt>
+              <dd v-if="activeDetail.decision">{{ activeDetail.decision }}</dd>
+            </dl>
+          </template>
+
+          <template v-else-if="detailTab === 'package'">
+            <p class="sub-pane-lead">绑定稿本对应的投稿包文件；修回轮可在此追加 Response letter。</p>
+            <ul class="sub-file-rows">
+              <li class="sub-file-row">
+                <span class="sub-file-row-icon" aria-hidden="true">PDF</span>
+                <div class="sub-file-row-body">
+                  <span class="sub-file-row-name">{{
+                    activeDetail.main_pdf_filename ||
+                      `main_${submissionSnapshotLabel(activeDetail.draft_version)}.pdf`
+                  }}</span>
+                  <span class="sub-file-row-hint">主文稿 · 绑定 {{ submissionSnapshotLabel(activeDetail.draft_version) }}</span>
+                </div>
+                <span class="sub-file-row-badge">主 PDF</span>
+              </li>
+              <li class="sub-file-row sub-file-row--muted">
+                <span class="sub-file-row-icon" aria-hidden="true">ZIP</span>
+                <div class="sub-file-row-body">
+                  <span class="sub-file-row-name">supplementary.zip</span>
+                  <span class="sub-file-row-hint">补充材料（占位）</span>
+                </div>
+                <span class="sub-file-row-badge sub-file-row-badge--muted">待上传</span>
+              </li>
+            </ul>
+          </template>
+
+          <template v-else-if="detailTab === 'checklist'">
+            <p class="sub-pane-lead">投递前校验项快照；接入规则引擎后可自动跑检并更新状态。</p>
+            <ul class="sub-check-rows">
+              <li v-for="c in detailChecklist" :key="c.id" class="sub-check-row">
+                <span class="sub-check-row-label">{{ c.label || c.id }}</span>
+                <span
+                  class="sub-check-row-status"
+                  :class="c.ok ? 'sub-check-row-status--ok' : 'sub-check-row-status--warn'"
+                >
+                  {{ c.ok ? '通过' : '待处理' }}
+                </span>
+              </li>
+            </ul>
+          </template>
+
+          <template v-else>
+            <p class="sub-pane-lead">投递创建、提交、上传与改稿相关操作记录。</p>
+            <ul v-if="activeDetail.events?.length" class="sub-log-rows">
+              <li v-for="ev in activeDetail.events" :key="ev.id" class="sub-log-row">
+                <time class="sub-log-row-time">{{
+                  new Date(ev.created_at).toLocaleString('zh-CN')
+                }}</time>
+                <span class="sub-log-row-msg">{{ ev.message }}</span>
+              </li>
+            </ul>
+            <p v-else class="sub-detail-empty">暂无操作日志。</p>
+          </template>
+        </div>
+      </section>
     </template>
 
-    <!-- 改稿 -->
     <template v-else-if="screen === 'revision' && activeDetail">
-      <nav class="sub-breadcrumb">
-        <button type="button" class="ul-btn-link" @click="openDetail(activeDetail.id)">← 投递详情</button>
-        <span class="sub-breadcrumb-sep">/</span>
+      <nav class="wf-subnav">
+        <button type="button" class="ul-btn-link" @click="openDetail(activeDetail.id)">← 投递</button>
+        <span class="wf-subnav-sep">/</span>
         <span>改稿中心</span>
       </nav>
-      <div class="sub-card">
-        <h3 class="sub-card-title">{{ activeDetail.venue_label }} · 审稿与修回</h3>
+      <section class="wf-panel sub-revision-panel">
+        <h3 class="sub-revision-panel-title">{{ activeDetail.venue_label }} · 审稿与修回</h3>
         <label class="sub-field">
           <span class="sub-label">Decision</span>
           <input
@@ -579,171 +742,138 @@ function onWizardPdfChange(e: Event) {
             标记已修回
           </button>
         </div>
-      </div>
+      </section>
     </template>
-  </section>
+  </div>
 </template>
 
 <style scoped>
-.sub-hub {
-  padding: 20px 22px 28px;
-}
-
-.sub-hub-head {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 16px;
-  align-items: flex-start;
-  justify-content: space-between;
-  margin-bottom: 20px;
-}
-
-.sub-hub-title {
-  margin: 0 0 6px;
-  font-size: 20px;
-  font-weight: 700;
-  color: #1e1b4b;
-}
-
-.sub-hub-lead {
-  margin: 0;
-  font-size: 14px;
-  line-height: 1.55;
-  color: #64748b;
-}
-
-.sub-hub-empty,
-.sub-hub-empty-card {
-  margin: 0;
-  padding: 28px 20px;
-  font-size: 14px;
-  line-height: 1.55;
-  color: #64748b;
-  text-align: center;
-  background: #f8fafc;
-  border-radius: 12px;
-}
-
-.sub-table {
+/* 列表白卡片顶留白与 PaperWorkflowPanels 文献综述列表一致（避免全局层叠未生效） */
+.sub-hub-list-panel.wf-panel.wf-lit-list-panel {
+  box-sizing: border-box;
+  display: flow-root;
   width: 100%;
-  table-layout: fixed;
-  font-size: 14px;
-  border-collapse: collapse;
+  padding: 24px 22px 52px;
   background: #fff;
   border: 1px solid #e8eaf0;
-  border-radius: 12px;
-  overflow: hidden;
+  border-radius: 16px;
+  box-shadow: 0 4px 24px rgba(30, 27, 75, 0.06);
 }
 
-.sub-table col.sub-col-venue {
-  width: 28%;
-}
-
-.sub-table col.sub-col-round {
-  width: 8%;
-}
-
-.sub-table col.sub-col-status {
-  width: 12%;
-}
-
-.sub-table col.sub-col-snap {
-  width: 10%;
-}
-
-.sub-table col.sub-col-date {
-  width: 14%;
-}
-
-.sub-table col.sub-col-actions {
-  width: 18%;
-}
-
-.sub-table th,
-.sub-table td {
-  padding: 12px;
-  text-align: left;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.sub-table th {
-  font-weight: 700;
-  color: #64748b;
-}
-
-.sub-pill {
-  display: inline-block;
-  padding: 3px 10px;
-  font-size: 12px;
-  font-weight: 600;
-  border-radius: 999px;
-}
-
-.sub-pill--submitted,
-.sub-pill--under_review,
-.sub-pill--resubmitted {
-  color: #4338ca;
-  background: #e0e7ff;
-}
-
-.sub-pill--revision,
-.sub-pill--rebuttal {
-  color: #b45309;
-  background: #fef3c7;
-}
-
-.sub-pill--accepted {
-  color: #047857;
-  background: #d1fae5;
-}
-
-.sub-pill--rejected {
-  color: #64748b;
-  background: #f1f5f9;
-}
-
-.sub-breadcrumb {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 16px;
-  font-size: 14px;
-  color: #64748b;
-}
-
-.sub-breadcrumb-sep {
-  opacity: 0.5;
-}
-
-.sub-wizard-steps {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 16px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #94a3b8;
-}
-
-.sub-wizard-step--on {
-  color: #4338ca;
-}
-
-.sub-card {
-  padding: 22px 24px;
-  margin-bottom: 16px;
-  background: #fff;
-  border: 1px solid #e8eaf0;
-  border-radius: 14px;
-  box-shadow: 0 4px 20px rgba(30, 27, 75, 0.05);
-}
-
-.sub-card-title {
+.sub-revision-panel-title {
   margin: 0 0 16px;
   font-size: 16px;
   font-weight: 700;
   color: #1e1b4b;
+}
+
+.sub-wizard-step-tabs {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.sub-wizard-step-tab {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  min-width: 120px;
+  white-space: nowrap;
+}
+
+.sub-wizard-step-tab:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.sub-wizard-step-tab--done:not(.ul-tab--active) {
+  color: #4338ca;
+}
+
+.sub-wizard-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  font-size: 12px;
+  font-weight: 700;
+  color: #64748b;
+  background: #e2e8f0;
+  border-radius: 999px;
+}
+
+.ul-tab--active .sub-wizard-step-num {
+  color: #fff;
+  background: #6366f1;
+}
+
+.sub-wizard-step-tab--done .sub-wizard-step-num {
+  color: #4338ca;
+  background: #e0e7ff;
+}
+
+.sub-wizard-pane {
+  min-height: 280px;
+}
+
+.sub-wizard-fields {
+  max-width: 560px;
+}
+
+.sub-wizard-fields .sub-field {
+  margin-bottom: 18px;
+}
+
+.sub-wizard-fields .sub-label {
+  margin-bottom: 8px;
+}
+
+.sub-wizard-fields--after-summary {
+  margin-top: 8px;
+}
+
+.sub-field-hint {
+  display: block;
+  margin-top: 8px;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.sub-check--block {
+  padding: 12px 14px;
+  margin-bottom: 16px;
+  background: #f8fafc;
+  border: 1px solid #e8eaf0;
+  border-radius: 10px;
+}
+
+.sub-input--file {
+  padding: 8px 10px;
+  font-size: 13px;
+}
+
+.sub-check-rows--compact {
+  max-width: 560px;
+  margin-top: 8px;
+}
+
+.sub-wizard-confirm-dl {
+  max-width: 560px;
+  padding: 16px 18px;
+  background: #f8fafc;
+  border: 1px solid #e8eaf0;
+  border-radius: 12px;
+}
+
+.sub-wizard-panel-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid #e2e8f0;
 }
 
 .sub-field {
@@ -834,50 +964,258 @@ function onWizardPdfChange(e: Event) {
   color: #1e1b4b;
 }
 
-.sub-wizard-footer {
+/* 详情 / 向导 / 改稿：外壳用全局 .wf-panel，Tab 用全局 .ul-tabs / .ul-tab */
+.sub-detail-panel-head {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  justify-content: flex-end;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 4px;
+  padding-bottom: 16px;
 }
 
-.sub-detail-head {
+.sub-detail-head-action {
+  flex-shrink: 0;
+  align-self: center;
+}
+
+.sub-detail-panel-title {
+  margin: 0 0 10px;
+  font-size: 20px;
+  font-weight: 700;
+  line-height: 1.35;
+  color: #1e1b4b;
+}
+
+.sub-detail-panel-lead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #64748b;
+}
+
+.sub-detail-panel-lead-sep {
+  opacity: 0.45;
+}
+
+.sub-detail-panel .ul-tab-pane,
+.sub-wizard-panel .ul-tab-pane {
+  min-height: 200px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #334155;
+}
+
+.sub-pane-lead {
+  margin: 0 0 20px;
+  font-size: 14px;
+  line-height: 1.65;
+  color: #64748b;
+}
+
+.sub-detail-dl {
+  display: grid;
+  grid-template-columns: 108px 1fr;
+  gap: 16px 20px;
+  padding: 4px 0 0;
+  margin: 0;
+}
+
+.sub-detail-dl dt {
+  margin: 0;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.sub-detail-dl dd {
+  margin: 0;
+  color: #1e293b;
+  word-break: break-word;
+}
+
+.sub-detail-link {
+  color: #4338ca;
+  text-decoration: none;
+  word-break: break-all;
+}
+
+.sub-detail-link:hover {
+  text-decoration: underline;
+}
+
+.sub-detail-code {
+  padding: 2px 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  color: #4338ca;
+  word-break: break-all;
+  background: #eef2ff;
+  border-radius: 6px;
+}
+
+.sub-detail-muted {
+  color: #94a3b8;
+}
+
+.sub-detail-empty {
+  margin: 8px 0 0;
+  padding: 24px 16px;
+  font-size: 14px;
+  color: #64748b;
+  text-align: center;
+  background: #f8fafc;
+  border-radius: 12px;
+}
+
+.sub-file-rows {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.sub-file-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+  padding: 16px 18px;
+  margin-bottom: 10px;
+  background: #f8fafc;
+  border: 1px solid #e8eaf0;
+  border-radius: 12px;
+}
+
+.sub-file-row--muted {
+  opacity: 0.85;
+}
+
+.sub-file-row-icon {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 44px;
+  color: #4338ca;
+  text-align: center;
+  background: #e0e7ff;
+  border-radius: 10px;
+}
+
+.sub-file-row-body {
+  flex: 1;
+  min-width: 160px;
+}
+
+.sub-file-row-name {
+  display: block;
+  font-weight: 600;
+  color: #1e1b4b;
+}
+
+.sub-file-row-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.sub-file-row-badge {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #4338ca;
+  background: #e0e7ff;
+  border-radius: 999px;
+}
+
+.sub-file-row-badge--muted {
+  color: #64748b;
+  background: #e2e8f0;
+}
+
+.sub-check-rows {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+  border: 1px solid #e8eaf0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.sub-check-row {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  margin-bottom: 12px;
-}
-
-.sub-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-bottom: 12px;
-}
-
-.sub-tab {
-  padding: 8px 14px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #64748b;
-  cursor: pointer;
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
-}
-
-.sub-tab--active {
-  color: #4338ca;
-  border-bottom-color: #6366f1;
-}
-
-.sub-file-list,
-.sub-log {
-  margin: 0;
-  padding-left: 18px;
+  padding: 16px 18px;
   font-size: 14px;
+  background: #fff;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.sub-check-row:last-child {
+  border-bottom: none;
+}
+
+.sub-check-row-label {
+  flex: 1;
+  min-width: 200px;
+  color: #334155;
+}
+
+.sub-check-row-status {
+  flex-shrink: 0;
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 999px;
+}
+
+.sub-check-row-status--ok {
+  color: #047857;
+  background: #d1fae5;
+}
+
+.sub-check-row-status--warn {
+  color: #b45309;
+  background: #fef3c7;
+}
+
+.sub-log-rows {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.sub-log-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 168px) 1fr;
+  gap: 12px 20px;
+  padding: 14px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.sub-log-row:last-child {
+  border-bottom: none;
+}
+
+.sub-log-row-time {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: #64748b;
+}
+
+.sub-log-row-msg {
+  font-size: 14px;
+  line-height: 1.55;
   color: #334155;
 }
 
