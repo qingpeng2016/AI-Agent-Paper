@@ -11,7 +11,7 @@
 -- | 类型       | 表名 |
 -- |------------|------|
 -- | ref        | paper_ref_* |
--- | strategy   | paper_strategy_package, paper_strategy_route |
+-- | strategy   | paper_llm_strategy_package, paper_llm_strategy_route |
 -- |            | paper_ref_venue（strategy_profile_key 由策略包解释） |
 -- | manuscript | paper_manuscript（我的论文） |
 -- | output     | paper_output_*（各模块业务产出，均含 manuscript_id） |
@@ -432,7 +432,7 @@ CREATE TABLE IF NOT EXISTS `paper_llm_model_config` (
   KEY `idx_paper_llm_model_cfg_provider` (`provider_code`, `model_name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='平台 LLM 端点配置（Key/Host/模型名）';
 
-CREATE TABLE IF NOT EXISTS `paper_strategy_package` (
+CREATE TABLE IF NOT EXISTS `paper_llm_strategy_package` (
   `id`                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '策略包 ID',
   `code`              VARCHAR(64)  NOT NULL COMMENT '包键：builtin|aris|…',
   `name`              VARCHAR(128) NOT NULL COMMENT '展示名',
@@ -446,16 +446,16 @@ CREATE TABLE IF NOT EXISTS `paper_strategy_package` (
   `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_paper_strategy_package_code` (`code`),
-  KEY `idx_paper_strategy_package_status` (`status`)
+  UNIQUE KEY `uk_paper_llm_strategy_package_code` (`code`),
+  KEY `idx_paper_llm_strategy_package_status` (`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='AI 策略包';
 
-CREATE TABLE IF NOT EXISTS `paper_strategy_route` (
+CREATE TABLE IF NOT EXISTS `paper_llm_strategy_route` (
   `id`                      BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `behavior_key`            VARCHAR(128) NOT NULL COMMENT '如 topic.stage.topic_generate',
   `module`                  VARCHAR(64)  NOT NULL DEFAULT '',
   `action`                  VARCHAR(64)  NOT NULL DEFAULT '',
-  `strategy_package_id`     BIGINT UNSIGNED NOT NULL COMMENT 'paper_strategy_package.id',
+  `strategy_package_id`     BIGINT UNSIGNED NOT NULL COMMENT 'paper_llm_strategy_package.id',
   `capability_id`           VARCHAR(128) NOT NULL DEFAULT '',
   `default_model_config_id` BIGINT UNSIGNED NOT NULL DEFAULT 0,
   `fallback_route_id`       BIGINT UNSIGNED DEFAULT NULL,
@@ -465,8 +465,8 @@ CREATE TABLE IF NOT EXISTS `paper_strategy_route` (
   `created_at`              DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`              DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_paper_strategy_route_behavior` (`behavior_key`),
-  KEY `idx_paper_strategy_route_pkg` (`strategy_package_id`, `status`)
+  UNIQUE KEY `uk_paper_llm_strategy_route_behavior` (`behavior_key`),
+  KEY `idx_paper_llm_strategy_route_pkg` (`strategy_package_id`, `status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='需求行为 → 策略包';
 
 -- ---------------------------------------------------------------------------
@@ -568,7 +568,7 @@ CREATE TABLE IF NOT EXISTS `paper_llm_call_logs` (
   `id`              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '日志 ID',
   `manuscript_id`   BIGINT UNSIGNED NOT NULL COMMENT 'paper_manuscript.id',
   `stage_code`      VARCHAR(64)  DEFAULT NULL COMMENT '环节键',
-  `behavior_key`    VARCHAR(128) DEFAULT NULL COMMENT 'paper_strategy_route.behavior_key',
+  `behavior_key`    VARCHAR(128) DEFAULT NULL COMMENT 'paper_llm_strategy_route.behavior_key',
   `strategy_package_id` BIGINT UNSIGNED DEFAULT NULL,
   `capability_id`   VARCHAR(128) DEFAULT NULL,
   `external_trace_id` VARCHAR(128) DEFAULT NULL,
@@ -1023,13 +1023,13 @@ INSERT INTO `paper_llm_model_config` (
   'active'
 );
 
-INSERT INTO `paper_strategy_package` (`code`, `name`, `provider_kind`, `manifest_version`, `capabilities`, `status`)
+INSERT INTO `paper_llm_strategy_package` (`code`, `name`, `provider_kind`, `manifest_version`, `capabilities`, `status`)
 VALUES
   ('builtin', '内置（过渡内联）', 'inline', '1', JSON_ARRAY('topic.stage.default', 'topic.stage.topic_generate', 'topic.stage.topic_audit', 'topic.stage.experiment_plan'), 'active'),
   ('aris', 'ARIS 策略服务', 'http', NULL, NULL, 'disabled')
 ON DUPLICATE KEY UPDATE `name` = VALUES(`name`), `status` = VALUES(`status`);
 
-SET @pkg_builtin := (SELECT `id` FROM `paper_strategy_package` WHERE `code` = 'builtin' LIMIT 1);
+SET @pkg_builtin := (SELECT `id` FROM `paper_llm_strategy_package` WHERE `code` = 'builtin' LIMIT 1);
 SET @paper_llm_model_id := (
   SELECT c.`id` FROM `paper_llm_model_config` c
   WHERE c.`status` = 'active'
@@ -1037,7 +1037,7 @@ SET @paper_llm_model_id := (
   LIMIT 1
 );
 
-INSERT INTO `paper_strategy_route` (
+INSERT INTO `paper_llm_strategy_route` (
   `behavior_key`, `module`, `action`, `strategy_package_id`, `capability_id`, `default_model_config_id`, `status`
 ) VALUES
   ('topic.stage.default', 'topic_discovery', 'default', @pkg_builtin, 'topic.stage.default', IFNULL(@paper_llm_model_id, 0), 'active'),

@@ -21,7 +21,7 @@ type PaperStrategyPackage struct {
 	UpdatedAt       time.Time      `gorm:"column:updated_at"`
 }
 
-func (PaperStrategyPackage) TableName() string { return "paper_strategy_package" }
+func (PaperStrategyPackage) TableName() string { return "paper_llm_strategy_package" }
 
 const (
 	StrategyProviderInline = "inline"

@@ -11,7 +11,7 @@ type PaperStrategyRoute struct {
 	BehaviorKey          string         `gorm:"column:behavior_key;size:128;not null"`
 	Module               string         `gorm:"column:module;size:64;not null;default:''"`
 	Action               string         `gorm:"column:action;size:64;not null;default:''"`
-	StrategyPackageID    uint64         `gorm:"column:strategy_package_id;not null"`
+	StrategyPackageID    uint64         `gorm:"column:strategy_package_id;not null"` // paper_llm_strategy_package.id
 	CapabilityID         string         `gorm:"column:capability_id;size:128;not null;default:''"`
 	DefaultModelConfigID uint64         `gorm:"column:default_model_config_id;not null;default:0"`
 	FallbackRouteID      *uint64        `gorm:"column:fallback_route_id"`
@@ -24,4 +24,4 @@ type PaperStrategyRoute struct {
 	Package *PaperStrategyPackage `gorm:"foreignKey:StrategyPackageID;references:ID"`
 }
 
-func (PaperStrategyRoute) TableName() string { return "paper_strategy_route" }
+func (PaperStrategyRoute) TableName() string { return "paper_llm_strategy_route" }

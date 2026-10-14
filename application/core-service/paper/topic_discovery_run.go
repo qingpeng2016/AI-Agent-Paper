@@ -829,7 +829,7 @@ func (s *TopicDiscoveryRunService) resolveStageLLM(ctx context.Context, stageCod
 		return nil, err
 	}
 	if route == nil {
-		return nil, errorx.ErrLLMNotConfigured.WithDetail("缺少 paper_strategy_route（behavior_key=" + stageBehavior + "）")
+		return nil, errorx.ErrLLMNotConfigured.WithDetail("缺少 paper_llm_strategy_route（behavior_key=" + stageBehavior + "）")
 	}
 	pkg := route.Package
 	if pkg == nil && s.strategyRepo != nil {

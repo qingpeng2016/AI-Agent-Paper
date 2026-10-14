@@ -4,7 +4,7 @@
 -- ---------------------------------------------------------------------------
 -- 1. 策略包注册
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS `paper_strategy_package` (
+CREATE TABLE IF NOT EXISTS `paper_llm_strategy_package` (
   `id`                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '策略包 ID',
   `code`              VARCHAR(64)  NOT NULL COMMENT '包键：builtin|aris|…',
   `name`              VARCHAR(128) NOT NULL COMMENT '展示名',
@@ -18,19 +18,19 @@ CREATE TABLE IF NOT EXISTS `paper_strategy_package` (
   `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_paper_strategy_package_code` (`code`),
-  KEY `idx_paper_strategy_package_status` (`status`)
+  UNIQUE KEY `uk_paper_llm_strategy_package_code` (`code`),
+  KEY `idx_paper_llm_strategy_package_status` (`status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='AI 策略包（独立服务/内联）';
 
 -- ---------------------------------------------------------------------------
 -- 2. 行为 → 策略包路由
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS `paper_strategy_route` (
+CREATE TABLE IF NOT EXISTS `paper_llm_strategy_route` (
   `id`                      BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `behavior_key`            VARCHAR(128) NOT NULL COMMENT '如 topic.stage.topic_generate',
   `module`                  VARCHAR(64)  NOT NULL DEFAULT '' COMMENT 'topic_discovery|write_paper|…',
   `action`                  VARCHAR(64)  NOT NULL DEFAULT '' COMMENT 'stage 或子动作',
-  `strategy_package_id`     BIGINT UNSIGNED NOT NULL COMMENT 'paper_strategy_package.id',
+  `strategy_package_id`     BIGINT UNSIGNED NOT NULL COMMENT 'paper_llm_strategy_package.id',
   `capability_id`           VARCHAR(128) NOT NULL DEFAULT '' COMMENT '包内能力/skill id',
   `default_model_config_id` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0=包内默认；非 0=平台代发 LLM',
   `fallback_route_id`       BIGINT UNSIGNED DEFAULT NULL COMMENT '失败时备用 route.id',
@@ -40,11 +40,11 @@ CREATE TABLE IF NOT EXISTS `paper_strategy_route` (
   `created_at`              DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`              DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_paper_strategy_route_behavior` (`behavior_key`),
-  KEY `idx_paper_strategy_route_pkg` (`strategy_package_id`, `status`)
+  UNIQUE KEY `uk_paper_llm_strategy_route_behavior` (`behavior_key`),
+  KEY `idx_paper_llm_strategy_route_pkg` (`strategy_package_id`, `status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='需求行为 → 策略包';
 
-INSERT INTO `paper_strategy_package` (`code`, `name`, `provider_kind`, `base_url`, `auth_type`, `manifest_version`, `capabilities`, `status`)
+INSERT INTO `paper_llm_strategy_package` (`code`, `name`, `provider_kind`, `base_url`, `auth_type`, `manifest_version`, `capabilities`, `status`)
 VALUES
   ('builtin', '内置（过渡内联）', 'inline', NULL, 'none', '1', JSON_ARRAY('topic.stage.default', 'topic.stage.topic_generate', 'topic.stage.topic_audit', 'topic.stage.experiment_plan'), 'active'),
   ('aris', 'ARIS 策略服务', 'http', NULL, 'bearer', NULL, NULL, 'disabled')
@@ -53,7 +53,7 @@ ON DUPLICATE KEY UPDATE
   `provider_kind` = VALUES(`provider_kind`),
   `status` = VALUES(`status`);
 
-SET @pkg_builtin := (SELECT `id` FROM `paper_strategy_package` WHERE `code` = 'builtin' LIMIT 1);
+SET @pkg_builtin := (SELECT `id` FROM `paper_llm_strategy_package` WHERE `code` = 'builtin' LIMIT 1);
 SET @model_default := (
   SELECT c.`id` FROM `paper_llm_model_config` c
   WHERE c.`status` = 'active'
@@ -61,7 +61,7 @@ SET @model_default := (
   LIMIT 1
 );
 
-INSERT INTO `paper_strategy_route` (
+INSERT INTO `paper_llm_strategy_route` (
   `behavior_key`, `module`, `action`, `strategy_package_id`, `capability_id`, `default_model_config_id`, `status`
 ) VALUES
   ('topic.stage.default', 'topic_discovery', 'default', @pkg_builtin, 'topic.stage.default', IFNULL(@model_default, 0), 'active'),
@@ -135,7 +135,7 @@ SET @col_bk := (
 SET @sql := IF(
   @col_bk = 0,
   'ALTER TABLE `paper_llm_call_logs`
-     ADD COLUMN `behavior_key` VARCHAR(128) DEFAULT NULL COMMENT ''paper_strategy_route.behavior_key'' AFTER `stage_code`,
+     ADD COLUMN `behavior_key` VARCHAR(128) DEFAULT NULL COMMENT ''paper_llm_strategy_route.behavior_key'' AFTER `stage_code`,
      ADD COLUMN `strategy_package_id` BIGINT UNSIGNED DEFAULT NULL AFTER `behavior_key`,
      ADD COLUMN `capability_id` VARCHAR(128) DEFAULT NULL AFTER `strategy_package_id`,
      ADD COLUMN `external_trace_id` VARCHAR(128) DEFAULT NULL AFTER `capability_id`',
