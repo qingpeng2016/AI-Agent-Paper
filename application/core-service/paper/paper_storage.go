@@ -9,8 +9,9 @@ import (
 )
 
 const (
-	paperFilesStorageSubdir     = "paper-files"
-	experimentDataStorageSubdir = "experiment-data"
+	paperFilesStorageSubdir      = "paper-files"
+	experimentDataStorageSubdir  = "experiment-data"
+	submissionDataStorageSubdir  = "submission-data"
 )
 
 // StorageRoot 项目本地 storage 根目录（相对工作目录）。
@@ -44,6 +45,20 @@ func ExperimentDataStorageRoot() string {
 }
 
 // ExperimentDataLocalRelPath 相对 storage/ 的实验数据路径。
+// SubmissionMainPDFLocalRelPath 相对 storage/ 的投稿主 PDF 路径。
+func SubmissionMainPDFLocalRelPath(manuscriptID, submissionID uint64, originalFileName string) string {
+	name := sanitizeStorageFileName(originalFileName)
+	if !strings.HasSuffix(strings.ToLower(name), ".pdf") {
+		name = name + ".pdf"
+	}
+	return filepath.ToSlash(filepath.Join(
+		submissionDataStorageSubdir,
+		fmt.Sprintf("manuscript_%d", manuscriptID),
+		fmt.Sprintf("submission_%d", submissionID),
+		name,
+	))
+}
+
 func ExperimentDataLocalRelPath(manuscriptID, planID uint64, originalFileName string) string {
 	name := sanitizeStorageFileName(originalFileName)
 	return filepath.ToSlash(filepath.Join(

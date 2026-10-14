@@ -53,6 +53,7 @@ import PaperInviteRebatePanel from './PaperInviteRebatePanel.vue'
 import PaperPersonalCenterPanel from './PaperPersonalCenterPanel.vue'
 import PaperEnvironmentPanel from './PaperEnvironmentPanel.vue'
 import PaperCourseReportPanel from './PaperCourseReportPanel.vue'
+import PaperSubmissionHubPanel from './PaperSubmissionHubPanel.vue'
 import PaperSelect from './PaperSelect.vue'
 import PaperMultiSelect from './PaperMultiSelect.vue'
 import PaperWorkflowPanels from './PaperWorkflowPanels.vue'
@@ -154,6 +155,7 @@ const showGenericModuleLoading = computed(
     activeModule.value !== 'literature-review' &&
     activeModule.value !== 'experiment-planning' &&
     activeModule.value !== 'paper-writing' &&
+    activeModule.value !== 'paper-submission' &&
     activeModule.value !== 'user-literature' &&
     activeModule.value !== 'figure-generation' &&
     activeModule.value !== 'course-report',
@@ -636,6 +638,20 @@ async function onStartWritingFromMyManuscripts(manuscriptId: string) {
   selectModule('paper-writing')
 }
 
+async function onStartSubmissionFromMyManuscripts(manuscriptId: string) {
+  const id = manuscriptId.trim()
+  if (!id || !/^\d+$/.test(id)) {
+    ElMessage.warning('请从列表中选择已创建的论文')
+    return
+  }
+  if (manuscriptSwitching.value) return
+  if (id !== activeManuscriptId.value) {
+    await onManuscriptChange(id)
+    if (activeManuscriptId.value !== id) return
+  }
+  selectModule('paper-submission')
+}
+
 function onManuscriptsListUpdate(list: PaperManuscriptItem[]) {
   manuscripts.value = list
   persistManuscripts()
@@ -698,6 +714,7 @@ const isUtilityModule = computed(
     isEnvironmentModule.value ||
     isInviteRebateModule.value ||
     isCourseReportModule.value ||
+    isPaperSubmissionModule.value ||
     isPersonalCenterModule.value,
 )
 const isTopicDiscoveryModule = computed(() => activeModule.value === 'topic-discovery')
@@ -705,12 +722,15 @@ const isTopicDiscoveryModule = computed(() => activeModule.value === 'topic-disc
 const isLiteratureReviewModule = computed(() => activeModule.value === 'literature-review')
 const isExperimentPlanningModule = computed(() => activeModule.value === 'experiment-planning')
 const isPaperWritingModule = computed(() => activeModule.value === 'paper-writing')
+const isPaperSubmissionModule = computed(() => activeModule.value === 'paper-submission')
 
 /** 仅本篇工作流模块展示顶栏「当前论文」切换（全局模块如我的论文/文献管理不展示） */
 const MANUSCRIPT_CONTEXT_MODULE_IDS = [
   'topic-discovery',
   'literature-review',
   'experiment-planning',
+  'paper-writing',
+  'paper-submission',
 ] as const satisfies readonly PaperModuleId[]
 
 const showManuscriptContextInHeader = computed(() =>
@@ -1909,7 +1929,8 @@ async function onPrimaryAction() {
           mod !== 'my-manuscripts' &&
           mod !== 'user-literature' &&
           mod !== 'figure-generation' &&
-          mod !== 'course-report'
+          mod !== 'course-report' &&
+          mod !== 'paper-submission'
         ) {
           recordModuleOperationLog(mod, `运行「${currentMeta.value.label}」`)
         }
@@ -2618,6 +2639,16 @@ watch(
         :active-manuscript-id="activeManuscriptId"
         :manuscript-switching="manuscriptSwitching"
         @start-writing="onStartWritingFromMyManuscripts($event.id)"
+        @start-submission="onStartSubmissionFromMyManuscripts($event.id)"
+      />
+
+      <PaperSubmissionHubPanel
+        v-else-if="activeModule === 'paper-submission'"
+        :key="`paper-submission-${moduleContentKey}`"
+        :active-manuscript-id="activeManuscriptId"
+        :manuscript-title="currentManuscript?.title ?? '未命名'"
+        :draft-version="currentManuscript?.draftVersion"
+        @manuscript-summary-changed="void loadManuscriptsFromServer()"
       />
 
       <PaperUserLiteraturePanel

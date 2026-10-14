@@ -358,6 +358,46 @@ CREATE TABLE IF NOT EXISTS `paper_manuscript` (
   KEY `idx_paper_manuscript_user` (`user_id`, `status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='我的论文（元数据 + 当前论文正文草稿）';
 
+CREATE TABLE IF NOT EXISTS `paper_manuscript_submission` (
+  `id`                  BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '投递记录 ID',
+  `manuscript_id`       BIGINT UNSIGNED NOT NULL COMMENT 'paper_manuscript.id',
+  `user_id`             BIGINT UNSIGNED NOT NULL COMMENT 'users.id',
+  `venue_code`          VARCHAR(64)  NOT NULL COMMENT '目标 venue 编码',
+  `venue_label`         VARCHAR(128) NOT NULL COMMENT '展示名',
+  `track`               VARCHAR(16)  NOT NULL DEFAULT 'main' COMMENT 'main|short',
+  `round`               INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '修回轮次',
+  `status`              VARCHAR(24)  NOT NULL DEFAULT 'submitted' COMMENT '投递状态',
+  `draft_version`       INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '绑定写作稿本版本',
+  `anonymous`           TINYINT(1)   NOT NULL DEFAULT 1 COMMENT '双盲投稿',
+  `portal_url`          VARCHAR(1024) DEFAULT NULL,
+  `external_id`         VARCHAR(128)  DEFAULT NULL,
+  `title`               VARCHAR(512)  DEFAULT NULL,
+  `abstract`            TEXT          DEFAULT NULL,
+  `main_pdf_uri`        VARCHAR(1024) DEFAULT NULL,
+  `main_pdf_filename`   VARCHAR(256)  DEFAULT NULL,
+  `decision`            VARCHAR(128)  DEFAULT NULL,
+  `comments_summary`    TEXT          DEFAULT NULL,
+  `revision_deadline`   DATETIME(3)   DEFAULT NULL,
+  `submitted_at`        DATETIME(3)   DEFAULT NULL,
+  `checklist`           JSON          DEFAULT NULL,
+  `record_status`       VARCHAR(16)   NOT NULL DEFAULT 'active' COMMENT 'active|deleted',
+  `created_at`          DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at`          DATETIME(3)   NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  KEY `idx_pms_manuscript` (`manuscript_id`, `record_status`, `updated_at`),
+  KEY `idx_pms_user` (`user_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='论文对外投递记录';
+
+CREATE TABLE IF NOT EXISTS `paper_manuscript_submission_event` (
+  `id`            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `submission_id` BIGINT UNSIGNED NOT NULL,
+  `event_type`    VARCHAR(32)  NOT NULL,
+  `message`       VARCHAR(512) NOT NULL DEFAULT '',
+  `created_at`    DATETIME(3)  NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`id`),
+  KEY `idx_pmse_submission` (`submission_id`, `created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='论文投递操作日志';
+
 CREATE TABLE IF NOT EXISTS `paper_user_preference` (
   `user_id`                   BIGINT UNSIGNED NOT NULL COMMENT '用户 ID',
   `default_discipline_id`     BIGINT UNSIGNED DEFAULT NULL COMMENT '默认学科 ID',

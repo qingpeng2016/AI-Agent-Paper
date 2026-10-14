@@ -3,6 +3,7 @@ package mysql
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/repository"
@@ -96,4 +97,30 @@ func (r *PaperManuscriptImpl) SetCurrentForUser(ctx context.Context, userID, man
 			Where("id = ? AND user_id = ?", manuscriptID, userID).
 			Update("is_current", true).Error
 	})
+}
+
+func (r *PaperManuscriptImpl) UpdateSubmissionSummary(
+	ctx context.Context,
+	manuscriptID, userID uint,
+	submissionStatus string,
+	submissionLabel *string,
+	submissionDeadline *time.Time,
+) error {
+	updates := map[string]any{
+		"submission_status": submissionStatus,
+	}
+	if submissionLabel != nil {
+		updates["submission_label"] = *submissionLabel
+	} else {
+		updates["submission_label"] = nil
+	}
+	if submissionDeadline != nil && !submissionDeadline.IsZero() {
+		updates["submission_deadline"] = submissionDeadline
+	} else {
+		updates["submission_deadline"] = nil
+	}
+	return r.db.WithContext(ctx).
+		Model(&entity.PaperManuscript{}).
+		Where("id = ? AND user_id = ? AND status = ?", manuscriptID, userID, "active").
+		Updates(updates).Error
 }

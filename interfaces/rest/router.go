@@ -28,7 +28,8 @@ type Router struct {
 	paperLiteratureReviewHandler *handler.PaperLiteratureReviewHandler
 	paperExperimentPlanHandler   *handler.PaperExperimentPlanHandler
 	paperUserLiteratureHandler   *handler.PaperUserLiteratureHandler
-	paperFigureHandler           *handler.PaperFigureHandler
+	paperFigureHandler                 *handler.PaperFigureHandler
+	paperManuscriptSubmissionHandler   *handler.PaperManuscriptSubmissionHandler
 }
 
 func NewRouter(
@@ -44,6 +45,7 @@ func NewRouter(
 	paperExperimentPlanHandler *handler.PaperExperimentPlanHandler,
 	paperUserLiteratureHandler *handler.PaperUserLiteratureHandler,
 	paperFigureHandler *handler.PaperFigureHandler,
+	paperManuscriptSubmissionHandler *handler.PaperManuscriptSubmissionHandler,
 ) *Router {
 	return &Router{
 		setting:                      setting,
@@ -57,7 +59,8 @@ func NewRouter(
 		paperLiteratureReviewHandler: paperLiteratureReviewHandler,
 		paperExperimentPlanHandler:   paperExperimentPlanHandler,
 		paperUserLiteratureHandler:   paperUserLiteratureHandler,
-		paperFigureHandler:           paperFigureHandler,
+		paperFigureHandler:                 paperFigureHandler,
+		paperManuscriptSubmissionHandler:   paperManuscriptSubmissionHandler,
 	}
 }
 
@@ -114,6 +117,12 @@ func (r *Router) setupRouters() *gin.Engine {
 		paperAuth.GET("/experiment-plans/detail", r.paperExperimentPlanHandler.GetExperimentPlanDetail)
 		paperAuth.POST("/experiment-plans/upload-experiment-data", r.paperExperimentPlanHandler.PostUploadExperimentData)
 		paperAuth.POST("/experiment-plans/delete-experiment-data", r.paperExperimentPlanHandler.PostDeleteExperimentData)
+		paperAuth.GET("/manuscript-submissions", r.paperManuscriptSubmissionHandler.GetManuscriptSubmissions)
+		paperAuth.GET("/manuscript-submissions/detail", r.paperManuscriptSubmissionHandler.GetManuscriptSubmissionDetail)
+		paperAuth.POST("/manuscript-submissions", r.paperManuscriptSubmissionHandler.PostCreateManuscriptSubmission)
+		paperAuth.PUT("/manuscript-submissions/revision", r.paperManuscriptSubmissionHandler.PutManuscriptSubmissionRevision)
+		paperAuth.POST("/manuscript-submissions/mark-resubmitted", r.paperManuscriptSubmissionHandler.PostMarkManuscriptSubmissionResubmitted)
+		paperAuth.POST("/manuscript-submissions/upload-main-pdf", r.paperManuscriptSubmissionHandler.PostUploadManuscriptSubmissionPDF)
 	}
 
 	userAuth := engine.Group("/api/v1", ginMiddleware.RequireAuth)

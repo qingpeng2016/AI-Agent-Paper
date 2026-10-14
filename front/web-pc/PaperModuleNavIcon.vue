@@ -36,6 +36,11 @@ defineProps<{
       <path d="M12 20h9" />
       <path d="M14.5 6.5 17.5 3.5a2.1 2.1 0 0 1 3 3L8 19l-4 1 1-4 9.5-9.5z" />
     </template>
+    <!-- 论文投稿：发送 -->
+    <template v-else-if="moduleId === 'paper-submission'">
+      <path d="M22 2 11 13" />
+      <path d="M22 2 15 22l-4-9-9-4 20-7z" />
+    </template>
     <!-- 文献管理：书页 -->
     <template v-else-if="moduleId === 'user-literature'">
       <path d="M6 4h8a2 2 0 0 1 2 2v14a1 1 0 0 0-1-1H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" />

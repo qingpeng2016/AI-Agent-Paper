@@ -3,6 +3,7 @@ export type PaperModuleId =
   | 'literature-review'
   | 'experiment-planning'
   | 'paper-writing'
+  | 'paper-submission'
   | 'figure-generation'
   | 'user-literature'
   | 'my-manuscripts'
@@ -37,6 +38,11 @@ export const PAPER_MODULES: PaperModuleMeta[] = [
     id: 'paper-writing',
     label: '论文写作',
     description: '基于综述、实验方案与图表生成稿件正文（LaTeX/Markdown），对接写作与审计流程',
+  },
+  {
+    id: 'paper-submission',
+    label: '论文投稿',
+    description: '选择目标 venue、绑定稿本与投稿包、记录提交与审稿修回（演示前端，接口待接）',
   },
   {
     id: 'user-literature',
@@ -97,6 +103,7 @@ export const PAPER_MODULE_GROUPS: PaperModuleGroup[] = [
       'literature-review',
       'experiment-planning',
       'paper-writing',
+      'paper-submission',
     ],
   },
   {
