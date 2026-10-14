@@ -232,7 +232,12 @@ void loadPage(1)
       <div class="ul-filter-label-row">
         <label class="ul-filter-label ul-filter-label--search" for="ul-filter-keyword">搜索</label>
         <label class="ul-filter-label ul-filter-label--select" for="ul-filter-category">按名称</label>
-        <label class="ul-filter-label ul-filter-label--select" for="ul-filter-manuscript">按论文</label>
+        <label
+          class="ul-filter-label ul-filter-label--select ul-filter-label--manuscript"
+          for="ul-filter-manuscript"
+        >
+          按论文
+        </label>
       </div>
       <div class="ul-filter-control-row">
         <div class="ul-filter-control-slot ul-filter-control-slot--search">
@@ -248,7 +253,10 @@ void loadPage(1)
         <div id="ul-filter-category" class="ul-filter-control-slot ul-filter-control-slot--select">
           <PaperSelect v-model="filterCategoryId" :options="categorySelectOptions" />
         </div>
-        <div id="ul-filter-manuscript" class="ul-filter-control-slot ul-filter-control-slot--select">
+        <div
+          id="ul-filter-manuscript"
+          class="ul-filter-control-slot ul-filter-control-slot--select ul-filter-control-slot--manuscript"
+        >
           <PaperSelect v-model="filterManuscriptId" :options="manuscriptSelectOptions" />
         </div>
         <div class="ul-filter-control-slot ul-filter-control-slot--action">
@@ -579,8 +587,21 @@ void loadPage(1)
   width: 168px;
 }
 
+.ul-filter-label--select.ul-filter-label--manuscript,
+.ul-filter-control-slot--select.ul-filter-control-slot--manuscript {
+  width: 320px;
+  max-width: min(320px, 100%);
+}
+
 .ul-filter-control-slot--select :deep(.paper-select) {
   width: 100%;
+}
+
+.ul-filter-control-slot--manuscript :deep(.paper-select-menu) {
+  right: auto;
+  left: 0;
+  width: max(100%, 360px);
+  max-width: min(480px, 92vw);
 }
 
 .ul-filter-control-slot--action {

@@ -45,11 +45,12 @@ export function formatFigureOrigin(origin?: string): string {
   return ORIGIN_LABELS[origin] ?? origin
 }
 
-export type FigureOriginTone = 'upload' | 'generated' | 'default'
+/** 与文献管理 `userLiteratureFromTone` 共用 pill 样式类名 */
+export type FigureOriginTone = 'upload' | 'arxiv' | 'catalog' | 'default'
 
 export function figureOriginTone(origin?: string): FigureOriginTone {
   if (origin === 'upload') return 'upload'
-  if (origin === 'generated') return 'generated'
+  if (origin === 'generated') return 'catalog'
   return 'default'
 }
 

@@ -1857,37 +1857,38 @@ defineExpose({
 
     <div class="wf-paper-write-layout">
       <aside class="wf-paper-write-sidebar">
-        <section class="wf-panel wf-paper-write-sidebar-panel">
-          <h3 class="wf-paper-write-sidebar-title">写作阶段</h3>
-          <nav class="wf-paper-write-phase-nav" aria-label="写作阶段">
-            <button
-              v-for="(p, i) in PAPER_WRITE_PHASES"
-              :key="p.id"
-              type="button"
-              class="wf-paper-write-phase-btn"
-              :class="{ 'wf-paper-write-phase-btn--active': paperWritePhase === p.id }"
-              @click="setPaperWritePhase(p.id)"
-            >
-              <span class="wf-paper-write-phase-index">{{ i + 1 }}</span>
-              <span class="wf-paper-write-phase-text">
-                {{ p.label }}
-                <span class="wf-paper-write-phase-skill">{{ p.skill }}</span>
-              </span>
-            </button>
-          </nav>
-          <p class="wf-meta wf-paper-write-flow-hint">
-            全流程：plan → 图表模块 → write → compile → polish → audit
-          </p>
-        </section>
-
-        <section class="wf-panel wf-paper-write-sidebar-panel">
-          <h3 class="wf-paper-write-sidebar-title">人工检查点</h3>
-          <ul class="wf-paper-write-checklist">
-            <li class="wf-paper-write-checklist-item wf-paper-write-checklist-item--done">
-              大纲冻结后再写 Method
-            </li>
-            <li class="wf-paper-write-checklist-item">编译通过后再开润色循环</li>
-          </ul>
+        <section class="wf-panel wf-paper-write-sidebar-panel wf-paper-write-sidebar-panel--merged">
+          <div class="wf-paper-write-sidebar-block">
+            <h3 class="wf-paper-write-sidebar-title">写作阶段</h3>
+            <nav class="wf-paper-write-phase-nav" aria-label="写作阶段">
+              <button
+                v-for="(p, i) in PAPER_WRITE_PHASES"
+                :key="p.id"
+                type="button"
+                class="wf-paper-write-phase-btn"
+                :class="{ 'wf-paper-write-phase-btn--active': paperWritePhase === p.id }"
+                @click="setPaperWritePhase(p.id)"
+              >
+                <span class="wf-paper-write-phase-index">{{ i + 1 }}</span>
+                <span class="wf-paper-write-phase-text">
+                  {{ p.label }}
+                  <span class="wf-paper-write-phase-skill">{{ p.skill }}</span>
+                </span>
+              </button>
+            </nav>
+            <p class="wf-meta wf-paper-write-flow-hint">
+              全流程：plan → 图表模块 → write → compile → polish → audit
+            </p>
+          </div>
+          <div class="wf-paper-write-sidebar-block wf-paper-write-sidebar-block--checkpoints">
+            <h3 class="wf-paper-write-sidebar-title wf-paper-write-sidebar-title--tight">人工检查点</h3>
+            <ul class="wf-paper-write-checklist">
+              <li class="wf-paper-write-checklist-item wf-paper-write-checklist-item--done">
+                大纲冻结后再写 Method
+              </li>
+              <li class="wf-paper-write-checklist-item">编译通过后再开润色循环</li>
+            </ul>
+          </div>
         </section>
       </aside>
 
@@ -4208,10 +4209,12 @@ defineExpose({
 }
 
 .wf-paper-write-layout {
+  --wf-paper-write-work-min-h: 420px;
+
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
   gap: 16px;
-  align-items: start;
+  align-items: stretch;
 }
 
 @media (max-width: 960px) {
@@ -4223,11 +4226,27 @@ defineExpose({
 .wf-paper-write-sidebar {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 0;
+  min-height: 100%;
 }
 
 .wf-paper-write-sidebar-panel {
   padding: 16px;
+}
+
+.wf-paper-write-sidebar-panel--merged {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  height: 100%;
+  min-height: var(--wf-paper-write-work-min-h);
+}
+
+.wf-paper-write-sidebar-block--checkpoints {
+  flex: 1;
+  margin-top: 0;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
 }
 
 .wf-paper-write-sidebar-title {
@@ -4235,6 +4254,11 @@ defineExpose({
   font-size: 14px;
   font-weight: 700;
   color: #1e1b4b;
+}
+
+.wf-paper-write-sidebar-title--tight {
+  margin-top: 0;
+  margin-bottom: 10px;
 }
 
 .wf-paper-write-phase-nav {
@@ -4297,9 +4321,13 @@ defineExpose({
 }
 
 .wf-paper-write-flow-hint {
-  margin-top: 12px;
+  margin: 12px 0 0;
   padding-top: 12px;
   border-top: 1px solid #e2e8f0;
+}
+
+.wf-paper-write-sidebar-panel--merged .wf-paper-write-flow-hint {
+  margin-bottom: 0;
 }
 
 .wf-paper-write-checklist {
@@ -4336,7 +4364,9 @@ defineExpose({
 .wf-paper-write-main {
   display: flex;
   flex-direction: column;
-  min-height: 420px;
+  box-sizing: border-box;
+  height: 100%;
+  min-height: var(--wf-paper-write-work-min-h);
 }
 
 .wf-paper-write-main-head {
