@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	ArisInvokeStorageSubdir      = "aris-invoke"
+	PaperInoutDirName            = "inout"
 	PaperFilesStorageSubdir      = "paper-files"
 	paperFilesStorageSubdir      = PaperFilesStorageSubdir
 	ExperimentDataStorageSubdir  = "experiment-data"
@@ -17,12 +17,33 @@ const (
 	submissionDataStorageSubdir  = "submission-data"
 )
 
-// ArisInvokeWorkRoot 本地 ARIS/skill 单次 invoke 工作区根（默认 storage/aris-invoke）。
-func ArisInvokeWorkRoot() string {
+// PaperInoutRoot 项目 inout 根目录（ARIS invoke 等工作区；默认仓库下 inout/）。
+func PaperInoutRoot() string {
 	if v := strings.TrimSpace(os.Getenv("PAPER_ARIS_WORK_ROOT")); v != "" {
 		return v
 	}
-	return StorageLocalAbsPath(ArisInvokeStorageSubdir)
+	if v := strings.TrimSpace(os.Getenv("PAPER_INOUT_ROOT")); v != "" {
+		return v
+	}
+	candidates := []string{PaperInoutDirName, filepath.Join("AI-Agent-Paper", PaperInoutDirName)}
+	if wd, err := os.Getwd(); err == nil {
+		candidates = append(candidates, filepath.Join(wd, PaperInoutDirName))
+	}
+	for _, c := range candidates {
+		if st, err := os.Stat(c); err == nil && st.IsDir() {
+			abs, _ := filepath.Abs(c)
+			return abs
+		}
+	}
+	// 尚无目录时创建默认 inout（相对 cwd）
+	abs, _ := filepath.Abs(PaperInoutDirName)
+	_ = os.MkdirAll(abs, 0o755)
+	return abs
+}
+
+// ArisInvokeWorkRoot 与 PaperInoutRoot 相同（invoke 会话目录直接挂在 inout 下）。
+func ArisInvokeWorkRoot() string {
+	return PaperInoutRoot()
 }
 
 // StorageRoot 项目本地 storage 根目录（相对工作目录）。
