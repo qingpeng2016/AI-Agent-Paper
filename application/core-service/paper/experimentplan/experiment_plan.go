@@ -378,6 +378,15 @@ func experimentPlanItemView(row entity.PaperOutputExperimentPlan) response.Paper
 	if row.ContentMedium != nil {
 		item.ContentMedium = *row.ContentMedium
 	}
+	if row.PdfURI != nil {
+		item.PdfURI = strings.TrimSpace(*row.PdfURI)
+	}
+	if row.WordURI != nil {
+		item.WordURI = strings.TrimSpace(*row.WordURI)
+	}
+	if row.StorageURI != nil {
+		item.StorageURI = strings.TrimSpace(*row.StorageURI)
+	}
 	if row.ExperimentDataURI != nil && strings.TrimSpace(*row.ExperimentDataURI) != "" {
 		item.ExperimentDataURI = strings.TrimSpace(*row.ExperimentDataURI)
 	}

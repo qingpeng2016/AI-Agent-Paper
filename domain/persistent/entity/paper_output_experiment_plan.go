@@ -17,6 +17,8 @@ type PaperOutputExperimentPlan struct {
 	Summary       *string        `gorm:"column:summary"`
 	ContentMedium *string        `gorm:"column:content_medium"`
 	StorageURI        *string        `gorm:"column:storage_uri;size:1024"`
+	PdfURI            *string        `gorm:"column:pdf_uri;size:1024"`
+	WordURI           *string        `gorm:"column:word_uri;size:1024"`
 	ExperimentDataURI *string        `gorm:"column:experiment_data_uri;size:1024"`
 	Format        string         `gorm:"column:format;size:16;not null;default:md"`
 	InputParams   datatypes.JSON `gorm:"column:input_params"`

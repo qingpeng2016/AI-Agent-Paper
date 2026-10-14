@@ -2806,7 +2806,7 @@ watch(
               "
               @click="confirmTopicSelectedRound"
             >
-              {{ topicConfirmRoundLoading ? '写入中…' : '确认所选轮次并入库' }}
+              {{ topicConfirmRoundLoading ? '写入中…' : '确认并写入' }}
             </button>
           </div>
         </div>

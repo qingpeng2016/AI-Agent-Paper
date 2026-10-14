@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/internal/jsonx"
+	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/storage"
 	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/lang"
 	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/llm"
 	paperstep "github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/step"
@@ -309,16 +310,31 @@ func (s *TopicDiscoveryRunService) persistTopicExperimentPlan(
 	if msID == 0 {
 		return nil, fmt.Errorf("manuscript_id 未绑定")
 	}
-	title := StrFromAny(plan["title"])
-	summary := StrFromAny(plan["summary"])
-	content := StrFromAny(plan["content_medium"])
+	fallbackTitle := StrFromAny(input.Direction)
+	if fallbackTitle == "" {
+		fallbackTitle = StrFromAny(input.Venue)
+	}
+	title := strings.TrimSpace(experimentPlanTitleFromPayload(plan, fallbackTitle))
+	summary := experimentPlanSummaryFromPayload(plan)
+	content := strings.TrimSpace(experimentPlanBodyFromPayload(plan))
+	if title == "" {
+		title = "实验方案"
+	}
 	if content == "" {
-		content = StrFromAny(plan["content"])
+		return nil, fmt.Errorf("实验方案正文为空，无法入库")
+	}
+	exportAt := time.Now()
+	pdfRel, docxRel, err := storage.WriteExperimentPlanExportFiles(uint(userID), title, content, exportAt)
+	if err != nil {
+		return nil, fmt.Errorf("导出实验方案 PDF/Word 失败: %w", err)
 	}
 	var meta datatypes.JSON
 	if raw, ok := plan["meta"]; ok && raw != nil {
 		b, _ := json.Marshal(raw)
 		meta = b
+	}
+	if len(meta) == 0 {
+		meta = datatypes.JSON(jsonx.MustJSON(plan))
 	}
 	inputSnap, _ := json.Marshal(map[string]any{
 		"literature_review_id": litReviewID,
@@ -335,14 +351,13 @@ func (s *TopicDiscoveryRunService) persistTopicExperimentPlan(
 		InputParams:  inputSnap,
 		Meta:         meta,
 	}
-	if title != "" {
-		row.Title = &title
-	}
+	row.Title = &title
+	row.ContentMedium = &content
+	row.PdfURI = &pdfRel
+	row.WordURI = &docxRel
+	row.StorageURI = &pdfRel
 	if summary != "" {
 		row.Summary = &summary
-	}
-	if content != "" {
-		row.ContentMedium = &content
 	}
 	if err := s.expPlans.Create(ctx, row); err != nil {
 		return nil, err

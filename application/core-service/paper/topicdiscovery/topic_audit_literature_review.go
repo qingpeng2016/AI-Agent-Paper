@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/storage"
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
 )
 
@@ -84,10 +86,20 @@ func (s *TopicDiscoveryRunService) persistLiteratureReviewFromLLM(
 		return 0, fmt.Errorf("无法确定 manuscript_id，文献综述未写入")
 	}
 	auditStep.ManuscriptID = msID
-	title := StrFromAny(lit["title"])
-	content := StrFromAny(lit["content_medium"])
-	if content == "" {
-		content = StrFromAny(lit["content"])
+	title := strings.TrimSpace(StrFromAny(lit["title"]))
+	content := literatureReviewBodyFromPayload(lit)
+	content = literatureReviewReferencesAppend(lit, content)
+	if title == "" {
+		title = "文献综述"
+	}
+	if strings.TrimSpace(content) == "" {
+		return 0, fmt.Errorf("文献综述正文为空，无法入库")
+	}
+
+	exportAt := time.Now()
+	pdfRel, docxRel, err := storage.WriteLiteratureReviewExportFiles(userID, title, content, exportAt)
+	if err != nil {
+		return 0, fmt.Errorf("导出文献综述 PDF/Word 失败: %w", err)
 	}
 
 	row := &entity.PaperOutputLiteratureReview{
@@ -97,12 +109,10 @@ func (s *TopicDiscoveryRunService) persistLiteratureReviewFromLLM(
 		From:         "generated",
 		Format:       "md",
 	}
-	if title != "" {
-		row.Title = &title
-	}
-	if content != "" {
-		row.ContentMedium = &content
-	}
+	row.Title = &title
+	row.ContentMedium = &content
+	row.PdfURI = &pdfRel
+	row.WordURI = &docxRel
 	if err := s.litReviews.Create(ctx, row); err != nil {
 		return 0, err
 	}

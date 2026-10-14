@@ -8,6 +8,9 @@ type PaperExperimentPlanItemView struct {
 	Summary            string `json:"summary,omitempty"`
 	ContentMedium      string `json:"content_medium,omitempty"`
 	Format             string `json:"format"`
+	PdfURI             string `json:"pdf_uri,omitempty"`
+	WordURI            string `json:"word_uri,omitempty"`
+	StorageURI         string `json:"storage_uri,omitempty"`
 	LiteratureReviewID string `json:"literature_review_id,omitempty"`
 	ExperimentDataURI  string `json:"experiment_data_uri,omitempty"`
 	CreatedAt          string `json:"created_at"`

@@ -214,19 +214,12 @@ export function literatureReviewHasAttachmentUri(uri?: string): boolean {
   return Boolean(u && u !== '0')
 }
 
-/** 列表「生成」：实验方案或 PDF/Word/PPT 任一未就绪时显示生成入口 */
+/** 列表主操作：true →「生成」，false →「管理」。仅按来源区分。 */
 export function literatureReviewNeedsGenerateRun(
-  item: Pick<
-    PaperLiteratureReviewItem,
-    'experiment_plan_id' | 'pdf_uri' | 'word_uri' | 'ppt_uri'
-  >,
+  item: Pick<PaperLiteratureReviewItem, 'from'>,
 ): boolean {
-  const planId = item.experiment_plan_id?.trim()
-  if (!planId || planId === '0') return true
-  if (!literatureReviewHasAttachmentUri(item.pdf_uri)) return true
-  if (!literatureReviewHasAttachmentUri(item.word_uri)) return true
-  if (!literatureReviewHasAttachmentUri(item.ppt_uri)) return true
-  return false
+  const from = (item.from ?? 'generated').trim().toLowerCase()
+  return from !== 'generated'
 }
 
 export function literatureReviewHasPaperManuscript(
