@@ -122,6 +122,101 @@ function goWizardStep(step: number) {
 
 const detailChecklist = computed(() => activeDetail.value?.checklist ?? wizardChecklistItems)
 
+type SubmissionRoundLogBlock = {
+  round: number
+  outgoing: {
+    submittedAt?: string
+    title?: string
+    abstract?: string
+    draftVersion?: number
+    pdfFilename?: string
+    externalId?: string
+  }
+  incoming: {
+    returnedAt?: string
+    decision?: string
+    comments?: string
+    pending?: boolean
+  } | null
+}
+
+function buildSubmissionRoundLogs(d: PaperManuscriptSubmissionDetail): SubmissionRoundLogBlock[] {
+  const events = [...(d.events ?? [])].sort(
+    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+  )
+  const maxR = Math.max(0, d.round)
+  const blocks: SubmissionRoundLogBlock[] = []
+
+  for (let r = 0; r <= maxR; r++) {
+    const isLatestRound = r === maxR
+    let submittedAt: string | undefined
+    if (r === 0) {
+      submittedAt =
+        events.find((e) => e.event_type === 'submitted')?.created_at ?? d.submitted_at ?? undefined
+    } else {
+      submittedAt =
+        events.find((e) => e.event_type === 'resubmitted' && e.message.includes(`R${r}`))
+          ?.created_at ??
+        events.filter((e) => e.event_type === 'resubmitted')[r - 1]?.created_at ??
+        undefined
+    }
+
+    const outgoing = {
+      submittedAt,
+      title: r === 0 || isLatestRound ? d.title || props.manuscriptTitle : undefined,
+      abstract: r === 0 || isLatestRound ? d.abstract : undefined,
+      draftVersion: isLatestRound ? d.draft_version : undefined,
+      pdfFilename: isLatestRound ? d.main_pdf_filename : undefined,
+      externalId: r === 0 ? d.external_id : undefined,
+    }
+
+    let incoming: SubmissionRoundLogBlock['incoming'] = null
+
+    if (r < maxR) {
+      if (r === 0 && (d.decision || d.comments_summary)) {
+        incoming = {
+          returnedAt: events.find((e) => e.event_type === 'revision_saved')?.created_at,
+          decision: d.decision ?? undefined,
+          comments: d.comments_summary ?? undefined,
+        }
+      }
+    } else if (maxR === 0) {
+      if (d.decision || d.comments_summary) {
+        incoming = {
+          returnedAt: events.find((e) => e.event_type === 'revision_saved')?.created_at,
+          decision: d.decision ?? undefined,
+          comments: d.comments_summary ?? undefined,
+        }
+      } else if (d.status === 'under_review' || d.status === 'submitted') {
+        incoming = { pending: true, comments: '已提交，等待编辑部/审稿意见。' }
+      }
+    } else if (isLatestRound && r > 0) {
+      if (d.status === 'resubmitted' || d.status === 'under_review') {
+        incoming = {
+          pending: true,
+          comments: '修回已提交，等待本轮审稿或 meta 结论。',
+          returnedAt: submittedAt,
+        }
+      } else if (d.decision || d.comments_summary) {
+        incoming = {
+          decision: d.decision ?? undefined,
+          comments: d.comments_summary ?? undefined,
+        }
+      }
+    }
+
+    blocks.push({ round: r, outgoing, incoming })
+  }
+
+  return blocks
+}
+
+const submissionRoundLogs = computed(() => {
+  const d = activeDetail.value
+  if (!d) return []
+  return buildSubmissionRoundLogs(d)
+})
+
 async function loadList() {
   const msId = props.activeManuscriptId
   if (!msId || !/^\d+$/.test(msId)) {
@@ -585,7 +680,7 @@ defineExpose({ openWizard })
               { id: 'overview', label: '概览' },
               { id: 'package', label: '投稿包' },
               { id: 'checklist', label: '校验' },
-              { id: 'log', label: '日志' },
+              { id: 'log', label: '投递日志' },
             ]"
             :key="t.id"
             type="button"
@@ -689,17 +784,83 @@ defineExpose({ openWizard })
             </ul>
           </template>
 
-          <template v-else>
-            <p class="sub-pane-lead">投递创建、提交、上传与改稿相关操作记录。</p>
-            <ul v-if="activeDetail.events?.length" class="sub-log-rows">
-              <li v-for="ev in activeDetail.events" :key="ev.id" class="sub-log-row">
-                <time class="sub-log-row-time">{{
-                  new Date(ev.created_at).toLocaleString('zh-CN')
-                }}</time>
-                <span class="sub-log-row-msg">{{ ev.message }}</span>
-              </li>
-            </ul>
-            <p v-else class="sub-detail-empty">暂无操作日志。</p>
+          <template v-else-if="detailTab === 'log'">
+            <p class="sub-pane-lead">按轮次记录我方投稿内容与编辑部/审稿反馈（后续可接入分轮归档与 PDF）。</p>
+            <div v-if="submissionRoundLogs.length" class="sub-round-log-stack">
+              <article
+                v-for="block in submissionRoundLogs"
+                :key="block.round"
+                class="sub-round-log"
+              >
+                <h3 class="sub-round-log-title">轮次 R{{ block.round }}</h3>
+                <section class="sub-round-log-section sub-round-log-section--out">
+                  <h4 class="sub-round-log-section-title">我方投递</h4>
+                  <dl class="sub-round-log-dl">
+                    <dt>提交时间</dt>
+                    <dd>
+                      {{
+                        block.outgoing.submittedAt
+                          ? new Date(block.outgoing.submittedAt).toLocaleString('zh-CN')
+                          : '—'
+                      }}
+                    </dd>
+                    <template v-if="block.outgoing.title">
+                      <dt>标题</dt>
+                      <dd>{{ block.outgoing.title }}</dd>
+                    </template>
+                    <template v-if="block.outgoing.abstract">
+                      <dt>摘要</dt>
+                      <dd class="sub-round-log-abstract">{{ block.outgoing.abstract }}</dd>
+                    </template>
+                    <template v-if="block.outgoing.draftVersion != null">
+                      <dt>绑定稿本</dt>
+                      <dd>{{ submissionSnapshotLabel(block.outgoing.draftVersion) }}</dd>
+                    </template>
+                    <template v-if="block.outgoing.pdfFilename">
+                      <dt>主 PDF</dt>
+                      <dd>{{ block.outgoing.pdfFilename }}</dd>
+                    </template>
+                    <template v-if="block.outgoing.externalId">
+                      <dt>Submission ID</dt>
+                      <dd>
+                        <code class="sub-detail-code">{{ block.outgoing.externalId }}</code>
+                      </dd>
+                    </template>
+                    <template
+                      v-if="
+                        !block.outgoing.title &&
+                        !block.outgoing.abstract &&
+                        block.outgoing.draftVersion == null &&
+                        !block.outgoing.pdfFilename
+                      "
+                    >
+                      <dt>说明</dt>
+                      <dd class="sub-detail-muted">本轮详细稿本未单独归档，见「投稿包」或后续分轮存储。</dd>
+                    </template>
+                  </dl>
+                </section>
+                <section class="sub-round-log-section sub-round-log-section--in">
+                  <h4 class="sub-round-log-section-title">对方返回</h4>
+                  <template v-if="block.incoming">
+                    <dl v-if="!block.incoming.pending" class="sub-round-log-dl">
+                      <dt v-if="block.incoming.returnedAt">反馈时间</dt>
+                      <dd v-if="block.incoming.returnedAt">
+                        {{ new Date(block.incoming.returnedAt).toLocaleString('zh-CN') }}
+                      </dd>
+                      <dt v-if="block.incoming.decision">结论</dt>
+                      <dd v-if="block.incoming.decision">{{ block.incoming.decision }}</dd>
+                      <dt v-if="block.incoming.comments">意见</dt>
+                      <dd v-if="block.incoming.comments" class="sub-round-log-comments">
+                        {{ block.incoming.comments }}
+                      </dd>
+                    </dl>
+                    <p v-else class="sub-round-log-pending">{{ block.incoming.comments }}</p>
+                  </template>
+                  <p v-else class="sub-detail-muted sub-round-log-empty">本轮暂无审稿或编辑部返回。</p>
+                </section>
+              </article>
+            </div>
+            <p v-else class="sub-detail-empty">暂无投递轮次记录。</p>
           </template>
         </div>
       </section>
@@ -1189,34 +1350,81 @@ defineExpose({ openWizard })
   background: #fef3c7;
 }
 
-.sub-log-rows {
-  padding: 0;
-  margin: 0;
-  list-style: none;
+.sub-round-log-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
 }
 
-.sub-log-row {
-  display: grid;
-  grid-template-columns: minmax(140px, 168px) 1fr;
-  gap: 12px 20px;
-  padding: 14px 0;
-  border-bottom: 1px solid #f1f5f9;
+.sub-round-log {
+  padding: 18px 20px;
+  background: #f8fafc;
+  border: 1px solid #e8eaf0;
+  border-radius: 12px;
 }
 
-.sub-log-row:last-child {
-  border-bottom: none;
+.sub-round-log-title {
+  margin: 0 0 14px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #1e1b4b;
 }
 
-.sub-log-row-time {
+.sub-round-log-section {
+  padding-top: 12px;
+  margin-top: 12px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.sub-round-log-section:first-of-type {
+  padding-top: 0;
+  margin-top: 0;
+  border-top: none;
+}
+
+.sub-round-log-section-title {
+  margin: 0 0 10px;
   font-size: 13px;
-  font-variant-numeric: tabular-nums;
+  font-weight: 700;
   color: #64748b;
 }
 
-.sub-log-row-msg {
+.sub-round-log-dl {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: 10px 16px;
+  margin: 0;
   font-size: 14px;
+}
+
+.sub-round-log-dl dt {
+  margin: 0;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.sub-round-log-dl dd {
+  margin: 0;
   line-height: 1.55;
   color: #334155;
+  word-break: break-word;
+}
+
+.sub-round-log-abstract,
+.sub-round-log-comments {
+  white-space: pre-wrap;
+}
+
+.sub-round-log-pending {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: #475569;
+}
+
+.sub-round-log-empty {
+  margin: 0;
+  font-size: 14px;
 }
 
 .sub-revision-actions {
