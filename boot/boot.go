@@ -102,6 +102,7 @@ func BuildContainer() *dig.Container {
 	_ = c.Provide(mysql.NewPaperOutputLiteratureReviewImpl)
 	_ = c.Provide(mysql.NewPaperOutputExperimentPlanImpl)
 	_ = c.Provide(mysql.NewPaperLLMImpl)
+	_ = c.Provide(mysql.NewPaperStrategyImpl)
 	_ = c.Provide(mysql.NewPaperUserPreferenceImpl)
 	_ = c.Provide(mysql.NewPaperUserLiteratureImpl)
 	_ = c.Provide(mysql.NewPaperUserLiteratureCategoryImpl)

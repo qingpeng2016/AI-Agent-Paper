@@ -1890,10 +1890,6 @@ async function onPrimaryAction() {
       ElMessage.warning('请填写详细描述')
       return
     }
-    if (topicForm.sourceCodes.length === 0) {
-      ElMessage.warning('请至少选择一个文献来源（检索在选题发现完成）')
-      return
-    }
     if (topicForm.venueCodes.length === 0) {
       ElMessage.warning('请至少选择一个目标会议/期刊')
       return
@@ -2430,7 +2426,7 @@ watch(
         </div>
 
         <div class="paper-field paper-field--block paper-field--section-gap">
-          <span class="paper-label">文献来源 <em class="req">*</em></span>
+          <span class="paper-label">文献来源</span>
           <div class="paper-check-group">
             <label
               v-for="src in literatureSourceOptions"

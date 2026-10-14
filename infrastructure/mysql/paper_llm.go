@@ -61,21 +61,6 @@ func (r *PaperLLMImpl) ResolveActiveModel(ctx context.Context, configID uint) (*
 	return &row, nil
 }
 
-func (r *PaperLLMImpl) GetActivePromptByStage(ctx context.Context, stageCode string) (*entity.PaperLLMPromptTemplate, error) {
-	var row entity.PaperLLMPromptTemplate
-	err := r.db.WithContext(ctx).
-		Preload("Description", "status = ? AND description_code > ?", "active", 0).
-		Where("stage_code = ? AND status = ?", stageCode, "active").
-		First(&row).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &row, nil
-}
-
 func (r *PaperLLMImpl) InsertCallLog(ctx context.Context, row *entity.PaperLLMCallLog) error {
 	if row == nil {
 		return nil

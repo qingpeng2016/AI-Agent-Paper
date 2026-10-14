@@ -39,10 +39,7 @@ type TopicDiscoveryExecutionIntensityOption struct {
 }
 
 type TopicDiscoveryAuditLevelOption struct {
-	Code            string `json:"code"`
-	Label           string `json:"label"`
-	LlmDescriptionCitationCheckCode uint64 `json:"llm_description_citation_check_code"`
-	LlmDescriptionClaimCheckCode    uint64 `json:"llm_description_claim_check_code"`
-	LlmDescriptionKillCheckCode     uint64 `json:"llm_description_kill_check_code"`
-	IsDefault       bool   `json:"is_default"`
+	Code      string `json:"code"`
+	Label     string `json:"label"`
+	IsDefault bool   `json:"is_default"`
 }

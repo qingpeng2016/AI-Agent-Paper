@@ -79,12 +79,9 @@ func (s *TopicDiscoveryOptionsService) GetFormOptions(ctx context.Context) (*res
 
 	for _, a := range audits {
 		out.AuditLevels = append(out.AuditLevels, response.TopicDiscoveryAuditLevelOption{
-			Code:            a.Code,
-			Label:           a.Name,
-			LlmDescriptionCitationCheckCode: a.LlmDescriptionCitationCheckCode,
-			LlmDescriptionClaimCheckCode:    a.LlmDescriptionClaimCheckCode,
-			LlmDescriptionKillCheckCode:     a.LlmDescriptionKillCheckCode,
-			IsDefault:       a.IsDefault,
+			Code:      a.Code,
+			Label:     a.Name,
+			IsDefault: a.IsDefault,
 		})
 	}
 

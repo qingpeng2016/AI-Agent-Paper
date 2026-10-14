@@ -11,13 +11,12 @@
 -- | 类型       | 表名 |
 -- |------------|------|
 -- | ref        | paper_ref_* |
--- | template   | paper_llm_template_topic（选题环节平台话术） |
--- |            | paper_ref_venue（含 llm_description_codes）；约束文案见 paper_llm_description |
+-- | strategy   | paper_strategy_package, paper_strategy_route |
+-- |            | paper_ref_venue（strategy_profile_key 由策略包解释） |
 -- | manuscript | paper_manuscript（我的论文） |
 -- | output     | paper_output_*（各模块业务产出，均含 manuscript_id） |
 -- | user       | paper_user_preference, paper_user_literature |
--- | model      | paper_llm_model_config, paper_llm_template_topic, |
--- |            | paper_llm_description, paper_llm_constraint_gate, paper_exec_intensity_topic, paper_exec_intensity_write_paper |
+-- | model      | paper_llm_model_config, paper_llm_constraint_gate, paper_exec_intensity_topic, paper_exec_intensity_write_paper |
 -- | llm        | paper_llm_call_logs |
 -- 多数 output 表含 manuscript_id → paper_manuscript.id（逻辑外键，不设 DB FK）；paper_user_literature 按 user_id
 
@@ -262,7 +261,7 @@ CREATE TABLE IF NOT EXISTS `paper_ref_venue` (
   `name`            VARCHAR(256) NOT NULL COMMENT 'NeurIPS / Nature 等',
   `sort`            INT          NOT NULL DEFAULT 100 COMMENT '选题下拉展示顺序，越小越靠前',
   `venue_type`      VARCHAR(16)  NOT NULL COMMENT 'conference|journal|workshop|other',
-  `llm_description_codes` JSON NOT NULL DEFAULT (JSON_ARRAY(20000, 20001, 20002)) COMMENT 'paper_llm_description.description_code 列表（如 constraint_venue 2xxxx）',
+  `strategy_profile_key` VARCHAR(64) NOT NULL DEFAULT 'venue/generic' COMMENT '策略包 venue profile，如 venue/ml_top3',
   `publisher`       VARCHAR(128) DEFAULT NULL COMMENT '出版方',
   `website_url`     VARCHAR(512) DEFAULT NULL COMMENT '官网',
   `status`          VARCHAR(16)  NOT NULL DEFAULT 'active' COMMENT 'active|hidden',
@@ -314,12 +313,9 @@ CREATE TABLE IF NOT EXISTS `paper_llm_constraint_gate` (
   `prompt_scene`       VARCHAR(32)  NOT NULL COMMENT 'topic|write_paper',
   `code`               VARCHAR(16)  NOT NULL COMMENT '档位键 standard|polished|strict',
   `name`               VARCHAR(64)  NOT NULL COMMENT '展示名',
-  `llm_description_citation_check_code` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'paper_llm_description.description_code',
-  `llm_description_claim_check_code`    BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'paper_llm_description.description_code',
-  `llm_description_kill_check_code`     BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'paper_llm_description.description_code',
   `is_default`         TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '前端默认选中项，每 prompt_scene 仅一条应为 1',
   PRIMARY KEY (`prompt_scene`, `code`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='审计等级';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='审计等级（语义由策略包解释）';
 
 -- ---------------------------------------------------------------------------
 -- 2. 稿件线与用户默认（工作台「当前论文」= paper_manuscript）
@@ -417,6 +413,7 @@ CREATE TABLE IF NOT EXISTS `paper_user_preference` (
 CREATE TABLE IF NOT EXISTS `paper_llm_model_config` (
   `id`                   BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '配置 ID',
   `label`                VARCHAR(128) NOT NULL COMMENT '展示名',
+  `scope`                VARCHAR(32)  NOT NULL DEFAULT 'platform_delegate' COMMENT 'platform_delegate|strategy_only',
   `provider_code`        VARCHAR(32)  NOT NULL COMMENT 'openai|anthropic|azure_openai|openai_compatible|ollama|gateway|other',
   `model_name`           VARCHAR(128) NOT NULL COMMENT '上游 model 参数',
   `api_base_url`         VARCHAR(512) NOT NULL COMMENT 'API Origin（仅 scheme://host；HTTP path 由 provider_code 在代码中拼接）',
@@ -435,43 +432,48 @@ CREATE TABLE IF NOT EXISTS `paper_llm_model_config` (
   KEY `idx_paper_llm_model_cfg_provider` (`provider_code`, `model_name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='平台 LLM 端点配置（Key/Host/模型名）';
 
-CREATE TABLE IF NOT EXISTS `paper_llm_template_topic` (
-  `id`                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '模板 ID',
-  `stage_code`        VARCHAR(64)  NOT NULL DEFAULT 'default' COMMENT '环节键：default|retrieve|generate_ideas|…（由代码约定）',
-  `stage_name`        VARCHAR(128) NOT NULL COMMENT '环节中文名（运营/排查）',
-  `llm_description_code` BIGINT UNSIGNED NOT NULL COMMENT 'paper_llm_description.description_code（template_topic 段 30000+）',
+CREATE TABLE IF NOT EXISTS `paper_strategy_package` (
+  `id`                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '策略包 ID',
+  `code`              VARCHAR(64)  NOT NULL COMMENT '包键：builtin|aris|…',
+  `name`              VARCHAR(128) NOT NULL COMMENT '展示名',
+  `provider_kind`     VARCHAR(16)  NOT NULL DEFAULT 'inline' COMMENT 'inline|http|process',
+  `base_url`          VARCHAR(512) DEFAULT NULL COMMENT 'http 策略服务 Origin',
+  `auth_type`         VARCHAR(32)  NOT NULL DEFAULT 'none' COMMENT 'none|bearer|hmac',
+  `auth_secret_ref`   VARCHAR(256) DEFAULT NULL COMMENT '平台密钥引用',
+  `manifest_version`  VARCHAR(32)  DEFAULT NULL COMMENT '能力清单版本',
+  `capabilities`      JSON         DEFAULT NULL COMMENT '能力 id 列表',
   `status`            VARCHAR(16)  NOT NULL DEFAULT 'active' COMMENT 'active|disabled',
-  `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  `updated_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_paper_llm_template_topic_stage` (`stage_code`),
-  KEY `idx_paper_llm_template_topic_status` (`status`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='选题环节 stage→description；模型见 description.model_config_id';
+  UNIQUE KEY `uk_paper_strategy_package_code` (`code`),
+  KEY `idx_paper_strategy_package_status` (`status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='AI 策略包';
 
-CREATE TABLE IF NOT EXISTS `paper_llm_description` (
-  `description_code`  BIGINT UNSIGNED NOT NULL COMMENT '业务键；gate 1xxxx venue 2xxxx template_topic 3xxxx（每类 10000 段）',
-  `prompt_scene`      VARCHAR(32)  NOT NULL DEFAULT 'shared' COMMENT 'topic|write_paper|shared',
-  `model_config_id`   BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '0=全模型默认；非 0=paper_llm_model_config.id',
-  `prompt_code`       VARCHAR(64)  NOT NULL DEFAULT '' COMMENT 'constraint_gate|constraint_venue|template_topic',
-  `prompt_name`       VARCHAR(128) NOT NULL COMMENT '类型名：门禁约束、期刊会议约束、选题环节话术等',
-  `prompt_desc`       VARCHAR(256) NOT NULL DEFAULT '' COMMENT '运营/后台展示名',
-  `llm_desc_zh`       MEDIUMTEXT   NOT NULL COMMENT '注入 LLM 的中文正文；支持 {{var}}',
-  `llm_desc_en`       MEDIUMTEXT   NOT NULL COMMENT '注入 LLM 的英文正文；支持 {{var}}',
-  `status`            VARCHAR(16)  NOT NULL DEFAULT 'active' COMMENT 'active|disabled',
-  `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  `updated_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  PRIMARY KEY (`description_code`),
-  UNIQUE KEY `uk_paper_llm_description_scope` (`model_config_id`, `prompt_code`, `prompt_desc`),
-  KEY `idx_paper_llm_description_status` (`status`),
-  KEY `idx_paper_llm_description_model` (`model_config_id`),
-  KEY `idx_paper_llm_description_prompt_code` (`prompt_code`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='LLM 输入文案';
+CREATE TABLE IF NOT EXISTS `paper_strategy_route` (
+  `id`                      BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `behavior_key`            VARCHAR(128) NOT NULL COMMENT '如 topic.stage.topic_generate',
+  `module`                  VARCHAR(64)  NOT NULL DEFAULT '',
+  `action`                  VARCHAR(64)  NOT NULL DEFAULT '',
+  `strategy_package_id`     BIGINT UNSIGNED NOT NULL COMMENT 'paper_strategy_package.id',
+  `capability_id`           VARCHAR(128) NOT NULL DEFAULT '',
+  `default_model_config_id` BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  `fallback_route_id`       BIGINT UNSIGNED DEFAULT NULL,
+  `config_json`             JSON         DEFAULT NULL,
+  `priority`                INT          NOT NULL DEFAULT 0,
+  `status`                  VARCHAR(16)  NOT NULL DEFAULT 'active',
+  `created_at`              DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`              DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_paper_strategy_route_behavior` (`behavior_key`),
+  KEY `idx_paper_strategy_route_pkg` (`strategy_package_id`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='需求行为 → 策略包';
 
 -- ---------------------------------------------------------------------------
 -- 4. 各模块业务产出 paper_output_*（均关联 paper_manuscript.id；retrieve 步 result 承载文献命中）
 -- ---------------------------------------------------------------------------
 
--- 选题发现：一轮 run 固定四步，每步一行（stage_code 与 paper_llm_template_topic 同键）
+-- 选题发现：一轮 run 固定两步 retrieve + topic_discovery
 CREATE TABLE IF NOT EXISTS `paper_output_topic_step` (
   `id`                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '记录 ID',
   `manuscript_id`     BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '论文 ID；选题未确认综述前为 0，确认后反填',
@@ -565,9 +567,12 @@ CREATE TABLE IF NOT EXISTS `paper_user_figure` (
 CREATE TABLE IF NOT EXISTS `paper_llm_call_logs` (
   `id`              BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '日志 ID',
   `manuscript_id`   BIGINT UNSIGNED NOT NULL COMMENT 'paper_manuscript.id',
-  `stage_code`      VARCHAR(64)  DEFAULT NULL COMMENT '环节键（与 paper_llm_template_topic.stage_code 一致）',
+  `stage_code`      VARCHAR(64)  DEFAULT NULL COMMENT '环节键',
+  `behavior_key`    VARCHAR(128) DEFAULT NULL COMMENT 'paper_strategy_route.behavior_key',
+  `strategy_package_id` BIGINT UNSIGNED DEFAULT NULL,
+  `capability_id`   VARCHAR(128) DEFAULT NULL,
+  `external_trace_id` VARCHAR(128) DEFAULT NULL,
   `model_config_id` BIGINT UNSIGNED DEFAULT NULL COMMENT 'paper_llm_model_config.id',
-  `prompt_template_id` BIGINT UNSIGNED DEFAULT NULL COMMENT 'paper_llm_template_topic.id',
   `model_name`      VARCHAR(128) NOT NULL COMMENT '模型名快照',
   `request_json`    JSON         NOT NULL COMMENT '请求快照：stage_code、system_prompt、user_prompt',
   `response_json`   JSON         NOT NULL COMMENT '响应快照：text；失败时含 error',
@@ -769,130 +774,16 @@ ON DUPLICATE KEY UPDATE
   `exec_rounds` = VALUES(`exec_rounds`),
   `is_default` = VALUES(`is_default`);
 
-INSERT INTO `paper_llm_description` (`description_code`, `prompt_scene`, `model_config_id`, `prompt_code`, `prompt_name`, `prompt_desc`, `llm_desc_zh`, `llm_desc_en`) VALUES
-(10000, 'topic', 1, 'constraint_gate', '门禁约束', '引用门禁·基础',
- '引用门禁（基础）：ref_id/reference_keys/citations 须对应 verified Corpus；禁止编造文献；无法溯源则 blocker。',
- 'Citation (basic): refs must map to verified Corpus; no fabrication; missing traceability is blocker.'),
-(10001, 'topic', 1, 'constraint_gate', '门禁约束', '引用门禁·标准',
- '引用门禁（标准）：含基础项；literature_review 关键句须有 citations；idea reference_keys 须完整合理；orphan ref 为 major。',
- 'Citation (standard): includes basic; review claims need citations; idea keys complete; orphan refs major.'),
-(10002, 'topic', 1, 'constraint_gate', '门禁约束', '引用门禁·严格',
- '引用门禁（严格）：含标准项；逐段抽查综述与 idea 引用是否充分、是否 over-cite 无关文献。',
- 'Citation (strict): includes standard; section-level citation adequacy review.'),
-(10003, 'topic', 1, 'constraint_gate', '门禁约束', '论断门禁·基础',
- '论断门禁（基础）：贡献须可被 Corpus 支撑；禁止无证据的 SOTA/首创表述。',
- 'Claim (basic): contributions supportable; no unsupported SOTA/first claims.'),
-(10004, 'topic', 1, 'constraint_gate', '门禁约束', '论断门禁·标准',
- '论断门禁（标准）：含基础；SOTA 须点明基线/指标；contribution 符合 venue allowed 类型；实验计划与核心 claim 对齐（无计划且需实验为 major）。',
- 'Claim (standard): baselines for SOTA; venue contribution types; plan aligns with claims.'),
-(10005, 'topic', 1, 'constraint_gate', '门禁约束', '论断门禁·严格',
- '论断门禁（严格）：含标准；禁止因果夸大；empirical 须含可复现性要点；缺则为 major。',
- 'Claim (strict): no causal overreach; reproducibility hints required for empirical claims.'),
-(10006, 'topic', 1, 'constraint_gate', '门禁约束', '驳论门禁·基础',
- '驳论门禁（基础）：venue 明显不匹配则 blocker；列出拒稿式理由。',
- 'Kill (basic): clear venue misfit is blocker.'),
-(10007, 'topic', 1, 'constraint_gate', '门禁约束', '驳论门禁·标准',
- '驳论门禁（标准）：含基础；致命 flaw、与 Corpus 矛盾且未讨论、假新颖为 blocker/major。',
- 'Kill (standard): fatal flaws, contradictions, false novelty.'),
-(10008, 'topic', 1, 'constraint_gate', '门禁约束', '驳论门禁·严格',
- '驳论门禁（严格）：含标准；实验/数据不可行、不可复现为 major/blocker。',
- 'Kill (strict): infeasible or non-reproducible experiments.'),
-(11000, 'write_paper', 1, 'constraint_gate', '门禁约束', '引用门禁·基础·写作',
- '引用门禁（基础）：正文 citations/ref_id 须对应 verified Corpus；禁止编造文献；无法溯源则 blocker。',
- 'Citation (basic, manuscript): in-text refs must map to verified Corpus; no fabrication; missing traceability is blocker.'),
-(11001, 'write_paper', 1, 'constraint_gate', '门禁约束', '引用门禁·标准·写作',
- '引用门禁（标准）：含基础项；Related Work/Method/Experiment 等关键句须有 citations；orphan ref 为 major。',
- 'Citation (standard, manuscript): includes basic; key sections need citations; orphan refs major.'),
-(11002, 'write_paper', 1, 'constraint_gate', '门禁约束', '引用门禁·严格·写作',
- '引用门禁（严格）：含标准项；逐段抽查全文引用是否充分、是否 over-cite 无关文献。',
- 'Citation (strict, manuscript): includes standard; section-level citation adequacy across full draft.'),
-(11003, 'write_paper', 1, 'constraint_gate', '门禁约束', '论断门禁·基础·写作',
- '论断门禁（基础）：摘要与正文 claim 须可被 Corpus/实验结果支撑；禁止无证据的 SOTA/首创表述。',
- 'Claim (basic, manuscript): abstract and body claims supportable; no unsupported SOTA/first claims.'),
-(11004, 'write_paper', 1, 'constraint_gate', '门禁约束', '论断门禁·标准·写作',
- '论断门禁（标准）：含基础；SOTA 须点明基线/指标；贡献类型符合 venue；实验节与摘要/结论 claim 一致。',
- 'Claim (standard, manuscript): baselines for SOTA; venue contribution types; experiments align with claims.'),
-(11005, 'write_paper', 1, 'constraint_gate', '门禁约束', '论断门禁·严格·写作',
- '论断门禁（严格）：含标准；禁止因果夸大；empirical 须含可复现性要点；缺则为 major。',
- 'Claim (strict, manuscript): no causal overreach; reproducibility hints required for empirical claims.'),
-(11006, 'write_paper', 1, 'constraint_gate', '门禁约束', '驳论门禁·基础·写作',
- '驳论门禁（基础）：venue 明显不匹配则 blocker；列出拒稿式理由。',
- 'Kill (basic, manuscript): clear venue misfit is blocker.'),
-(11007, 'write_paper', 1, 'constraint_gate', '门禁约束', '驳论门禁·标准·写作',
- '驳论门禁（标准）：含基础；致命 flaw、与 Corpus/实验矛盾且未讨论、假新颖为 blocker/major。',
- 'Kill (standard, manuscript): fatal flaws, contradictions, false novelty.'),
-(11008, 'write_paper', 1, 'constraint_gate', '门禁约束', '驳论门禁·严格·写作',
- '驳论门禁（严格）：含标准；实验/数据不可行、不可复现为 major/blocker。',
- 'Kill (strict, manuscript): infeasible or non-reproducible experiments.')
-ON DUPLICATE KEY UPDATE
-  `prompt_scene` = VALUES(`prompt_scene`),
-  `model_config_id` = VALUES(`model_config_id`),
-  `prompt_code` = VALUES(`prompt_code`),
-  `prompt_name` = VALUES(`prompt_name`),
-  `prompt_desc` = VALUES(`prompt_desc`),
-  `llm_desc_zh` = VALUES(`llm_desc_zh`), `llm_desc_en` = VALUES(`llm_desc_en`);
-
-INSERT INTO `paper_llm_constraint_gate` (
-  `prompt_scene`, `code`, `name`, `llm_description_citation_check_code`, `llm_description_claim_check_code`, `llm_description_kill_check_code`, `is_default`
-) VALUES
-  ('topic', 'polished', '基础', 10000, 10003, 10006, 0),
-  ('topic', 'standard', '标准', 10001, 10004, 10007, 1),
-  ('topic', 'strict',   '严格', 10002, 10005, 10008, 0),
-  ('write_paper', 'polished', '基础', 11000, 11003, 11006, 0),
-  ('write_paper', 'standard', '标准', 11001, 11004, 11007, 1),
-  ('write_paper', 'strict',   '严格', 11002, 11005, 11008, 0)
+INSERT INTO `paper_llm_constraint_gate` (`prompt_scene`, `code`, `name`, `is_default`) VALUES
+  ('topic', 'polished', '基础', 0),
+  ('topic', 'standard', '标准', 1),
+  ('topic', 'strict',   '严格', 0),
+  ('write_paper', 'polished', '基础', 0),
+  ('write_paper', 'standard', '标准', 1),
+  ('write_paper', 'strict',   '严格', 0)
 ON DUPLICATE KEY UPDATE
   `name` = VALUES(`name`),
-  `llm_description_citation_check_code` = VALUES(`llm_description_citation_check_code`),
-  `llm_description_claim_check_code` = VALUES(`llm_description_claim_check_code`),
-  `llm_description_kill_check_code` = VALUES(`llm_description_kill_check_code`),
   `is_default` = VALUES(`is_default`);
-
-INSERT INTO `paper_llm_description` (`description_code`, `model_config_id`, `prompt_code`, `prompt_name`, `prompt_desc`, `llm_desc_zh`, `llm_desc_en`) VALUES
-(20000, 1, 'constraint_venue', '期刊会议约束', '通用·贡献类型',
- '每条 idea 的 contribution 须明确属于 allowed 之一，并与方向一致；勿混合未声明的类型。',
- 'Each idea contribution must map to one allowed type and match the direction.'),
-(20001, 1, 'constraint_venue', '期刊会议约束', '通用·实验标准',
- '实验方案须写清基线、指标与主结论所依赖的证据；勿夸大未设计的实验。',
- 'Plan must tie claims to evidence; do not invent unplanned experiments.'),
-(20002, 1, 'constraint_venue', '期刊会议约束', '通用·写作风格',
- '中文表述准确、克制；避免营销式用语；引用须对应 Corpus ref_id。',
- 'Precise, restrained English; citations must use Corpus ref_id.'),
-(20003, 1, 'constraint_venue', '期刊会议约束', 'ML顶会·贡献类型',
- '贡献须能在 8 页主会体量内讲清；method/theory/empirical 择主、可辅，勿堆叠无关贡献。',
- 'Fit a ~8-page main-track claim; one primary contribution type, avoid unrelated stacking.'),
-(20004, 1, 'constraint_venue', '期刊会议约束', 'ML顶会·实验标准',
- '缺基线须在 audit issues 标 major。',
- 'Missing baselines should be audit major issues.'),
-(20005, 1, 'constraint_venue', '期刊会议约束', 'ML顶会·写作风格',
- 'Related Work 聚焦差异；Experiments 先主结果后消融；claim 与表格/图一致。',
- 'Related work: contrast; experiments: main results then ablations; claims match tables/figures.')
-ON DUPLICATE KEY UPDATE
-  `model_config_id` = VALUES(`model_config_id`),
-  `prompt_code` = VALUES(`prompt_code`),
-  `prompt_name` = VALUES(`prompt_name`),
-  `prompt_desc` = VALUES(`prompt_desc`),
-  `llm_desc_zh` = VALUES(`llm_desc_zh`), `llm_desc_en` = VALUES(`llm_desc_en`);
-
-INSERT INTO `paper_llm_description` (`description_code`, `model_config_id`, `prompt_code`, `prompt_name`, `prompt_desc`, `llm_desc_zh`, `llm_desc_en`) VALUES
-(30000, 0, 'template_topic', '选题环节话术', 'default',
- '你是 Paper Agent 平台的学术科研助手。只根据用户消息中给出的文献与前置步骤结果作答，不得编造未出现的来源或实验。{{output_language_rule}} 若要求 JSON，严格遵守用户消息中的 schema。',
- 'You are an academic research assistant for the Paper Agent platform. Answer only from literature and prior-step results in the user message; do not fabricate sources or experiments. {{output_language_rule}} When JSON is required, follow the schema in the user message.'),
-(30001, 0, 'template_topic', '选题环节话术', 'generate_ideas',
- '环节：脑暴 + 新颖性（与 novelty 同一次模型调用完成）。最多 {{max_ideas}} 条 idea；仅依据用户消息 Corpus 与 CorpusFiles；输出 JSON 含 ideas 与 novelty（lines/risks/synthesis），以用户消息 schema 为准。{{output_language_rule}}',
- 'Stage: brainstorming + novelty in one call. At most {{max_ideas}} ideas; use only Corpus and CorpusFiles from the user message. Output JSON with ideas and novelty (lines/risks/synthesis) per the user message schema. {{output_language_rule}}'),
-(30002, 0, 'template_topic', '选题环节话术', 'audit',
- '环节：审查结论 + 生成文献综述。方向：{{direction}}。目标期刊：{{venue}}。须再次审查第二步 generate_ideas（含 novelty）是否贴题；以严格审稿人视角给出 issues/summary/off_topic；并基于 Corpus 生成文献综述（structure/content_medium/citations）。输出 JSON 以用户消息 schema 为准（含 audit 与 literature_review）。{{output_language_rule}}',
- 'Stage: audit conclusion + literature review. Direction: {{direction}}. Target venue: {{venue}}. Re-check generate_ideas (with novelty) for fit; reviewer-style issues/summary/off_topic; literature review from Corpus (structure/content_medium/citations). Output JSON per user schema (audit + literature_review). {{output_language_rule}}'),
-(30003, 0, 'template_topic', '选题环节话术', 'experiment_plan',
- '环节：生成实验方案（experiment planning）。方向：{{direction}}。目标期刊/会议：{{venue}}。须以用户消息中的 LiteratureReview（文献综述全文/摘要）与选题 Corpus 为依据，不得编造未给出的基线或数据。输出可审稿的实验计划：核心假设、主实验与对照基线、评价指标、消融设计、算力/数据资源与时间线（写入 paper_output_experiment_plan：title、summary、content_medium、meta）。严格 JSON，字段以用户消息 schema 为准（含 experiment_plan）。{{output_language_rule}}',
- 'Stage: experiment planning. Direction: {{direction}}. Target venue: {{venue}}. Use LiteratureReview and topic Corpus from the user message only; do not invent baselines or data. Output a review-ready plan (hypothesis, main experiment, baselines, metrics, ablations, resources/timeline) as experiment_plan JSON per user schema. {{output_language_rule}}')
-ON DUPLICATE KEY UPDATE
-  `model_config_id` = VALUES(`model_config_id`),
-  `prompt_code` = VALUES(`prompt_code`),
-  `prompt_name` = VALUES(`prompt_name`),
-  `prompt_desc` = VALUES(`prompt_desc`),
-  `llm_desc_zh` = VALUES(`llm_desc_zh`), `llm_desc_en` = VALUES(`llm_desc_en`);
 
 INSERT INTO `paper_ref_discipline` (`code`, `name`, `name_en`, `sort`) VALUES
   ('general', '跨学科通用', 'General & Interdisciplinary', 0),
@@ -961,9 +852,9 @@ ON DUPLICATE KEY UPDATE
   `name_en` = VALUES(`name_en`),
   `sort` = VALUES(`sort`);
 
-INSERT INTO `paper_ref_venue` (`code`, `name`, `venue_type`, `llm_description_codes`, `publisher`, `website_url`, `status`)
+INSERT INTO `paper_ref_venue` (`code`, `name`, `venue_type`, `strategy_profile_key`, `publisher`, `website_url`, `status`)
 SELECT v.`code`, v.`name`, v.`venue_type`,
-       CASE WHEN v.`profile_code` = 'ml_top3' THEN JSON_ARRAY(20003, 20004, 20005) ELSE JSON_ARRAY(20000, 20001, 20002) END,
+       CASE WHEN v.`profile_code` = 'ml_top3' THEN 'venue/ml_top3' ELSE 'venue/generic' END,
        v.`publisher`, v.`website_url`, 'active'
 FROM (
   /* --- ML 顶会 --- */
@@ -1084,40 +975,12 @@ FROM (
 ON DUPLICATE KEY UPDATE
   `name` = VALUES(`name`),
   `venue_type` = VALUES(`venue_type`),
-  `llm_description_codes` = VALUES(`llm_description_codes`),
+  `strategy_profile_key` = VALUES(`strategy_profile_key`),
   `publisher` = VALUES(`publisher`),
   `website_url` = VALUES(`website_url`),
   `status` = VALUES(`status`);
 
 UPDATE `paper_ref_venue` SET `sort` = `id`;
-
--- 阶段 JSON schema 见 Go 内 user message；环节话术正文在 paper_llm_description（template_topic）
-INSERT INTO `paper_llm_template_topic` (`stage_code`, `stage_name`, `llm_description_code`, `status`)
-SELECT 'default', '默认（全局兜底）', d.`description_code`, 'active'
-FROM `paper_llm_description` d
-WHERE d.`prompt_code` = 'template_topic' AND d.`prompt_desc` = 'default' LIMIT 1
-ON DUPLICATE KEY UPDATE
-  `stage_name` = VALUES(`stage_name`),
-  `llm_description_code` = VALUES(`llm_description_code`),
-  `status` = VALUES(`status`);
-
-INSERT INTO `paper_llm_template_topic` (`stage_code`, `stage_name`, `llm_description_code`, `status`)
-SELECT 'topic_generate', '选题生成包', d.`description_code`, 'active'
-FROM `paper_llm_description` d
-WHERE d.`prompt_code` = 'template_topic' AND d.`prompt_desc` = 'generate_ideas' LIMIT 1
-ON DUPLICATE KEY UPDATE
-  `stage_name` = VALUES(`stage_name`),
-  `llm_description_code` = VALUES(`llm_description_code`),
-  `status` = VALUES(`status`);
-
-INSERT INTO `paper_llm_template_topic` (`stage_code`, `stage_name`, `llm_description_code`, `status`)
-SELECT 'topic_audit', '选题审计', d.`description_code`, 'active'
-FROM `paper_llm_description` d
-WHERE d.`prompt_code` = 'template_topic' AND d.`prompt_desc` = 'audit' LIMIT 1
-ON DUPLICATE KEY UPDATE
-  `stage_name` = VALUES(`stage_name`),
-  `llm_description_code` = VALUES(`llm_description_code`),
-  `status` = VALUES(`status`);
 
 INSERT INTO `paper_literature_platform` (`code`, `name`, `api_kind`, `base_url`, `auth_type`, `default_config`, `config_schema`, `sort`, `default_selected`) VALUES
   ('arxiv', 'arXiv', 'rest', 'https://export.arxiv.org/api/query', 'none', NULL, NULL, 1, 1),
@@ -1144,10 +1007,11 @@ ON DUPLICATE KEY UPDATE
 
 -- 11.1 Claude 端点（勿重复 INSERT 多条相同 label，除非手动清理）
 INSERT INTO `paper_llm_model_config` (
-  `label`, `provider_code`, `model_name`, `api_base_url`, `api_key`,
+  `label`, `scope`, `provider_code`, `model_name`, `api_base_url`, `api_key`,
   `timeout_ms`, `max_retries`, `supports_vision`, `context_window_hint`, `status`
 ) VALUES (
   'Claude Sonnet（平台默认）',
+  'platform_delegate',
   'anthropic',
   'claude-sonnet-5-5',
   'https://api.anthropic.com',
@@ -1159,17 +1023,32 @@ INSERT INTO `paper_llm_model_config` (
   'active'
 );
 
--- 11.2 选题 template_topic 话术 → 同一 Claude（model_config_id 写在 paper_llm_description）
-SET @paper_llm_model_id = (
+INSERT INTO `paper_strategy_package` (`code`, `name`, `provider_kind`, `manifest_version`, `capabilities`, `status`)
+VALUES
+  ('builtin', '内置（过渡内联）', 'inline', '1', JSON_ARRAY('topic.stage.default', 'topic.stage.topic_generate', 'topic.stage.topic_audit', 'topic.stage.experiment_plan'), 'active'),
+  ('aris', 'ARIS 策略服务', 'http', NULL, NULL, 'disabled')
+ON DUPLICATE KEY UPDATE `name` = VALUES(`name`), `status` = VALUES(`status`);
+
+SET @pkg_builtin := (SELECT `id` FROM `paper_strategy_package` WHERE `code` = 'builtin' LIMIT 1);
+SET @paper_llm_model_id := (
   SELECT c.`id` FROM `paper_llm_model_config` c
-  WHERE c.`provider_code` = 'anthropic' AND c.`status` = 'active'
-  ORDER BY c.`id` DESC LIMIT 1
+  WHERE c.`status` = 'active'
+  ORDER BY (c.`provider_code` = 'anthropic') DESC, c.`id` DESC
+  LIMIT 1
 );
 
-UPDATE `paper_llm_description` SET `model_config_id` = @paper_llm_model_id
-WHERE `prompt_code` = 'template_topic' AND @paper_llm_model_id IS NOT NULL;
-
--- 11.3 环节映射见上方 paper_llm_template_topic seed
+INSERT INTO `paper_strategy_route` (
+  `behavior_key`, `module`, `action`, `strategy_package_id`, `capability_id`, `default_model_config_id`, `status`
+) VALUES
+  ('topic.stage.default', 'topic_discovery', 'default', @pkg_builtin, 'topic.stage.default', IFNULL(@paper_llm_model_id, 0), 'active'),
+  ('topic.stage.topic_generate', 'topic_discovery', 'topic_generate', @pkg_builtin, 'topic.stage.topic_generate', IFNULL(@paper_llm_model_id, 0), 'active'),
+  ('topic.stage.topic_audit', 'topic_discovery', 'topic_audit', @pkg_builtin, 'topic.stage.topic_audit', IFNULL(@paper_llm_model_id, 0), 'active'),
+  ('topic.stage.experiment_plan', 'experiment_plan', 'experiment_plan', @pkg_builtin, 'topic.stage.experiment_plan', IFNULL(@paper_llm_model_id, 0), 'active'),
+  ('topic.discovery.run', 'topic_discovery', 'run', @pkg_builtin, 'topic.discovery.run', IFNULL(@paper_llm_model_id, 0), 'active')
+ON DUPLICATE KEY UPDATE
+  `strategy_package_id` = VALUES(`strategy_package_id`),
+  `default_model_config_id` = VALUES(`default_model_config_id`),
+  `status` = VALUES(`status`);
 
 -- ---------------------------------------------------------------------------
 -- 升级脚本（已有库执行一次即可）

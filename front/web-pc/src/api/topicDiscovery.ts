@@ -18,9 +18,6 @@ export type TopicDiscoveryFormOptionsResponse = {
   audit_levels: Array<{
     code: string
     label: string
-    llm_description_citation_check_code: number
-    llm_description_claim_check_code: number
-    llm_description_kill_check_code: number
     is_default?: boolean
   }>
   literature_sources?: Array<{

@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-
-	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
 )
 
 func compactDirectionForPrompt(input topicRunInput) string {
@@ -271,7 +269,6 @@ func (s *TopicDiscoveryRunService) buildAuditUserExtra(
 		}
 		return "\n【新颖性摘要 summary_text】\n" + noveltySummary
 	}()
-	gateBlock := auditGateInstructionsBlock(ctx, s.catalog, entity.LLMSceneTopic, input.AuditLevel, locale)
 	if locale == "en" {
 		return fmt.Sprintf(`Audit round %d/%d
 Target venue: %s
@@ -298,7 +295,6 @@ Audit level: %s
 2. Assess whether novelty supports the ideas; flag contradictions or over-claims.
 3. Reviewer-style audit: unsupported claims, missing baselines/comparisons, unclear contributions.
 4. Also produce a literature review (Markdown in content_medium): synthesize Corpus and vetted ideas/novelty; pick thematic/chronological/method for structure; citations must use Corpus ref_id.
-%s
 Return ONLY valid JSON (final round must include literature_review):
 {
   "audit": {
@@ -329,7 +325,6 @@ Return ONLY valid JSON (final round must include literature_review):
 			ideasJSON,
 			noveltyJSON,
 			noveltyExtra,
-			gateBlock,
 			jsonStringFieldsLocaleHint(locale),
 		)
 	}
@@ -358,7 +353,6 @@ Return ONLY valid JSON (final round must include literature_review):
 2. 新颖性结论是否支撑 idea，有无与文献/方向矛盾或过度声称。
 3. 以严格审稿人视角给出审查结论：论断是否有文献支持、是否缺少基线/对照、贡献是否清晰；列出 unsupported claims、缺失基线/对照、贡献含糊等问题。
 4. **同时生成文献综述**（Markdown 正文）：综合 Corpus 与已通过审查的 idea/novelty，结构清晰（thematic/chronological/method 择一写入 structure），引用须使用 Corpus 中的 ref_id；正文写入 content_medium。
-%s
 输出 ONLY valid JSON（最后一轮须含 literature_review）：
 {
   "audit": {
@@ -389,7 +383,6 @@ Return ONLY valid JSON (final round must include literature_review):
 		ideasJSON,
 		noveltyJSON,
 		noveltyExtra,
-		gateBlock,
 		jsonStringFieldsLocaleHint(locale),
 	)
 }
@@ -410,7 +403,6 @@ func (s *TopicDiscoveryRunService) buildTopicAuditOnlyUserExtra(
 	if refsLine == "" {
 		refsLine = "（无）"
 	}
-	gateBlock := auditGateInstructionsBlock(ctx, s.catalog, entity.LLMSceneTopic, input.AuditLevel, locale)
 	if locale == "en" {
 		return fmt.Sprintf(`Audit round %d/%d (generate ↔ audit iteration)
 Target venue: %s
@@ -432,7 +424,6 @@ Audit level: %s
 1. Apply citation, claim, and kill gates to the entire bundle; tag each issue with gate=citation|claim|kill and severity=blocker|major|minor.
 2. If experiment_plan is null, skip claim checks that require experiments.
 3. Set audit.passed true only when no blocker-level issues remain.
-%s
 Return ONLY valid JSON:
 {
   "audit": {
@@ -450,7 +441,6 @@ Return ONLY valid JSON:
 			refsLine,
 			briefText,
 			generateBundleJSON,
-			gateBlock,
 			jsonStringFieldsLocaleHint(locale),
 		)
 	}
@@ -474,7 +464,6 @@ Return ONLY valid JSON:
 1. 对生成包全文适用引用、论断、驳论三门禁；每条 issue 标注 gate 与 severity。
 2. experiment_plan 为 null 时，跳过依赖实验设计的论断项。
 3. 仅当无 blocker 级 issue 时设 audit.passed 为 true。
-%s
 输出 ONLY valid JSON：
 {
   "audit": {
@@ -492,7 +481,6 @@ Return ONLY valid JSON:
 		refsLine,
 		briefText,
 		generateBundleJSON,
-		gateBlock,
 		jsonStringFieldsLocaleHint(locale),
 	)
 }

@@ -37,8 +37,14 @@ func NewExperimentPlanService(
 	manuscripts repository.PaperManuscriptRepo,
 	llm *LLMChatService,
 	llmRepo repository.PaperLLMRepo,
+	strategyRepo repository.PaperStrategyRepo,
 ) *ExperimentPlanService {
-	runner := &TopicDiscoveryRunService{llm: llm, llmRepo: llmRepo, manuscripts: manuscripts}
+	runner := &TopicDiscoveryRunService{
+		llm:          llm,
+		llmRepo:      llmRepo,
+		manuscripts:  manuscripts,
+		strategyRepo: strategyRepo,
+	}
 	return &ExperimentPlanService{
 		reviews:     reviews,
 		plans:       plans,

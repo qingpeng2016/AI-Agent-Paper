@@ -14,7 +14,6 @@ type PaperRefCatalogRepo interface {
 	ListAuditLevels(ctx context.Context, scene string) ([]entity.PaperLLMConstraintGate, error)
 	FindExecutionIntensityByCode(ctx context.Context, code string) (*entity.PaperExecIntensityTopic, error)
 	FindAuditLevelByCode(ctx context.Context, scene, code string) (*entity.PaperLLMConstraintGate, error)
-	FindLLMDescriptionByCode(ctx context.Context, code uint64) (*entity.PaperLLMDescription, error)
 	ListActiveVenues(ctx context.Context) ([]entity.PaperRefVenue, error)
 	FindVenueByCode(ctx context.Context, code string) (*entity.PaperRefVenue, error)
 	FindVenueByID(ctx context.Context, id uint64) (*entity.PaperRefVenue, error)

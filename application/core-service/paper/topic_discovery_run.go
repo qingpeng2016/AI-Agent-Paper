@@ -67,9 +67,10 @@ type TopicDiscoveryRunService struct {
 	expPlans    repository.PaperOutputExperimentPlanRepo
 	catalog     repository.PaperRefCatalogRepo
 	litSource   repository.PaperLiteraturePlatformRepo
-	litSearch   *LiteratureSearchService
-	llmRepo     repository.PaperLLMRepo
-	llm         *LLMChatService
+	litSearch    *LiteratureSearchService
+	llmRepo      repository.PaperLLMRepo
+	strategyRepo repository.PaperStrategyRepo
+	llm          *LLMChatService
 }
 
 func NewTopicDiscoveryRunService(
@@ -81,18 +82,20 @@ func NewTopicDiscoveryRunService(
 	litSource repository.PaperLiteraturePlatformRepo,
 	litSearch *LiteratureSearchService,
 	llmRepo repository.PaperLLMRepo,
+	strategyRepo repository.PaperStrategyRepo,
 	llm *LLMChatService,
 ) *TopicDiscoveryRunService {
 	return &TopicDiscoveryRunService{
-		manuscripts: manuscripts,
-		steps:       steps,
-		litReviews:  litReviews,
-		expPlans:    expPlans,
-		catalog:     catalog,
-		litSource:   litSource,
-		litSearch:   litSearch,
-		llmRepo:     llmRepo,
-		llm:         llm,
+		manuscripts:  manuscripts,
+		steps:        steps,
+		litReviews:   litReviews,
+		expPlans:     expPlans,
+		catalog:      catalog,
+		litSource:    litSource,
+		litSearch:    litSearch,
+		llmRepo:      llmRepo,
+		strategyRepo: strategyRepo,
+		llm:          llm,
 	}
 }
 
@@ -298,9 +301,6 @@ func (s *TopicDiscoveryRunService) prepareRun(ctx context.Context, userID uint, 
 	keywords, description, direction, ok := normalizeTopicDiscoveryInput(req)
 	if !ok {
 		return topicRunInput{}, errorx.ErrParamsError
-	}
-	if len(req.SourceCodes) == 0 {
-		return topicRunInput{}, errorx.ErrParamsError.WithDetail("请至少选择一个文献来源")
 	}
 	intensityCode := strings.TrimSpace(req.Intensity)
 	if intensityCode == "" {
@@ -649,11 +649,13 @@ func (s *TopicDiscoveryRunService) stageContext(ctx context.Context, userID uint
 }
 
 type stageLLMResolve struct {
-	model       *entity.PaperLLMModelConfig
-	defPrompt   *entity.PaperLLMPromptTemplate
-	stagePrompt *entity.PaperLLMPromptTemplate
-	system      string
-	userPrefix  string
+	model          *entity.PaperLLMModelConfig
+	route          *entity.PaperStrategyRoute
+	behaviorKey    string
+	capabilityID   string
+	strategyPkgID  uint64
+	system         string
+	userPrefix     string
 }
 
 func (s *TopicDiscoveryRunService) contentLocaleForStep(ctx context.Context, step *entity.PaperOutputTopicStep) string {
@@ -767,13 +769,20 @@ func (s *TopicDiscoveryRunService) persistLLMCallLog(
 		id := resolved.model.ID
 		modelCfgID = &id
 	}
-	var promptTplID *uint
-	if resolved.stagePrompt != nil && resolved.stagePrompt.ID > 0 {
-		id := resolved.stagePrompt.ID
-		promptTplID = &id
-	} else if resolved.defPrompt != nil && resolved.defPrompt.ID > 0 {
-		id := resolved.defPrompt.ID
-		promptTplID = &id
+	var behaviorKey *string
+	if strings.TrimSpace(resolved.behaviorKey) != "" {
+		bk := resolved.behaviorKey
+		behaviorKey = &bk
+	}
+	var strategyPkgID *uint64
+	if resolved.strategyPkgID > 0 {
+		id := resolved.strategyPkgID
+		strategyPkgID = &id
+	}
+	var capabilityID *string
+	if strings.TrimSpace(resolved.capabilityID) != "" {
+		cid := resolved.capabilityID
+		capabilityID = &cid
 	}
 	var promptTok, completionTok *int
 	if usage.PromptTokens > 0 {
@@ -794,11 +803,13 @@ func (s *TopicDiscoveryRunService) persistLLMCallLog(
 		respPayload["error"] = callErr.Error()
 	}
 	row := &entity.PaperLLMCallLog{
-		ManuscriptID:     manuscriptID,
-		StageCode:        &stage,
-		ModelConfigID:    modelCfgID,
-		PromptTemplateID: promptTplID,
-		ModelName:        resolved.model.ModelName,
+		ManuscriptID:      manuscriptID,
+		StageCode:         &stage,
+		BehaviorKey:       behaviorKey,
+		StrategyPackageID: strategyPkgID,
+		CapabilityID:      capabilityID,
+		ModelConfigID:     modelCfgID,
+		ModelName:         resolved.model.ModelName,
 		RequestJSON:      mustJSON(reqPayload),
 		ResponseJSON:     mustJSON(respPayload),
 		PromptTokens:     promptTok,
@@ -812,44 +823,60 @@ func (s *TopicDiscoveryRunService) persistLLMCallLog(
 
 func (s *TopicDiscoveryRunService) resolveStageLLM(ctx context.Context, stageCode string, vars map[string]string, locale string) (*stageLLMResolve, error) {
 	locale = NormalizeContentLanguage(locale)
-	defPrompt, _ := s.llmRepo.GetActivePromptByStage(ctx, "default")
-	stagePrompt, _ := s.llmRepo.GetActivePromptByStage(ctx, stageCode)
-	if stagePrompt == nil && stageCode == topicLLMStageGenerate {
-		stagePrompt, _ = s.llmRepo.GetActivePromptByStage(ctx, "generate_ideas")
+	stageBehavior := behaviorKeyForTopicStage(stageCode)
+	route, err := s.resolveStrategyRoute(ctx, stageBehavior)
+	if err != nil {
+		return nil, err
 	}
-	if stagePrompt == nil && stageCode == topicLLMStageAudit {
-		stagePrompt, _ = s.llmRepo.GetActivePromptByStage(ctx, "audit")
+	if route == nil {
+		return nil, errorx.ErrLLMNotConfigured.WithDetail("缺少 paper_strategy_route（behavior_key=" + stageBehavior + "）")
 	}
-	modelConfigID := modelConfigIDFromTopicPrompts(stagePrompt, defPrompt)
+	pkg := route.Package
+	if pkg == nil && s.strategyRepo != nil {
+		pkg, _ = s.strategyRepo.FindPackageByID(ctx, route.StrategyPackageID)
+	}
+	if pkg != nil && pkg.ProviderKind == entity.StrategyProviderHTTP {
+		return nil, errorx.ErrLLMNotConfigured.WithDetail(
+			"策略包 " + pkg.Code + " 为 http 远程服务，尚未接入 Invoke（behavior_key=" + stageBehavior + "）",
+		)
+	}
+	modelConfigID := modelConfigIDFromRoute(route)
 	model, err := s.llmRepo.ResolveActiveModel(ctx, modelConfigID)
 	if err != nil {
 		return nil, err
 	}
 	if model == nil {
 		return nil, errorx.ErrLLMNotConfigured.WithDetail(
-			"缺少 paper_llm_model_config（template_topic description.model_config_id=" +
+			"缺少 paper_llm_model_config（route.default_model_config_id=" +
 				fmt.Sprintf("%d", modelConfigID) + " 且无 active 默认端点）",
 		)
 	}
 	renderVars := mergePromptVars(vars, locale)
-	system := ""
-	if defPrompt != nil {
-		system = renderPromptTemplate(defPrompt.TemplateBodyForLocale(locale), renderVars)
-	}
-	userTmpl := ""
-	if stagePrompt != nil {
-		userTmpl = renderPromptTemplate(stagePrompt.TemplateBodyForLocale(locale), renderVars)
-	}
+	system := renderPromptTemplate(builtinSystemPrompt(locale), renderVars)
+	userTmpl := renderPromptTemplate(builtinStageUserTemplate(stageCode, locale), renderVars)
 	if userTmpl == "" {
 		userTmpl = stageCode
 	}
+	capID := route.CapabilityID
+	if capID == "" {
+		capID = stageBehavior
+	}
 	return &stageLLMResolve{
-		model:       model,
-		defPrompt:   defPrompt,
-		stagePrompt: stagePrompt,
-		system:      system,
-		userPrefix:  userTmpl,
+		model:         model,
+		route:         route,
+		behaviorKey:   stageBehavior,
+		capabilityID:  capID,
+		strategyPkgID: route.StrategyPackageID,
+		system:        system,
+		userPrefix:    userTmpl,
 	}, nil
+}
+
+func (s *TopicDiscoveryRunService) resolveStrategyRoute(ctx context.Context, behaviorKey string) (*entity.PaperStrategyRoute, error) {
+	if s == nil || s.strategyRepo == nil {
+		return nil, nil
+	}
+	return s.strategyRepo.FindActiveRouteByBehaviorKey(ctx, behaviorKey)
 }
 
 func (s *TopicDiscoveryRunService) reloadView(ctx context.Context, userID uint, runVersion int) (*response.TopicDiscoveryRunView, error) {

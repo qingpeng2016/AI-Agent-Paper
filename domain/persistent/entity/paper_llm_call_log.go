@@ -10,8 +10,11 @@ type PaperLLMCallLog struct {
 	ID                 uint64         `gorm:"primaryKey;column:id"`
 	ManuscriptID       uint64         `gorm:"column:manuscript_id;not null"`
 	StageCode          *string        `gorm:"column:stage_code;size:64"`
+	BehaviorKey        *string        `gorm:"column:behavior_key;size:128"`
+	StrategyPackageID  *uint64        `gorm:"column:strategy_package_id"`
+	CapabilityID       *string        `gorm:"column:capability_id;size:128"`
+	ExternalTraceID    *string        `gorm:"column:external_trace_id;size:128"`
 	ModelConfigID      *uint          `gorm:"column:model_config_id"`
-	PromptTemplateID   *uint          `gorm:"column:prompt_template_id"`
 	ModelName          string         `gorm:"column:model_name;size:128;not null"`
 	RequestJSON        datatypes.JSON `gorm:"column:request_json;not null"`
 	ResponseJSON       datatypes.JSON `gorm:"column:response_json;not null"`

@@ -96,21 +96,6 @@ func (r *PaperRefCatalogImpl) FindAuditLevelByCode(ctx context.Context, scene, c
 	return &row, nil
 }
 
-func (r *PaperRefCatalogImpl) FindLLMDescriptionByCode(ctx context.Context, code uint64) (*entity.PaperLLMDescription, error) {
-	if code == 0 {
-		return nil, nil
-	}
-	var row entity.PaperLLMDescription
-	err := r.db.WithContext(ctx).Where("description_code = ? AND status = ?", code, "active").First(&row).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &row, nil
-}
-
 func (r *PaperRefCatalogImpl) ListActiveVenues(ctx context.Context) ([]entity.PaperRefVenue, error) {
 	var rows []entity.PaperRefVenue
 	err := r.db.WithContext(ctx).

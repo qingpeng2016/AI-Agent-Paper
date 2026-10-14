@@ -9,6 +9,7 @@ import (
 type PaperLLMModelConfig struct {
 	ID                uint           `gorm:"primaryKey;column:id"`
 	Label             string         `gorm:"column:label;size:128;not null"`
+	Scope             string         `gorm:"column:scope;size:32;not null;default:platform_delegate"`
 	ProviderCode      string         `gorm:"column:provider_code;size:32;not null"`
 	ModelName         string         `gorm:"column:model_name;size:128;not null"`
 	APIBaseURL        string         `gorm:"column:api_base_url;size:512;not null"`

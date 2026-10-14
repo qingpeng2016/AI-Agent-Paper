@@ -516,10 +516,6 @@ function onLitReviewGenerateUserLiteraturePicked(ids: string[]) {
 
 async function submitLitReviewGenerateRun() {
   if (!litReviewGeneratePending.value) return
-  if (!litReviewGenerateForm.sourceCodes.length) {
-    ElMessage.warning('请至少选择一个文献来源')
-    return
-  }
   litReviewGenerateSubmitting.value = true
   try {
     await new Promise((r) => setTimeout(r, 400))
@@ -1317,7 +1313,7 @@ defineExpose({
             </p>
             <div class="paper-message-box__form wf-lit-run-form">
               <div class="paper-field paper-field--block">
-                <span class="paper-label">文献来源 <em class="req">*</em></span>
+                <span class="paper-label">文献来源</span>
                 <div class="paper-check-group wf-lit-run-check-group">
                   <label
                     v-for="src in LITERATURE_SOURCE_OPTIONS"
@@ -1405,7 +1401,7 @@ defineExpose({
             <button
               type="button"
               class="paper-btn-primary wf-lit-delete-dialog-btn"
-              :disabled="litReviewGenerateSubmitting || !litReviewGenerateForm.sourceCodes.length"
+              :disabled="litReviewGenerateSubmitting"
               @click="submitLitReviewGenerateRun"
             >
               {{ litReviewGenerateSubmitting ? '运行中…' : '运行' }}
