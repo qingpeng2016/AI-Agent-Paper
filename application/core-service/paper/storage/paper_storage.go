@@ -9,12 +9,21 @@ import (
 )
 
 const (
+	ArisInvokeStorageSubdir      = "aris-invoke"
 	PaperFilesStorageSubdir      = "paper-files"
 	paperFilesStorageSubdir      = PaperFilesStorageSubdir
 	ExperimentDataStorageSubdir  = "experiment-data"
 	experimentDataStorageSubdir  = ExperimentDataStorageSubdir
 	submissionDataStorageSubdir  = "submission-data"
 )
+
+// ArisInvokeWorkRoot 本地 ARIS/skill 单次 invoke 工作区根（默认 storage/aris-invoke）。
+func ArisInvokeWorkRoot() string {
+	if v := strings.TrimSpace(os.Getenv("PAPER_ARIS_WORK_ROOT")); v != "" {
+		return v
+	}
+	return StorageLocalAbsPath(ArisInvokeStorageSubdir)
+}
 
 // StorageRoot 项目本地 storage 根目录（相对工作目录）。
 func StorageRoot() string {

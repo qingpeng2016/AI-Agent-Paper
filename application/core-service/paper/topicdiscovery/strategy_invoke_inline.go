@@ -71,7 +71,7 @@ func (s *TopicDiscoveryRunService) requireTopicStrategyRoute(ctx context.Context
 	return route, nil
 }
 
-// invokeTopicDiscoveryBehavior 经 route 调用本地 ARIS CLI（paper_strategy_invoke.py + skill）。
+// invokeTopicDiscoveryBehavior 经 route 调用本地 ARIS CLI（Go 落盘 + claude/aris + skill）。
 func (s *TopicDiscoveryRunService) invokeTopicDiscoveryBehavior(
 	ctx context.Context,
 	step *entity.PaperOutputTopicStep,

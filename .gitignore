@@ -29,6 +29,8 @@ go.work.sum
 /log/*
 /storage/
 /storage/*
+/inout/
+/inout/*
 *.log
 *.txt
 !deployment.yaml

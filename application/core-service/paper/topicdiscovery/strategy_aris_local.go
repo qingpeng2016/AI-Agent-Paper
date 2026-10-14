@@ -1,12 +1,10 @@
 package topicdiscovery
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -17,39 +15,6 @@ import (
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
 	"gorm.io/datatypes"
 )
-
-
-type arisInvokePayload struct {
-	StrategyInvokeRequest
-	PlatformUserPrompt string `json:"platform_user_prompt,omitempty"`
-}
-
-type localARISInvokeStdout struct {
-	ResultJSON      json.RawMessage `json:"result_json"`
-	ExternalTraceID string          `json:"external_trace_id"`
-	RawText         string          `json:"raw_text"`
-	Error           string          `json:"error"`
-}
-
-func paperARISInvokeScriptPath() string {
-	if p := strings.TrimSpace(os.Getenv("PAPER_ARIS_INVOKE_SCRIPT")); p != "" {
-		return p
-	}
-	candidates := []string{
-		"libs/aris/tools/paper_strategy_invoke.py",
-		filepath.Join("AI-Agent-Paper", "libs/aris/tools/paper_strategy_invoke.py"),
-	}
-	if wd, err := os.Getwd(); err == nil {
-		candidates = append(candidates, filepath.Join(wd, "libs/aris/tools/paper_strategy_invoke.py"))
-	}
-	for _, c := range candidates {
-		if st, err := os.Stat(c); err == nil && !st.IsDir() {
-			abs, _ := filepath.Abs(c)
-			return abs
-		}
-	}
-	return candidates[0]
-}
 
 func paperARISSkillsRoot() string {
 	if p := strings.TrimSpace(os.Getenv("PAPER_ARIS_SKILLS_ROOT")); p != "" {
@@ -71,68 +36,35 @@ func (s *TopicDiscoveryRunService) invokeLocalARIS(
 	route *entity.PaperStrategyRoute,
 	userExtra string,
 ) (json.RawMessage, llm.LLMUsage, error) {
-	script := paperARISInvokeScriptPath()
-	if st, err := os.Stat(script); err != nil || st.IsDir() {
-		return nil, llm.LLMUsage{}, errorx.ErrLLMNotConfigured.WithDetail(
-			"本地 ARIS 脚本不存在: " + script + "（设置 PAPER_ARIS_INVOKE_SCRIPT）",
-		)
-	}
-
-	payload := arisInvokePayload{
-		StrategyInvokeRequest: req,
-		PlatformUserPrompt:    strings.TrimSpace(userExtra),
-	}
-	stdinJSON, err := json.Marshal(payload)
-	if err != nil {
-		return nil, llm.LLMUsage{}, err
-	}
-
-	timeout := 3600 * time.Second
-	if v := strings.TrimSpace(os.Getenv("PAPER_ARIS_INVOKE_TIMEOUT_SEC")); v != "" {
-		if sec, parseErr := parsePositiveInt(v); parseErr == nil && sec > 0 {
-			timeout = time.Duration(sec) * time.Second
-		}
-	}
-	runCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-
-	cmd := exec.CommandContext(runCtx, "python3", script)
-	cmd.Stdin = bytes.NewReader(stdinJSON)
-	cmd.Env = os.Environ()
-	if root := paperARISSkillsRoot(); root != "" {
-		cmd.Env = append(cmd.Env, "PAPER_ARIS_SKILLS_ROOT="+root)
-	}
+	reqJSON, _ := json.Marshal(map[string]any{
+		"behavior_key":           req.BehaviorKey,
+		"capability_id":          req.CapabilityID,
+		"context":                req.Context,
+		"options":                req.Options,
+		"platform_user_prompt":   strings.TrimSpace(userExtra),
+	})
 
 	start := time.Now()
-	out, err := cmd.Output()
+	out, err := runLocalStrategyInvoke(ctx, req, userExtra)
 	latencyMs := int(time.Since(start).Milliseconds())
 	if err != nil {
-		if ee, ok := err.(*exec.ExitError); ok && len(ee.Stderr) > 0 {
-			err = fmt.Errorf("%w: %s", err, strings.TrimSpace(string(ee.Stderr)))
-		}
-		s.persistARISInvokeLog(ctx, step, route, req, string(stdinJSON), "", latencyMs, err)
+		s.persistARISInvokeLog(ctx, step, route, req, string(reqJSON), "", latencyMs, err)
 		return nil, llm.LLMUsage{}, errorx.ErrLLMCallFailed.WithDetail(err.Error())
 	}
-
-	var parsed localARISInvokeStdout
-	if err := json.Unmarshal(out, &parsed); err != nil {
-		s.persistARISInvokeLog(ctx, step, route, req, string(stdinJSON), string(out), latencyMs, err)
-		return nil, llm.LLMUsage{}, errorx.ErrLLMCallFailed.WithDetail("ARIS stdout 非 JSON: " + err.Error())
-	}
-	if strings.TrimSpace(parsed.Error) != "" {
-		err = fmt.Errorf("%s", parsed.Error)
-		s.persistARISInvokeLog(ctx, step, route, req, string(stdinJSON), string(out), latencyMs, err)
-		return nil, llm.LLMUsage{}, errorx.ErrLLMCallFailed.WithDetail(parsed.Error)
-	}
-	if len(parsed.ResultJSON) == 0 {
+	if out == nil || len(out.ResultJSON) == 0 {
 		err = fmt.Errorf("ARIS 未返回 result_json")
-		s.persistARISInvokeLog(ctx, step, route, req, string(stdinJSON), string(out), latencyMs, err)
+		s.persistARISInvokeLog(ctx, step, route, req, string(reqJSON), "", latencyMs, err)
 		return nil, llm.LLMUsage{}, errorx.ErrLLMCallFailed.WithDetail(err.Error())
 	}
 
+	respJSON, _ := json.Marshal(map[string]any{
+		"result_json":         json.RawMessage(out.ResultJSON),
+		"external_trace_id":   out.ExternalTraceID,
+		"raw_text":            out.RawText,
+	})
 	stageCode := topicStageCodeFromBehaviorKey(req.BehaviorKey)
-	result := stageResultJSONFromObject(stageCode, parsed.ResultJSON, parsed.RawText)
-	s.persistARISInvokeLog(ctx, step, route, req, string(stdinJSON), string(out), latencyMs, nil)
+	result := stageResultJSONFromObject(stageCode, out.ResultJSON, out.RawText)
+	s.persistARISInvokeLog(ctx, step, route, req, string(reqJSON), string(respJSON), latencyMs, nil)
 	return result, llm.LLMUsage{}, nil
 }
 
