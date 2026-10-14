@@ -400,7 +400,7 @@ export const TOPIC_DISCOVERY_FLOW_STEPS: TopicFlowStepDef[] = [
   },
   {
     stageCode: 'topic_confirm',
-    label: '确认选题轮次',
+    label: '生成文献综述、实验方案',
     checkpointKey: 'topic_confirm_ready',
   },
 ]

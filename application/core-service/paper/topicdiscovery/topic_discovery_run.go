@@ -712,8 +712,9 @@ func (s *TopicDiscoveryRunService) buildRunView(manuscriptID uint64, runVersion 
 	for _, r := range rows {
 		st := strings.TrimSpace(r.Status)
 		sv := response.TopicDiscoveryStepView{
-			StageCode: r.StageCode,
-			Status:    st,
+			StageCode:       r.StageCode,
+			Status:          st,
+			ExecProgressPct: r.ExecProgressPct,
 		}
 		if len(r.InputParams) > 0 {
 			sv.InputParams = json.RawMessage(r.InputParams)

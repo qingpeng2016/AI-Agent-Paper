@@ -37,8 +37,11 @@ func (s *TopicDiscoveryRunService) stageBeginTopicDiscoveryAsync(
 	step.SummaryText = &sum
 	step.Status = "running"
 	step.CompletedAt = nil
+	step.ExecProgressPct = 0
 	meta := paperstep.LoadStepExtra(step)
 	meta["async_llm"] = true
+	delete(meta, "exec_progress_completed_calls")
+	delete(meta, "exec_progress_planned_calls")
 	step.Extra = jsonx.MustJSON(meta)
 	return s.steps.SaveStep(ctx, step)
 }
@@ -85,6 +88,8 @@ func (s *TopicDiscoveryRunService) RunTopicDiscoveryLLM(
 		finalAudit     map[string]any
 		passed         bool
 	)
+	plannedCalls := topicDiscoveryPlannedCalls(maxRounds)
+	completedCalls := 0
 
 	for round := 1; round <= maxRounds; round++ {
 		invokeCtx := s.buildTopicStrategyInvokeContext(
@@ -92,8 +97,15 @@ func (s *TopicDiscoveryRunService) RunTopicDiscoveryLLM(
 		)
 		genUser := buildTopicGenerateBundleUserMessage(input, ctxBlock, filesBlock, locale, round, maxRounds, prevBundle, prevAudit)
 		genReq := BuildTopicDiscoveryInvokeRequest(genRoute.BehaviorKey, genRoute.CapabilityID, input, invokeCtx)
+		if err := s.saveTopicDiscoveryExecProgress(ctx, step, completedCalls, plannedCalls, completedCalls == 0); err != nil {
+			return err
+		}
 		bundleRaw, genUsage, err := s.invokeTopicDiscoveryBehavior(ctx, step, genReq, genUser)
 		if err != nil {
+			return err
+		}
+		completedCalls++
+		if err := s.saveTopicDiscoveryExecProgress(ctx, step, completedCalls, plannedCalls, false); err != nil {
 			return err
 		}
 		totalUsage.PromptTokens += genUsage.PromptTokens
@@ -108,8 +120,15 @@ func (s *TopicDiscoveryRunService) RunTopicDiscoveryLLM(
 		invokeCtx.PrevBundle = bundleJSON
 		auditUser := s.buildTopicAuditOnlyUserExtra(ctx, userID, runVersion, input, round, maxRounds, locale, string(bundleJSON))
 		auditReq := BuildTopicDiscoveryInvokeRequest(auditRoute.BehaviorKey, auditRoute.CapabilityID, input, invokeCtx)
+		if err := s.saveTopicDiscoveryExecProgress(ctx, step, completedCalls, plannedCalls, false); err != nil {
+			return err
+		}
 		auditRaw, auditUsage, err := s.invokeTopicDiscoveryBehavior(ctx, step, auditReq, auditUser)
 		if err != nil {
+			return err
+		}
+		completedCalls++
+		if err := s.saveTopicDiscoveryExecProgress(ctx, step, completedCalls, plannedCalls, false); err != nil {
 			return err
 		}
 		totalUsage.PromptTokens += auditUsage.PromptTokens
@@ -178,6 +197,9 @@ func (s *TopicDiscoveryRunService) RunTopicDiscoveryLLM(
 	meta["awaiting_user_confirm"] = true
 	delete(meta, "async_llm")
 	meta["async_llm_done"] = true
+	meta["exec_progress_completed_calls"] = completedCalls
+	meta["exec_progress_planned_calls"] = plannedCalls
+	step.ExecProgressPct = 100
 	step.Extra = jsonx.MustJSON(meta)
 
 	done := time.Now()

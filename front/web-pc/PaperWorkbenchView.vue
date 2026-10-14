@@ -16,6 +16,7 @@ import {
   formatVenueTextFromCodes,
   inferVenueCodesFromText,
   isTopicRunTerminalCompleted,
+  topicConfirmLiteratureReviewId,
   type TopicDiscoveryRunResponse,
   type TopicDiscoveryStepDTO,
 } from '@/api/topicDiscovery'
@@ -110,7 +111,7 @@ const CHECKPOINT_COPY: Record<TopicCheckpointKey, Omit<TopicCheckpointView, 'key
     ],
   },
   topic_confirm_ready: {
-    title: '选择迭代轮次',
+    title: '生成文献综述、实验方案',
     lines: ['对比各轮审计结果、综述与实验方案后确认一轮写入产出表'],
   },
 }
@@ -218,6 +219,7 @@ function selectModule(id: PaperModuleId) {
 
 /** 文献综述「查看实验方案」：切模块并打开对应方案弹窗 */
 const pendingOpenExperimentPlanId = ref<string | null>(null)
+const pendingOpenLiteratureReviewId = ref<string | null>(null)
 
 function onNavigateModule(id: PaperModuleId, openExperimentPlanId?: string) {
   const planId = openExperimentPlanId?.trim()
@@ -227,6 +229,16 @@ function onNavigateModule(id: PaperModuleId, openExperimentPlanId?: string) {
 
 function onConsumedPendingExperimentPlan() {
   pendingOpenExperimentPlanId.value = null
+}
+
+function onConsumedPendingLiteratureReview() {
+  pendingOpenLiteratureReviewId.value = null
+}
+
+function openLiteratureReviewAfterTopicConfirm(data: TopicDiscoveryRunResponse) {
+  const reviewId = topicConfirmLiteratureReviewId(data)
+  pendingOpenLiteratureReviewId.value = reviewId
+  selectModule('literature-review')
 }
 
 const running = ref(false)
@@ -1163,7 +1175,14 @@ const TOPIC_STEP_RUNNING_HINT: Record<string, string> = {
 }
 
 function topicStepRunningHint(stageCode: string) {
-  return TOPIC_STEP_RUNNING_HINT[stageCode] ?? 'AI 模型运行中…'
+  const base = TOPIC_STEP_RUNNING_HINT[stageCode] ?? 'AI 模型运行中…'
+  if (stageCode !== 'topic_discovery') return base
+  const dto = topicDiscoveryApiRun.value?.steps.find((s) => s.stage_code === 'topic_discovery')
+  const pct = dto?.exec_progress_pct
+  if (typeof pct === 'number' && pct > 0) {
+    return `${base} ${pct}%`
+  }
+  return base
 }
 
 const TOPIC_RUN_POLL_MS = 1500
@@ -1805,7 +1824,6 @@ async function confirmTopicSelectedRound() {
   if (topicConfirmRoundLoading.value) return
   const token = topicRunToken.value
   topicConfirmRoundLoading.value = true
-  markTopicRunForCompletionPrompt()
   try {
     const data = await postTopicDiscoveryConfirmRound({
       manuscript_id: Number(msId),
@@ -1813,8 +1831,11 @@ async function confirmTopicSelectedRound() {
       selected_round: round,
     })
     if (token !== topicRunToken.value) return
+    topicRunAwaitingCompletionPrompt.value = false
     syncTopicRunUiAfterServer(msId, data)
-    ElMessage.success(`已确认第 ${round} 轮并写入产出表`)
+    await markLiteratureReviewDone(msId)
+    openLiteratureReviewAfterTopicConfirm(data)
+    ElMessage.success(`已确认第 ${round} 轮，正在打开文献综述…`)
   } catch (e) {
     if (token !== topicRunToken.value) return
     const msg = e instanceof Error ? e.message : '确认失败'
@@ -2712,7 +2733,7 @@ watch(
           <div class="paper-checkpoint-head">
             <span class="paper-checkpoint-pause" aria-hidden="true">⏸</span>
             <div>
-              <h3 class="paper-checkpoint-title">第三步 · 选择迭代轮次</h3>
+              <h3 class="paper-checkpoint-title">第三步 · 生成文献综述、实验方案</h3>
               <p class="paper-checkpoint-sub">
                 各轮含生成包与门禁审计；确认后将写入文献综述与实验方案表。
               </p>
@@ -2931,8 +2952,10 @@ watch(
         :manuscript-title="currentManuscript?.title ?? '未命名'"
         :manuscript-draft-version="currentManuscript?.draftVersion"
         :pending-open-experiment-plan-id="pendingOpenExperimentPlanId"
+        :pending-open-literature-review-id="pendingOpenLiteratureReviewId"
         @navigate-module="onNavigateModule"
         @consumed-pending-experiment-plan="onConsumedPendingExperimentPlan"
+        @consumed-pending-literature-review="onConsumedPendingLiteratureReview"
       />
       </div>
     </main>

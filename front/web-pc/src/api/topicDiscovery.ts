@@ -92,6 +92,8 @@ export type TopicDiscoveryLiteratureLink = {
 export type TopicDiscoveryStepDTO = {
   stage_code: string
   status: string
+  /** 0-100，topic_discovery 多轮 LLM 执行进度 */
+  exec_progress_pct?: number
   summary_text?: string
   input_params?: Record<string, unknown>
   result?: unknown
@@ -248,6 +250,26 @@ export type TopicDiscoveryRunResponse = {
 }
 
 /** 三步均 completed（或 run_status=completed）：终态，不再把 retrieve 输入回填到表单 */
+/** 第三步 confirm-round 写入后，从 topic_confirm 步 result/extra 取 literature_review_id */
+export function topicConfirmLiteratureReviewId(
+  data: TopicDiscoveryRunResponse | null | undefined,
+): string | null {
+  if (!data) return null
+  const step = data.steps.find((s) => s.stage_code === 'topic_confirm')
+  if (!step) return null
+  const fromObj = (obj: Record<string, unknown> | undefined): string | null => {
+    if (!obj) return null
+    const raw = obj.literature_review_id
+    if (typeof raw === 'number' && raw > 0) return String(raw)
+    if (typeof raw === 'string' && /^\d+$/.test(raw.trim()) && Number(raw) > 0) return raw.trim()
+    return null
+  }
+  return (
+    fromObj(step.result as Record<string, unknown> | undefined) ??
+    fromObj(step.extra as Record<string, unknown> | undefined)
+  )
+}
+
 export function isTopicRunTerminalCompleted(
   data: TopicDiscoveryRunResponse | null | undefined,
 ): boolean {

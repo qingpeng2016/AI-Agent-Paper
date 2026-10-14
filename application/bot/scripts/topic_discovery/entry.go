@@ -103,6 +103,7 @@ func (j *TopicDiscoveryJob) markFailed(ctx context.Context, step *entity.PaperOu
 	delete(meta, "async_llm")
 	step.Extra = papersvc.MustJSONStep(meta)
 	step.Status = "failed"
+	step.ExecProgressPct = 0
 	now := time.Now()
 	step.CompletedAt = &now
 	sum := "选题发现失败"

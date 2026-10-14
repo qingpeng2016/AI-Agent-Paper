@@ -3,9 +3,10 @@ package response
 import "encoding/json"
 
 type TopicDiscoveryStepView struct {
-	StageCode   string          `json:"stage_code"`
-	Status      string          `json:"status"`
-	SummaryText string          `json:"summary_text,omitempty"`
+	StageCode        string          `json:"stage_code"`
+	Status           string          `json:"status"`
+	ExecProgressPct  uint8           `json:"exec_progress_pct,omitempty"`
+	SummaryText      string          `json:"summary_text,omitempty"`
 	InputParams json.RawMessage `json:"input_params,omitempty"`
 	Result      json.RawMessage `json:"result,omitempty"`
 	Extra       json.RawMessage `json:"extra,omitempty"`

@@ -50,6 +50,7 @@ import PaperTopicUserLiteraturePickDialog from './PaperTopicUserLiteraturePickDi
 const emit = defineEmits<{
   navigateModule: [PaperModuleId, openExperimentPlanId?: string]
   consumedPendingExperimentPlan: []
+  consumedPendingLiteratureReview: []
 }>()
 
 const props = withDefaults(
@@ -59,12 +60,14 @@ const props = withDefaults(
     manuscriptTitle?: string
     manuscriptDraftVersion?: number
     pendingOpenExperimentPlanId?: string | null
+    pendingOpenLiteratureReviewId?: string | null
   }>(),
   {
     manuscriptId: '',
     manuscriptTitle: '未命名',
     manuscriptDraftVersion: undefined,
     pendingOpenExperimentPlanId: null,
+    pendingOpenLiteratureReviewId: null,
   },
 )
 const { moduleId, manuscriptId, manuscriptTitle, manuscriptDraftVersion } = toRefs(props)
@@ -372,8 +375,31 @@ async function reloadLiteratureReviews(opts?: { silent?: boolean; page?: number 
     if (seq === litReviewReloadSeq) {
       if (!silent) litReviewsLoading.value = false
       syncLitReviewPollTimer()
+      void tryOpenPendingLiteratureReview()
     }
   }
+}
+
+/** 列表「管理」：打开综述 + 实验方案 bundle（不走路由「生成」弹窗） */
+async function tryOpenPendingLiteratureReview() {
+  const reviewId = props.pendingOpenLiteratureReviewId?.trim()
+  if (moduleId.value !== 'literature-review' || !reviewId) return
+
+  let item = litReviewItems.value.find((it) => it.id === reviewId)
+  if (!item) {
+    const ms = manuscriptId.value
+    if (!ms) return
+    try {
+      item = await fetchLiteratureReviewDetail(ms, reviewId)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : '加载文献综述失败'
+      ElMessage.error(msg)
+      emit('consumedPendingLiteratureReview')
+      return
+    }
+  }
+  await openLitReviewBundleView(item)
+  emit('consumedPendingLiteratureReview')
 }
 
 function onLitReviewListPageChange(page: number) {
@@ -740,6 +766,13 @@ watch(
   () => props.pendingOpenExperimentPlanId,
   () => {
     void tryOpenPendingExperimentPlan()
+  },
+)
+
+watch(
+  () => props.pendingOpenLiteratureReviewId,
+  () => {
+    void tryOpenPendingLiteratureReview()
   },
 )
 
