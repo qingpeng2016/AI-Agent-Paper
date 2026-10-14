@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/qingpeng2016/ai-agent-paper/common/dederi/logger"
+	"github.com/qingpeng2016/ai-agent-paper/common/notification"
 	"go.uber.org/zap"
 )
 
@@ -44,7 +44,7 @@ func DownloadLiteraturePDF(ctx context.Context, pdfURL, absPath string) error {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		logger.WarnZ(ctx, "literature-pdf-download-http",
+		notification.SendErrorLog(ctx, "literature-pdf-download-http",
 			zap.String("pdf_url", pdfURL),
 			zap.Int("http_status", resp.StatusCode))
 		return fmt.Errorf("download http %d", resp.StatusCode)

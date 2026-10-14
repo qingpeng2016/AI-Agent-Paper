@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/go-resty/resty/v2"
-	"github.com/qingpeng2016/ai-agent-paper/common/dederi/logger"
+	"github.com/qingpeng2016/ai-agent-paper/common/notification"
 	"go.uber.org/zap"
 )
 
@@ -58,7 +58,7 @@ func LogLiteratureTransportError(ctx context.Context, platform, operation, reque
 	if err == nil {
 		return nil
 	}
-	logger.WarnZ(ctx, "literature-http-failure",
+	notification.SendErrorLog(ctx, "literature-http-failure",
 		zap.String("platform", platform),
 		zap.String("operation", operation),
 		zap.String("request_url", requestURL),
@@ -77,7 +77,7 @@ func NewLiteratureHTTPError(ctx context.Context, platform, operation, requestURL
 		status = resp.StatusCode()
 		preview = TruncateLiteratureBody(resp.Body(), literatureResponsePreviewMax)
 	}
-	logger.WarnZ(ctx, "literature-http-failure",
+	notification.SendErrorLog(ctx, "literature-http-failure",
 		zap.String("platform", platform),
 		zap.String("operation", operation),
 		zap.String("request_url", requestURL),

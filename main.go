@@ -64,7 +64,7 @@ func gracefulExit(container *dig.Container) {
 			return entry.Stop()
 		}
 		if err := container.Invoke(function); err != nil {
-			logger.ErrorZ(context.Background(), "stop bot failed", zap.String("error", err.Error()))
+			notification.SendErrorLog(context.Background(), "stop bot failed", zap.String("error", err.Error()))
 		}
 	} else {
 		var function any = func(router *rest.Router) {

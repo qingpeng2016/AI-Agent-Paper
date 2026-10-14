@@ -193,7 +193,7 @@ func (d *DistributedLock) Unlock(ctx context.Context) bool {
 		// 解锁错误（如网络错误、Redis 连接错误）是常见情况，不影响业务逻辑
 		// 因为锁已经过期或业务已完成，即使解锁失败也不影响数据一致性
 		// 只记录日志，不报警，避免频繁报警
-		logger.WarnZ(ctx, "redis unlock error",
+		notification.SendErrorLog(ctx, "redis unlock error",
 			zap.String("error", err.Error()),
 			zap.String("key", d.key),
 			zap.String("reason", "解锁失败，但锁可能已过期，不影响业务逻辑"))

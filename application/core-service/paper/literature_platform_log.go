@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"github.com/qingpeng2016/ai-agent-paper/common/dederi/logger"
+	"github.com/qingpeng2016/ai-agent-paper/common/notification"
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
 	restresponse "github.com/qingpeng2016/ai-agent-paper/domain/rest/response"
 	httpx "github.com/qingpeng2016/ai-agent-paper/infrastructure/http"
@@ -71,7 +72,7 @@ func logLiteraturePlatformRequest(ctx context.Context, scope LiteratureRetrieveL
 	}
 	if entry.Error != "" {
 		fields = append(fields, zap.String("error", entry.Error))
-		logger.WarnZ(ctx, "literature-platform-request", fields...)
+		notification.SendErrorLog(ctx, "literature-platform-request", fields...)
 		return
 	}
 	fields = append(fields, zap.Int("hit_count", literaturePlatformHitCount(entry.Response)))

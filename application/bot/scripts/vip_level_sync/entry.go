@@ -7,6 +7,7 @@ import (
 
 	"github.com/qingpeng2016/ai-agent-paper/application/core-service/invite_rebate"
 	"github.com/qingpeng2016/ai-agent-paper/common/dederi/logger"
+	"github.com/qingpeng2016/ai-agent-paper/common/notification"
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/repository"
 	"github.com/shopspring/decimal"
@@ -54,13 +55,13 @@ func (j *VipLevelSyncJob) Run(ctx context.Context) {
 
 	allUsers, err := j.listAllUsersForSync(ctx)
 	if err != nil {
-		logger.ErrorZ(ctx, "vip-level-sync-list-users-failed", zap.Error(err))
+		notification.SendErrorLog(ctx, "vip-level-sync-list-users-failed", zap.Error(err))
 		return
 	}
 
 	var scanned, upgraded int64
 	if err := j.runUsersByBatch(ctx, plan, allUsers, &scanned, &upgraded); err != nil {
-		logger.ErrorZ(ctx, "vip-level-sync-batch-failed", zap.Error(err))
+		notification.SendErrorLog(ctx, "vip-level-sync-batch-failed", zap.Error(err))
 		return
 	}
 
@@ -72,7 +73,7 @@ func (j *VipLevelSyncJob) Run(ctx context.Context) {
 func (j *VipLevelSyncJob) buildSyncPlan(ctx context.Context) (*vipSyncPlan, error) {
 	enabledTiers, err := j.vipConfigs.ListEnabled(ctx)
 	if err != nil {
-		logger.ErrorZ(ctx, "vip-level-sync-list-tiers-failed", zap.Error(err))
+		notification.SendErrorLog(ctx, "vip-level-sync-list-tiers-failed", zap.Error(err))
 		return nil, err
 	}
 	if len(enabledTiers) == 0 {
@@ -81,7 +82,7 @@ func (j *VipLevelSyncJob) buildSyncPlan(ctx context.Context) (*vipSyncPlan, erro
 	}
 	allTiers, err := j.vipConfigs.ListAll(ctx)
 	if err != nil {
-		logger.ErrorZ(ctx, "vip-level-sync-list-all-tiers-failed", zap.Error(err))
+		notification.SendErrorLog(ctx, "vip-level-sync-list-all-tiers-failed", zap.Error(err))
 		return nil, err
 	}
 	tierRankByID := make(map[uint]int, len(allTiers))
@@ -91,13 +92,13 @@ func (j *VipLevelSyncJob) buildSyncPlan(ctx context.Context) (*vipSyncPlan, erro
 
 	inviteCounts, err := j.users.CountInviteesGroupByInviter(ctx)
 	if err != nil {
-		logger.ErrorZ(ctx, "vip-level-sync-count-invitees-failed", zap.Error(err))
+		notification.SendErrorLog(ctx, "vip-level-sync-count-invitees-failed", zap.Error(err))
 		return nil, err
 	}
 
 	inviteePaidTotal, err := j.users.SumInviteeCompletedOrderAmountGroupByInviter(ctx)
 	if err != nil {
-		logger.ErrorZ(ctx, "vip-level-sync-sum-invitee-paid-failed", zap.Error(err))
+		notification.SendErrorLog(ctx, "vip-level-sync-sum-invitee-paid-failed", zap.Error(err))
 		return nil, err
 	}
 
@@ -150,7 +151,7 @@ func (j *VipLevelSyncJob) runUsersByBatch(
 				atomic.AddInt64(scanned, 1)
 				didUpgrade, err := j.syncOneUser(ctx, plan, row)
 				if err != nil {
-					logger.ErrorZ(ctx, "vip-level-sync-user-failed",
+					notification.SendErrorLog(ctx, "vip-level-sync-user-failed",
 						zap.Uint("user_id", row.ID),
 						zap.Error(err))
 					return

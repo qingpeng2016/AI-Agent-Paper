@@ -15,6 +15,18 @@ var (
 	once                      sync.Once
 )
 
+type skipErrorAlertKey struct{}
+
+// WithSkipErrorAlert 仅写日志、不推送 Lark（用于 notification 内部或告警链路自身失败，避免递归）。
+func WithSkipErrorAlert(ctx context.Context) context.Context {
+	return context.WithValue(ctx, skipErrorAlertKey{}, true)
+}
+
+func skipErrorAlert(ctx context.Context) bool {
+	v, _ := ctx.Value(skipErrorAlertKey{}).(bool)
+	return v
+}
+
 // GetGlobalNotificationManager 获取全局通知管理器单例
 func GetGlobalNotificationManager() *NotificationManager {
 	once.Do(func() {
@@ -24,6 +36,13 @@ func GetGlobalNotificationManager() *NotificationManager {
 }
 
 func SendErrorLog(ctx context.Context, msg string, fields ...zap.Field) {
+	if !skipErrorAlert(ctx) {
+		sendErrorLogAlert(ctx, msg, fields...)
+	}
+	logger.ErrorZ(ctx, msg, fields...)
+}
+
+func sendErrorLogAlert(ctx context.Context, msg string, fields ...zap.Field) {
 	// 构建有序的报警字段列表
 	var alertFieldList []FieldPair
 
@@ -90,7 +109,4 @@ func SendErrorLog(ctx context.Context, msg string, fields ...zap.Field) {
 	// 发送错误报警（直接传递有序字段列表）
 	nm := GetGlobalNotificationManager()
 	nm.SendErrorAlertWithOrder(ctx, msg, alertFieldList)
-
-	// 然后输出日志
-	logger.ErrorZ(ctx, msg, fields...)
 }

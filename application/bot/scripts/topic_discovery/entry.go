@@ -7,15 +7,16 @@ import (
 
 	papersvc "github.com/qingpeng2016/ai-agent-paper/application/core-service/paper"
 	"github.com/qingpeng2016/ai-agent-paper/common/dederi/logger"
+	"github.com/qingpeng2016/ai-agent-paper/common/notification"
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/repository"
 	"go.uber.org/zap"
 )
 
 const (
-	ModuleAIAgentPaper      = "ai_agent_paper"
-	TaskTopicDiscoveryLLM   = "llm_topic_discovery"
-	scanLimit               = 20
+	ModuleAIAgentPaper    = "ai_agent_paper"
+	TaskTopicDiscoveryLLM = "llm_topic_discovery"
+	scanLimit             = 20
 )
 
 type TopicDiscoveryJob struct {
@@ -35,7 +36,7 @@ func NewTopicDiscoveryJob(
 func (j *TopicDiscoveryJob) Run(ctx context.Context) {
 	rows, err := j.steps.ListByStatusAndStage(ctx, "running", "topic_discovery", scanLimit)
 	if err != nil {
-		logger.ErrorZ(ctx, "topic-discovery-list-failed", zap.Error(err))
+		notification.SendErrorLog(ctx, "topic-discovery-list-failed", zap.Error(err))
 		return
 	}
 	if len(rows) == 0 {
@@ -73,7 +74,7 @@ func (j *TopicDiscoveryJob) processOne(ctx context.Context, step *entity.PaperOu
 	}
 
 	if err := j.runs.RunTopicDiscoveryLLM(ctx, uint(step.UserID), step.RunVersion, step, input); err != nil {
-		logger.WarnZ(ctx, "topic-discovery-llm-failed",
+		notification.SendErrorLog(ctx, "topic-discovery-llm-failed",
 			zap.Uint64("step_id", step.ID),
 			zap.Error(err))
 		j.markFailed(ctx, step, err.Error())
@@ -90,7 +91,7 @@ func (j *TopicDiscoveryJob) finishAlreadyDone(ctx context.Context, step *entity.
 	step.Status = "completed"
 	step.CompletedAt = &now
 	if err := j.steps.SaveStep(ctx, step); err != nil {
-		logger.ErrorZ(ctx, "topic-discovery-reconcile-save", zap.Error(err))
+		notification.SendErrorLog(ctx, "topic-discovery-reconcile-save", zap.Error(err))
 		return ""
 	}
 	return "completed"
@@ -107,6 +108,6 @@ func (j *TopicDiscoveryJob) markFailed(ctx context.Context, step *entity.PaperOu
 	sum := "选题发现失败"
 	step.SummaryText = &sum
 	if err := j.steps.SaveStep(ctx, step); err != nil {
-		logger.ErrorZ(ctx, "topic-discovery-fail-save", zap.Uint64("step_id", step.ID), zap.Error(err))
+		notification.SendErrorLog(ctx, "topic-discovery-fail-save", zap.Uint64("step_id", step.ID), zap.Error(err))
 	}
 }

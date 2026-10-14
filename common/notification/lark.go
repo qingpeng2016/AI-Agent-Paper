@@ -216,7 +216,7 @@ func (c *LarkClient) sendMessage(ctx context.Context, message interface{}) error
 
 	jsonData, err := json.Marshal(message)
 	if err != nil {
-		logger.ErrorZ(ctx, "lark-sendMessage-FailedToMarshal", zap.Error(err))
+		SendErrorLog(WithSkipErrorAlert(ctx), "lark-sendMessage-FailedToMarshal", zap.Error(err))
 		return fmt.Errorf("failed to marshal message: %w", err)
 	}
 
@@ -225,7 +225,7 @@ func (c *LarkClient) sendMessage(ctx context.Context, message interface{}) error
 
 	req, err := http.NewRequestWithContext(ctx, "POST", c.webhookURL, bytes.NewBuffer(jsonData))
 	if err != nil {
-		logger.ErrorZ(ctx, "lark-sendMessage-FailedToCreateRequest", zap.Error(err))
+		SendErrorLog(WithSkipErrorAlert(ctx), "lark-sendMessage-FailedToCreateRequest", zap.Error(err))
 		return fmt.Errorf("failed to create request: %w", err)
 	}
 
@@ -236,7 +236,7 @@ func (c *LarkClient) sendMessage(ctx context.Context, message interface{}) error
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		logger.ErrorZ(ctx, "lark-sendMessage-FailedToSendRequest", zap.Error(err))
+		SendErrorLog(WithSkipErrorAlert(ctx), "lark-sendMessage-FailedToSendRequest", zap.Error(err))
 		return fmt.Errorf("failed to send request: %w", err)
 	}
 	defer resp.Body.Close()
@@ -247,7 +247,7 @@ func (c *LarkClient) sendMessage(ctx context.Context, message interface{}) error
 	if resp.StatusCode != http.StatusOK {
 		// 读取响应体以获取更多错误信息
 		body, _ := io.ReadAll(resp.Body)
-		logger.ErrorZ(ctx, "lark-sendMessage-UnexpectedStatusCode",
+		SendErrorLog(WithSkipErrorAlert(ctx), "lark-sendMessage-UnexpectedStatusCode",
 			zap.Int("statusCode", resp.StatusCode),
 			zap.String("responseBody", string(body)))
 		return fmt.Errorf("unexpected status code: %d, response: %s", resp.StatusCode, string(body))

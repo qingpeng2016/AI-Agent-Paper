@@ -10,6 +10,7 @@ import (
 
 	papersvc "github.com/qingpeng2016/ai-agent-paper/application/core-service/paper"
 	"github.com/qingpeng2016/ai-agent-paper/common/dederi/logger"
+	"github.com/qingpeng2016/ai-agent-paper/common/notification"
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/repository"
 	"go.uber.org/zap"
@@ -39,7 +40,7 @@ func NewTopicLiteratureDownloadJob(
 func (j *TopicLiteratureDownloadJob) Run(ctx context.Context) {
 	rows, err := j.steps.ListByStatusAndStage(ctx, "running", "retrieve", scanLimit)
 	if err != nil {
-		logger.ErrorZ(ctx, "topic-literature-download-list-failed", zap.Error(err))
+		notification.SendErrorLog(ctx, "topic-literature-download-list-failed", zap.Error(err))
 		return
 	}
 	if len(rows) == 0 {
@@ -63,7 +64,7 @@ func (j *TopicLiteratureDownloadJob) Run(ctx context.Context) {
 
 func (j *TopicLiteratureDownloadJob) processOne(ctx context.Context, step *entity.PaperOutputTopicStep) string {
 	if len(step.Result) == 0 {
-		logger.WarnZ(ctx, "topic-literature-download-skip-no-result",
+		notification.SendErrorLog(ctx, "topic-literature-download-skip-no-result",
 			zap.Uint64("step_id", step.ID),
 			zap.Int("run_version", step.RunVersion))
 		return ""
@@ -137,7 +138,7 @@ func downloadPDFWithRetry(ctx context.Context, pdfURL, absPath, externalKey stri
 		if lastErr == nil {
 			return nil
 		}
-		logger.WarnZ(ctx, "topic-literature-download-pdf-failed",
+		notification.SendErrorLog(ctx, "topic-literature-download-pdf-failed",
 			zap.String("external_key", externalKey),
 			zap.String("pdf_url", pdfURL),
 			zap.Int("attempt", attempt),
@@ -172,7 +173,7 @@ func (j *TopicLiteratureDownloadJob) syncUserLiterature(ctx context.Context, ste
 	}
 	result := step.Result
 	for _, err := range papersvc.SyncDownloadedUserLiterature(ctx, j.userLit, step.UserID, result, items) {
-		logger.WarnZ(ctx, "topic-literature-user-lit-persist-failed", zap.Error(err))
+		notification.SendErrorLog(ctx, "topic-literature-user-lit-persist-failed", zap.Error(err))
 	}
 }
 
@@ -207,7 +208,7 @@ func (j *TopicLiteratureDownloadJob) finishSuccess(ctx context.Context, step *en
 		step.Extra = mustJSON(meta)
 	}
 	if err := j.steps.SaveStep(ctx, step); err != nil {
-		logger.ErrorZ(ctx, "topic-literature-download-save-failed", zap.Uint64("step_id", step.ID), zap.Error(err))
+		notification.SendErrorLog(ctx, "topic-literature-download-save-failed", zap.Uint64("step_id", step.ID), zap.Error(err))
 		return ""
 	}
 	return "completed"
@@ -238,7 +239,7 @@ func (j *TopicLiteratureDownloadJob) markFailed(ctx context.Context, step *entit
 	}
 	step.SummaryText = &sum
 	if err := j.steps.SaveStep(ctx, step); err != nil {
-		logger.ErrorZ(ctx, "topic-literature-download-fail-save", zap.Uint64("step_id", step.ID), zap.Error(err))
+		notification.SendErrorLog(ctx, "topic-literature-download-fail-save", zap.Uint64("step_id", step.ID), zap.Error(err))
 	}
 }
 

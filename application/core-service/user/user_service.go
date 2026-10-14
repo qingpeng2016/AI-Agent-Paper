@@ -12,7 +12,7 @@ import (
 
 	couponSvc "github.com/qingpeng2016/ai-agent-paper/application/core-service/coupon"
 	"github.com/qingpeng2016/ai-agent-paper/common/auth"
-	"github.com/qingpeng2016/ai-agent-paper/common/dederi/logger"
+	"github.com/qingpeng2016/ai-agent-paper/common/notification"
 	"github.com/qingpeng2016/ai-agent-paper/common/errorx"
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/repository"
@@ -200,14 +200,14 @@ func (s *UserService) Register(ctx context.Context, req *request.RegisterUserReq
 		if withInvite && isMissingSchemaErr(err) {
 			fallbackErr := s.users.CreateRegister(ctx, nil, u, false)
 			if fallbackErr == nil {
-				logger.WarnZ(ctx, "users-register-invite-columns-missing-fallback",
+				notification.SendErrorLog(ctx, "users-register-invite-columns-missing-fallback",
 					zap.String("registration_host", req.RegistrationHost),
 					zap.Error(err))
 				return s.finishRegistration(ctx, u)
 			}
 			err = fallbackErr
 		}
-		logger.ErrorZ(ctx, "users-register-create-failed", zap.Error(err))
+		notification.SendErrorLog(ctx, "users-register-create-failed", zap.Error(err))
 		return nil, errorx.ErrDbError
 	}
 	return s.finishRegistration(ctx, u)
@@ -223,7 +223,7 @@ func (s *UserService) finishRegistration(ctx context.Context, u *entity.Users) (
 	}
 	n, grantErr := s.coupons.GrantRegisterCoupons(ctx, u.ID)
 	if grantErr != nil {
-		logger.WarnZ(ctx, "register-coupon-grant-failed", zap.Error(grantErr))
+		notification.SendErrorLog(ctx, "register-coupon-grant-failed", zap.Error(grantErr))
 		return resp, nil
 	}
 	if n > 0 {
