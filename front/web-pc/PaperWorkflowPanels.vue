@@ -38,21 +38,13 @@ import {
   type PaperExperimentPlanItem,
 } from '@/api/experimentPlans'
 import { DEMO_FIGURES, DEMO_MANUSCRIPT } from './demoModuleOutputs'
-import PaperFigureUploadPanel from './PaperFigureUploadPanel.vue'
 import PaperListPagination from './PaperListPagination.vue'
 import PaperSelect from './PaperSelect.vue'
 import {
-  DEFAULT_FIGURE_GENERATION,
-  FIGURE_CHART_OPTIONS,
   LITERATURE_SOURCE_OPTIONS,
-  type FigureGenerationForm,
   type PaperModuleId,
 } from './types'
 import PaperTopicUserLiteraturePickDialog from './PaperTopicUserLiteraturePickDialog.vue'
-
-export type FigureManagementTabId = 'upload' | 'generate'
-
-const figureTab = defineModel<FigureManagementTabId>('figureTab', { default: 'upload' })
 
 const emit = defineEmits<{
   navigateModule: [PaperModuleId, openExperimentPlanId?: string]
@@ -75,11 +67,6 @@ const props = withDefaults(
   },
 )
 const { moduleId, manuscriptId, manuscriptTitle, manuscriptDraftVersion } = toRefs(props)
-
-const figureForm = reactive<FigureGenerationForm>({
-  ...DEFAULT_FIGURE_GENERATION,
-  chartTypes: [...DEFAULT_FIGURE_GENERATION.chartTypes],
-})
 
 const resultVisible = ref<Partial<Record<PaperModuleId, boolean>>>({})
 
@@ -759,28 +746,6 @@ watch(
   },
 )
 
-const figureDatasetOptions = [
-  { value: 'results_main.csv', label: 'results_main.csv（演示）' },
-  { value: 'ablation_B.csv', label: 'ablation_B.csv（演示）' },
-  { value: 'throughput.csv', label: 'throughput.csv（演示）' },
-]
-
-const captionLangOptions = [
-  { value: 'en', label: 'English' },
-  { value: 'zh', label: '中文' },
-]
-
-function toggleChartType(value: string, checked: boolean) {
-  const set = new Set(figureForm.chartTypes)
-  if (checked) set.add(value)
-  else set.delete(value)
-  figureForm.chartTypes = [...set]
-}
-
-function isChartChecked(value: string) {
-  return figureForm.chartTypes.includes(value)
-}
-
 function litReviewRowTitle(item: PaperLiteratureReviewItem): string {
   const t = item.title?.trim()
   if (t) return t
@@ -1130,10 +1095,6 @@ async function runModule(id: PaperModuleId): Promise<boolean> {
   if (id === 'paper-writing') {
     await runPaperWriteFullPipeline()
     return true
-  }
-  if (id === 'figure-generation' && figureForm.chartTypes.length === 0) {
-    ElMessage.warning('请至少选择一种图表类型')
-    return false
   }
 
   await new Promise((r) => setTimeout(r, 750))
@@ -2137,103 +2098,6 @@ defineExpose({
       </section>
     </div>
   </div>
-
-  <!-- 图表管理 -->
-  <section v-else-if="moduleId === 'figure-generation'" class="fig-mgmt-panel">
-    <div class="fig-mgmt-tabs" role="tablist" aria-label="图表管理">
-      <button
-        type="button"
-        role="tab"
-        class="fig-mgmt-tab"
-        :class="{ 'fig-mgmt-tab--active': figureTab === 'upload' }"
-        :aria-selected="figureTab === 'upload'"
-        @click="figureTab = 'upload'"
-      >
-        上传图表
-      </button>
-      <button
-        type="button"
-        role="tab"
-        class="fig-mgmt-tab"
-        :class="{ 'fig-mgmt-tab--active': figureTab === 'generate' }"
-        :aria-selected="figureTab === 'generate'"
-        @click="figureTab = 'generate'"
-      >
-        一键生成
-      </button>
-    </div>
-
-    <div v-show="figureTab === 'upload'" class="fig-mgmt-pane" role="tabpanel">
-      <PaperFigureUploadPanel
-        embedded
-        :manuscript-id="manuscriptId"
-        :manuscript-title="manuscriptTitle"
-      />
-    </div>
-
-    <div v-show="figureTab === 'generate'" class="fig-mgmt-pane fig-mgmt-pane--stack" role="tabpanel">
-    <section class="wf-panel wf-panel--in-fig-mgmt">
-      <h2 class="wf-title">参数</h2>
-      <p class="wf-lead">基于实验数据生成可复现统计图（非通用美工工具）。</p>
-      <label class="wf-field wf-field--block">
-        <span class="wf-label">数据文件</span>
-        <PaperSelect v-model="figureForm.datasetLabel" :options="figureDatasetOptions" />
-      </label>
-      <div class="wf-field wf-field--block">
-        <span class="wf-label">图表类型</span>
-        <div class="wf-check-group">
-          <label v-for="opt in FIGURE_CHART_OPTIONS" :key="opt.value" class="wf-check wf-check--inline">
-            <input
-              type="checkbox"
-              :checked="isChartChecked(opt.value)"
-              @change="toggleChartType(opt.value, ($event.target as HTMLInputElement).checked)"
-            />
-            <span>{{ opt.label }}</span>
-          </label>
-        </div>
-      </div>
-      <label class="wf-check">
-        <input v-model="figureForm.includeErrorBars" type="checkbox" />
-        <span>误差条 / 多 seed 汇总</span>
-      </label>
-      <label class="wf-field">
-        <span class="wf-label">Caption 语言</span>
-        <PaperSelect v-model="figureForm.captionLang" :options="captionLangOptions" />
-      </label>
-    </section>
-    <section
-      v-if="resultVisible['figure-generation']"
-      class="wf-panel wf-panel--in-fig-mgmt wf-panel--in-fig-mgmt-result"
-    >
-      <h2 class="wf-title">Figure 产出（演示）</h2>
-      <div class="wf-figure-grid">
-        <div v-for="fig in DEMO_FIGURES.files" :key="fig.id" class="wf-figure-card">
-          <div class="wf-figure-preview" :class="`wf-figure-preview--${fig.type}`">
-            <div v-for="n in 5" :key="n" class="wf-bar" :style="{ height: `${30 + n * 12}%` }" />
-          </div>
-          <p class="wf-figure-cap">{{ fig.title }}</p>
-          <code class="wf-figure-file">{{ fig.note }}</code>
-        </div>
-      </div>
-      <table class="wf-table wf-table--compact">
-        <thead>
-          <tr>
-            <th>Method</th>
-            <th>Score</th>
-            <th>±</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="row in DEMO_FIGURES.dataPreview" :key="row.method">
-            <td>{{ row.method }}</td>
-            <td>{{ row.score }}</td>
-            <td>{{ row.std }}</td>
-          </tr>
-        </tbody>
-      </table>
-    </section>
-    </div>
-  </section>
 
   <Teleport to="body">
     <div

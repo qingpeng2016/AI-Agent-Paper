@@ -45,7 +45,7 @@ export const PAPER_MODULES: PaperModuleMeta[] = [
   {
     id: 'figure-generation',
     label: '图表管理',
-    description: '上传自有 figure 资产，或基于实验数据一键生成可复现统计图',
+    description: '查看与管理已入库的图表资产（含本地上传与分类、论文关联）',
   },
   {
     id: 'my-manuscripts',
@@ -191,7 +191,7 @@ export function createUploadedReferenceFromFile(file: File): UploadedReferenceIt
 
 export type UploadedFigureKind = 'image' | 'pdf' | 'vector' | 'other'
 
-/** 对齐 paper_output_figure（origin=upload） */
+/** 对齐 paper_user_figure（origin=upload） */
 export type UploadedFigureItem = {
   id: string
   fileName: string

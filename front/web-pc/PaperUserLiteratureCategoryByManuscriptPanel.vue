@@ -189,7 +189,7 @@ watch(
 <template>
   <div class="ul-ms-lit-pane">
     <p v-if="loading" class="ul-meta">正在加载论文…</p>
-    <p v-else-if="!total" class="ul-empty">暂无论文（status=active）。</p>
+    <p v-else-if="!total" class="ul-empty">暂无论文。</p>
     <template v-else>
       <table class="ul-table">
         <colgroup>

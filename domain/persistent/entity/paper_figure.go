@@ -2,7 +2,7 @@ package entity
 
 import "time"
 
-type PaperOutputFigure struct {
+type PaperFigure struct {
 	ID             uint64    `gorm:"primaryKey;column:id"`
 	ManuscriptID   uint64    `gorm:"column:manuscript_id;not null"`
 	UserID         uint64    `gorm:"column:user_id;not null"`
@@ -20,4 +20,4 @@ type PaperOutputFigure struct {
 	UpdatedAt      time.Time `gorm:"column:updated_at"`
 }
 
-func (PaperOutputFigure) TableName() string { return "paper_output_figure" }
+func (PaperFigure) TableName() string { return "paper_user_figure" }

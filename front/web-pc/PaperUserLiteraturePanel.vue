@@ -264,7 +264,7 @@ void loadPage(1)
       {{
         filterKeywordApplied || filterCategoryId || filterManuscriptId
           ? '无匹配的文献，请调整筛选条件。'
-          : '暂无文献（status=active）。'
+          : '暂无文献。'
       }}
     </p>
     <template v-else>

@@ -48,6 +48,7 @@ import { DEMO_MODULE_TOKEN_ESTIMATES } from './demoOperationLogs'
 import PaperModuleNavIcon from './PaperModuleNavIcon.vue'
 import PaperMyManuscriptsPanel from './PaperMyManuscriptsPanel.vue'
 import PaperUserLiteraturePanel from './PaperUserLiteraturePanel.vue'
+import PaperFigureManagementPanel from './PaperFigureManagementPanel.vue'
 import PaperInviteRebatePanel from './PaperInviteRebatePanel.vue'
 import PaperPersonalCenterPanel from './PaperPersonalCenterPanel.vue'
 import PaperEnvironmentPanel from './PaperEnvironmentPanel.vue'
@@ -151,7 +152,9 @@ const showGenericModuleLoading = computed(
     activeModule.value !== 'topic-discovery' &&
     activeModule.value !== 'literature-review' &&
     activeModule.value !== 'experiment-planning' &&
-    activeModule.value !== 'paper-writing',
+    activeModule.value !== 'paper-writing' &&
+    activeModule.value !== 'user-literature' &&
+    activeModule.value !== 'figure-generation',
 )
 
 const topicDiscoveryPageLoading = computed(
@@ -234,7 +237,7 @@ const litReviewDoneByManuscript = ref<Record<string, boolean>>({})
 const experimentPlanDoneByManuscript = ref<Record<string, boolean>>({})
 const workflowPanelsRef = ref<InstanceType<typeof PaperWorkflowPanels> | null>(null)
 const userLiteraturePanelRef = ref<InstanceType<typeof PaperUserLiteraturePanel> | null>(null)
-const figureManagementTab = ref<'upload' | 'generate'>('upload')
+const figureManagementPanelRef = ref<InstanceType<typeof PaperFigureManagementPanel> | null>(null)
 const paperMainRef = ref<HTMLElement | null>(null)
 const topicFlowPanelRef = ref<HTMLElement | null>(null)
 
@@ -628,6 +631,7 @@ const topicDisciplineDisplayLabel = computed(() => {
 
 const isMyManuscriptsModule = computed(() => activeModule.value === 'my-manuscripts')
 const isUserLiteratureModule = computed(() => activeModule.value === 'user-literature')
+const isFigureGenerationModule = computed(() => activeModule.value === 'figure-generation')
 const isInviteRebateModule = computed(() => activeModule.value === 'invite-rebate')
 const isPersonalCenterModule = computed(() => activeModule.value === 'personal-center')
 const isEnvironmentModule = computed(() => activeModule.value === 'environment')
@@ -635,6 +639,7 @@ const isUtilityModule = computed(
   () =>
     isMyManuscriptsModule.value ||
     isUserLiteratureModule.value ||
+    isFigureGenerationModule.value ||
     isEnvironmentModule.value ||
     isInviteRebateModule.value ||
     isPersonalCenterModule.value,
@@ -707,7 +712,6 @@ const SECONDARY_WORKFLOW_MODULES = [
   'literature-review',
   'experiment-planning',
   'paper-writing',
-  'figure-generation',
 ] as const
 
 const isSecondaryWorkflowModule = computed(() =>
@@ -892,7 +896,6 @@ const showPrimaryAction = computed(() => {
   if (isUtilityModule.value) return false
   if (isLiteratureReviewModule.value) return false
   if (isExperimentPlanningModule.value) return false
-  if (activeModule.value === 'figure-generation' && figureManagementTab.value === 'upload') return false
   return true
 })
 
@@ -1775,6 +1778,10 @@ function onUserLiteratureUploadPrimary() {
   userLiteraturePanelRef.value?.openUploadDialog()
 }
 
+function onFigureUploadPrimary() {
+  figureManagementPanelRef.value?.openUploadDialog()
+}
+
 function onExpPlanUploadPlanPrimary() {
   void workflowPanelsRef.value?.openExpPlanUploadPlanDialog()
 }
@@ -1841,7 +1848,8 @@ async function onPrimaryAction() {
           mod !== 'invite-rebate' &&
           mod !== 'environment' &&
           mod !== 'my-manuscripts' &&
-          mod !== 'user-literature'
+          mod !== 'user-literature' &&
+          mod !== 'figure-generation'
         ) {
           recordModuleOperationLog(mod, `运行「${currentMeta.value.label}」`)
         }
@@ -2133,6 +2141,28 @@ watch(
             </svg>
           </span>
           上传文献
+        </button>
+        <button
+          v-else-if="isFigureGenerationModule"
+          type="button"
+          class="paper-run-btn"
+          @click="onFigureUploadPrimary"
+        >
+          <span class="paper-run-icon paper-run-icon--upload" aria-hidden="true">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M12 3v12" />
+              <path d="m7 8 5-5 5 5" />
+              <path d="M5 21h14" />
+            </svg>
+          </span>
+          上传图表
         </button>
         <button
           v-else-if="isMyManuscriptsModule"
@@ -2490,13 +2520,18 @@ watch(
         v-else-if="activeModule === 'my-manuscripts'"
         :key="`my-manuscripts-${moduleContentKey}`"
         :active-manuscript-id="activeManuscriptId"
-        @select="onManuscriptChange"
       />
 
       <PaperUserLiteraturePanel
         v-else-if="activeModule === 'user-literature'"
         ref="userLiteraturePanelRef"
         :key="`user-literature-${moduleContentKey}`"
+      />
+
+      <PaperFigureManagementPanel
+        v-else-if="activeModule === 'figure-generation'"
+        ref="figureManagementPanelRef"
+        :key="`figure-generation-${moduleContentKey}`"
       />
 
       <PaperEnvironmentPanel
@@ -2523,7 +2558,6 @@ watch(
         v-else-if="isSecondaryWorkflowModule"
         :key="activeModule"
         ref="workflowPanelsRef"
-        v-model:figure-tab="figureManagementTab"
         :module-id="activeModule"
         :manuscript-id="activeManuscriptId"
         :manuscript-title="currentManuscript?.title ?? '未命名'"

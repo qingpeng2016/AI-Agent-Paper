@@ -494,7 +494,7 @@ CREATE TABLE IF NOT EXISTS `paper_output_experiment_plan` (
   KEY `idx_paper_output_exp_plan_ms` (`manuscript_id`, `is_current`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='实验规划';
 
-CREATE TABLE IF NOT EXISTS `paper_output_figure` (
+CREATE TABLE IF NOT EXISTS `paper_user_figure` (
   `id`                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '图表 ID',
   `manuscript_id`     BIGINT UNSIGNED NOT NULL COMMENT '论文 ID',
   `user_id`           BIGINT UNSIGNED NOT NULL COMMENT '用户 ID',
@@ -511,8 +511,8 @@ CREATE TABLE IF NOT EXISTS `paper_output_figure` (
   `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   `updated_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (`id`),
-  KEY `idx_paper_output_figure_ms` (`manuscript_id`, `origin`, `status`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='图表记录（上传 + 一键生成）';
+  KEY `idx_paper_user_fig_ms` (`manuscript_id`, `origin`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户图表资产（本地上传 + 一键生成）';
 
 -- ---------------------------------------------------------------------------
 -- 7. LLM 调用日志（计费、排错；每次调用存 request/response JSON）
@@ -588,6 +588,36 @@ CREATE TABLE IF NOT EXISTS `paper_user_literature_category` (
   PRIMARY KEY (`id`),
   KEY `idx_paper_user_lit_cat_status_id` (`status`, `id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户文献分类';
+
+CREATE TABLE IF NOT EXISTS `paper_user_figure_category_rel` (
+  `id`          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '关联 ID',
+  `figure_id`   BIGINT UNSIGNED NOT NULL COMMENT 'paper_user_figure.id',
+  `category_id` BIGINT UNSIGNED NOT NULL COMMENT 'paper_user_figure_category.id',
+  `created_at`  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_paper_user_fig_cat_rel` (`figure_id`, `category_id`),
+  KEY `idx_paper_user_fig_cat_rel_cat` (`category_id`, `figure_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='图表与分类多对多';
+
+CREATE TABLE IF NOT EXISTS `paper_user_figure_manuscript_rel` (
+  `id`            BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '关联 ID',
+  `figure_id`     BIGINT UNSIGNED NOT NULL COMMENT 'paper_user_figure.id',
+  `manuscript_id` BIGINT UNSIGNED NOT NULL COMMENT 'paper_manuscript.id',
+  `created_at`    DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uk_paper_user_fig_ms_rel` (`figure_id`, `manuscript_id`),
+  KEY `idx_paper_user_fig_ms_rel_ms` (`manuscript_id`, `figure_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='图表与论文章多对多';
+
+CREATE TABLE IF NOT EXISTS `paper_user_figure_category` (
+  `id`         BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '分类 ID',
+  `name`       VARCHAR(128)    NOT NULL COMMENT '分类名称',
+  `status`     VARCHAR(16)     NOT NULL DEFAULT 'active' COMMENT 'active|deleted',
+  `created_at` DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  `updated_at` DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_paper_user_fig_cat_status_id` (`status`, `id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='图表分类';
 
 -- ---------------------------------------------------------------------------
 -- 9. 种子数据 — 平台（VIP、优惠券、Bot）

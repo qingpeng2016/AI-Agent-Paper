@@ -28,6 +28,7 @@ type Router struct {
 	paperLiteratureReviewHandler *handler.PaperLiteratureReviewHandler
 	paperExperimentPlanHandler   *handler.PaperExperimentPlanHandler
 	paperUserLiteratureHandler   *handler.PaperUserLiteratureHandler
+	paperFigureHandler           *handler.PaperFigureHandler
 }
 
 func NewRouter(
@@ -42,6 +43,7 @@ func NewRouter(
 	paperLiteratureReviewHandler *handler.PaperLiteratureReviewHandler,
 	paperExperimentPlanHandler *handler.PaperExperimentPlanHandler,
 	paperUserLiteratureHandler *handler.PaperUserLiteratureHandler,
+	paperFigureHandler *handler.PaperFigureHandler,
 ) *Router {
 	return &Router{
 		setting:                      setting,
@@ -55,6 +57,7 @@ func NewRouter(
 		paperLiteratureReviewHandler: paperLiteratureReviewHandler,
 		paperExperimentPlanHandler:   paperExperimentPlanHandler,
 		paperUserLiteratureHandler:   paperUserLiteratureHandler,
+		paperFigureHandler:           paperFigureHandler,
 	}
 }
 
@@ -91,6 +94,15 @@ func (r *Router) setupRouters() *gin.Engine {
 		paperAuth.GET("/user-literature/manuscripts/literature-ids", r.paperUserLiteratureHandler.GetManuscriptLiteratureIDs)
 		paperAuth.PUT("/user-literature/manuscripts/literature-membership", r.paperUserLiteratureHandler.PutManuscriptLiteratureMembership)
 		paperAuth.GET("/user-literature", r.paperUserLiteratureHandler.GetUserLiterature)
+		paperAuth.GET("/figures/categories", r.paperFigureHandler.GetFigureCategories)
+		paperAuth.GET("/figures/categories/figure-ids", r.paperFigureHandler.GetFigureCategoryFigureIDs)
+		paperAuth.PUT("/figures/categories/figure-membership", r.paperFigureHandler.PutFigureCategoryFigure)
+		paperAuth.POST("/figures/categories", r.paperFigureHandler.PostCreateFigureCategory)
+		paperAuth.PUT("/figures/categories", r.paperFigureHandler.PutUpdateFigureCategory)
+		paperAuth.GET("/figures/manuscripts-with-figures", r.paperFigureHandler.GetManuscriptsWithFigures)
+		paperAuth.GET("/figures/manuscripts/figure-ids", r.paperFigureHandler.GetManuscriptFigureIDs)
+		paperAuth.PUT("/figures/manuscripts/figure-membership", r.paperFigureHandler.PutManuscriptFigureMembership)
+		paperAuth.GET("/figures", r.paperFigureHandler.GetFigures)
 		paperAuth.GET("/manuscripts", r.paperManuscriptHandler.GetManuscripts)
 		paperAuth.POST("/manuscripts", r.paperManuscriptHandler.PostCreateManuscript)
 		paperAuth.POST("/manuscripts/set-current", r.paperManuscriptHandler.PostSetCurrentManuscript)

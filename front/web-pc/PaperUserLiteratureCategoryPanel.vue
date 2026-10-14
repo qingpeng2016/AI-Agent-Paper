@@ -316,7 +316,7 @@ watch(
 
     <div v-show="categorySubTab === 'by-name'" class="ul-cat-subpane" role="tabpanel">
     <p v-if="loading" class="ul-meta">正在加载分类…</p>
-    <p v-else-if="!total" class="ul-empty">暂无分类（status=active）。可先执行分类种子 SQL。</p>
+    <p v-else-if="!total" class="ul-empty">暂无分类。可先执行分类种子 SQL。</p>
     <template v-else>
       <table class="ul-table">
         <colgroup>
