@@ -2,50 +2,14 @@ package topicdiscovery
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/llm"
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
 )
 
-// StageLLMResolved 供 experimentplan 等子包使用的阶段 LLM 解析结果。
-type StageLLMResolved struct {
-	System     string
-	UserPrefix string
-	Model      *entity.PaperLLMModelConfig
-}
-
 func (s *TopicDiscoveryRunService) ContentLocaleForStep(ctx context.Context, step *entity.PaperOutputTopicStep) string {
 	return s.contentLocaleForStep(ctx, step)
-}
-
-func (s *TopicDiscoveryRunService) ResolveStageLLM(
-	ctx context.Context,
-	stageCode string,
-	vars map[string]string,
-	locale string,
-) (*StageLLMResolved, error) {
-	r, err := s.resolveStageLLM(ctx, stageCode, vars, locale)
-	if err != nil {
-		return nil, err
-	}
-	if r == nil {
-		return nil, nil
-	}
-	return &StageLLMResolved{
-		System:     r.system,
-		UserPrefix: r.userPrefix,
-		Model:      r.model,
-	}, nil
-}
-
-func (s *TopicDiscoveryRunService) CallStageLLM(
-	ctx context.Context,
-	step *entity.PaperOutputTopicStep,
-	stageCode string,
-	vars map[string]string,
-	userExtra string,
-) (string, llm.LLMUsage, error) {
-	return s.callStageLLM(ctx, step, stageCode, vars, userExtra)
 }
 
 func LLMUserMessage(userPrefix, userExtra string) string {
@@ -54,4 +18,31 @@ func LLMUserMessage(userPrefix, userExtra string) string {
 
 func ParseJSONOrWrap(text, key string) (map[string]any, string) {
 	return parseJSONOrWrap(text, key)
+}
+
+// InvokeExperimentPlan 实验方案 bot：本地 ARIS CLI。
+func (s *TopicDiscoveryRunService) InvokeExperimentPlan(
+	ctx context.Context,
+	step *entity.PaperOutputTopicStep,
+	invokeCtx StrategyInvokeContext,
+	userExtra string,
+) (json.RawMessage, llm.LLMUsage, error) {
+	return s.InvokeBehavior(ctx, step, BehaviorExperimentPlan, topicRunInput{}, invokeCtx, userExtra)
+}
+
+// InvokeBehavior 经 paper_llm_strategy_route 走本地 ARIS CLI（stdin JSON）。
+func (s *TopicDiscoveryRunService) InvokeBehavior(
+	ctx context.Context,
+	step *entity.PaperOutputTopicStep,
+	behaviorKey string,
+	input topicRunInput,
+	invokeCtx StrategyInvokeContext,
+	userExtra string,
+) (json.RawMessage, llm.LLMUsage, error) {
+	route, err := s.requireTopicStrategyRoute(ctx, behaviorKey)
+	if err != nil {
+		return nil, llm.LLMUsage{}, err
+	}
+	req := BuildTopicDiscoveryInvokeRequest(behaviorKey, route.CapabilityID, input, invokeCtx)
+	return s.invokeTopicDiscoveryBehavior(ctx, step, req, userExtra)
 }

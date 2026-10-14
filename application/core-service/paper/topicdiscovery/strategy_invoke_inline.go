@@ -13,8 +13,9 @@ import (
 )
 
 const (
-	BehaviorTopicGenerate = "topic.stage.topic_generate"
-	BehaviorTopicAudit    = "topic.stage.topic_audit"
+	BehaviorTopicGenerate  = "topic.stage.topic_generate"
+	BehaviorTopicAudit     = "topic.stage.topic_audit"
+	BehaviorExperimentPlan = "topic.stage.experiment_plan"
 )
 
 func topicStageCodeFromBehaviorKey(behaviorKey string) string {
@@ -40,7 +41,6 @@ func strategyRouteMeta(route *entity.PaperStrategyRoute) map[string]any {
 	}
 	if route.Package != nil {
 		m["strategy_package_code"] = route.Package.Code
-		m["provider_kind"] = route.Package.ProviderKind
 	}
 	return m
 }
@@ -68,35 +68,21 @@ func (s *TopicDiscoveryRunService) requireTopicStrategyRoute(ctx context.Context
 	if pkg.Status != "active" {
 		return nil, errorx.ErrLLMNotConfigured.WithDetail("策略包 " + pkg.Code + " 未 active")
 	}
-	if pkg.ProviderKind == entity.StrategyProviderHTTP {
-		return nil, errorx.ErrLLMNotConfigured.WithDetail(
-			"策略包 " + pkg.Code + " 为 http 远程服务，尚未接入 Invoke（behavior_key=" + behaviorKey + "）",
-		)
-	}
 	return route, nil
 }
 
-// invokeTopicDiscoveryBehavior 经 route → 策略包：aris=本地 CLI+SKILL；builtin=过渡内置 prompt+HTTP LLM。
+// invokeTopicDiscoveryBehavior 经 route 调用本地 ARIS CLI（paper_strategy_invoke.py + skill）。
 func (s *TopicDiscoveryRunService) invokeTopicDiscoveryBehavior(
 	ctx context.Context,
 	step *entity.PaperOutputTopicStep,
 	req StrategyInvokeRequest,
-	vars map[string]string,
 	userExtra string,
 ) (json.RawMessage, llm.LLMUsage, error) {
 	route, err := s.requireTopicStrategyRoute(ctx, req.BehaviorKey)
 	if err != nil {
 		return nil, llm.LLMUsage{}, err
 	}
-	if useLocalARISPackage(route.Package) {
-		return s.invokeLocalARIS(ctx, step, req, route, userExtra)
-	}
-	stageCode := topicStageCodeFromBehaviorKey(req.BehaviorKey)
-	text, usage, err := s.callStageLLM(ctx, step, stageCode, vars, userExtra)
-	if err != nil {
-		return nil, usage, err
-	}
-	return stageResultJSON(stageCode, text), usage, nil
+	return s.invokeLocalARIS(ctx, step, req, route, userExtra)
 }
 
 func stageResultJSON(stageCode, text string) json.RawMessage {

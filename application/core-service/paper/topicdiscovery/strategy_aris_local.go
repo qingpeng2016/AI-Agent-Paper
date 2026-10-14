@@ -18,10 +18,6 @@ import (
 	"gorm.io/datatypes"
 )
 
-const (
-	strategyPackageARIS   = "aris"
-	strategyPackageBuiltin = "builtin"
-)
 
 type arisInvokePayload struct {
 	StrategyInvokeRequest
@@ -66,13 +62,6 @@ func paperARISSkillsRoot() string {
 		}
 	}
 	return ""
-}
-
-func useLocalARISPackage(pkg *entity.PaperStrategyPackage) bool {
-	if pkg == nil || pkg.ProviderKind != entity.StrategyProviderInline {
-		return false
-	}
-	return strings.TrimSpace(pkg.Code) == strategyPackageARIS
 }
 
 func (s *TopicDiscoveryRunService) invokeLocalARIS(

@@ -10,7 +10,6 @@ import (
 
 	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/lang"
 	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/listpage"
-	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/llm"
 	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/topicdiscovery"
 	"github.com/qingpeng2016/ai-agent-paper/common/errorx"
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
@@ -30,25 +29,19 @@ type ExperimentPlanService struct {
 	reviews     repository.PaperOutputLiteratureReviewRepo
 	plans       repository.PaperOutputExperimentPlanRepo
 	manuscripts repository.PaperManuscriptRepo
-	llm         *llm.LLMChatService
-	llmRepo     repository.PaperLLMRepo
-	llmRunner   *topicdiscovery.TopicDiscoveryRunService
+	llmRunner *topicdiscovery.TopicDiscoveryRunService
 }
 
 func NewExperimentPlanService(
 	reviews repository.PaperOutputLiteratureReviewRepo,
 	plans repository.PaperOutputExperimentPlanRepo,
 	manuscripts repository.PaperManuscriptRepo,
-	chat *llm.LLMChatService,
-	llmRepo repository.PaperLLMRepo,
 	llmRunner *topicdiscovery.TopicDiscoveryRunService,
 ) *ExperimentPlanService {
 	return &ExperimentPlanService{
 		reviews:     reviews,
 		plans:       plans,
 		manuscripts: manuscripts,
-		llm:         chat,
-		llmRepo:     llmRepo,
 		llmRunner:   llmRunner,
 	}
 }
@@ -78,45 +71,31 @@ func (s *ExperimentPlanService) RunExperimentPlanLLM(ctx context.Context, review
 	}
 	locale := s.llmRunner.ContentLocaleForStep(ctx, step)
 	userExtra := buildExperimentPlanUserMessage(review, direction, venue, locale)
-	vars := map[string]string{"direction": direction, "venue": venue}
-
-	resolved, resolveErr := s.llmRunner.ResolveStageLLM(ctx, ExperimentPlanStageCode, vars, locale)
-	if resolveErr != nil {
-		return s.markExperimentPlanFailed(ctx, review, resolveErr.Error(), nil, nil)
+	invokeCtx := topicdiscovery.StrategyInvokeContext{
+		ManuscriptID:    review.ManuscriptID,
+		UserID:          uint64(review.UserID),
+		ContentLanguage: locale,
+		Direction:       direction,
+		VenueLabel:      venue,
 	}
-	systemPrompt := ""
-	userPrefix := ""
-	modelName := ""
-	if resolved != nil {
-		systemPrompt = strings.TrimSpace(resolved.System)
-		userPrefix = strings.TrimSpace(resolved.UserPrefix)
-		if resolved.Model != nil {
-			modelName = resolved.Model.ModelName
-		}
-	}
-	userPrompt := topicdiscovery.LLMUserMessage(userPrefix, userExtra)
 	reqSnap, _ := json.Marshal(map[string]any{
-		"stage_code":    ExperimentPlanStageCode,
-		"vars":          vars,
-		"system_prompt": systemPrompt,
-		"user_prompt":   userPrompt,
-		"model_name":    modelName,
+		"behavior_key": topicdiscovery.BehaviorExperimentPlan,
+		"user_prompt":  userExtra,
+		"locale":       locale,
 	})
 	_, _ = s.reviews.SaveExperimentPlanLLMRequest(
 		ctx, review.ID, review.ManuscriptID, uint(review.UserID), reqSnap,
 	)
 
-	text, usage, err := s.llmRunner.CallStageLLM(ctx, step, ExperimentPlanStageCode, vars, userExtra)
-	respBase := map[string]any{
-		"raw_text":          text,
-		"prompt_tokens":     usage.PromptTokens,
-		"completion_tokens": usage.CompletionTokens,
-	}
+	raw, _, err := s.llmRunner.InvokeExperimentPlan(ctx, step, invokeCtx, userExtra)
+	respBase := map[string]any{}
 	if err != nil {
 		respBase["error"] = err.Error()
 		respJSON, _ := json.Marshal(respBase)
 		return s.markExperimentPlanFailed(ctx, review, err.Error(), respJSON, reqSnap)
 	}
+	text := string(raw)
+	respBase["raw_text"] = text
 	planPayload := parseExperimentPlanLLMResponse(text)
 	if planPayload == nil {
 		respBase["error"] = "模型未返回 experiment_plan JSON"

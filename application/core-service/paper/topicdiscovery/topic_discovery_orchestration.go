@@ -92,11 +92,7 @@ func (s *TopicDiscoveryRunService) RunTopicDiscoveryLLM(
 		)
 		genUser := buildTopicGenerateBundleUserMessage(input, ctxBlock, filesBlock, locale, round, maxRounds, prevBundle, prevAudit)
 		genReq := BuildTopicDiscoveryInvokeRequest(genRoute.BehaviorKey, genRoute.CapabilityID, input, invokeCtx)
-		bundleRaw, genUsage, err := s.invokeTopicDiscoveryBehavior(ctx, step, genReq, map[string]string{
-			"direction": input.Direction,
-			"venue":     input.Venue,
-			"max_ideas": fmt.Sprintf("%d", input.MaxIdeas),
-		}, genUser)
+		bundleRaw, genUsage, err := s.invokeTopicDiscoveryBehavior(ctx, step, genReq, genUser)
 		if err != nil {
 			return err
 		}
@@ -112,10 +108,7 @@ func (s *TopicDiscoveryRunService) RunTopicDiscoveryLLM(
 		invokeCtx.PrevBundle = bundleJSON
 		auditUser := s.buildTopicAuditOnlyUserExtra(ctx, userID, runVersion, input, round, maxRounds, locale, string(bundleJSON))
 		auditReq := BuildTopicDiscoveryInvokeRequest(auditRoute.BehaviorKey, auditRoute.CapabilityID, input, invokeCtx)
-		auditRaw, auditUsage, err := s.invokeTopicDiscoveryBehavior(ctx, step, auditReq, map[string]string{
-			"direction": compactDirectionForPrompt(input),
-			"venue":     input.Venue,
-		}, auditUser)
+		auditRaw, auditUsage, err := s.invokeTopicDiscoveryBehavior(ctx, step, auditReq, auditUser)
 		if err != nil {
 			return err
 		}

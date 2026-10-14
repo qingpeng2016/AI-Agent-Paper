@@ -32,7 +32,7 @@ func NewTopicDiscoveryJob(
 }
 
 // Run 扫描 paper_output_topic_step 第二步（stage_code=topic_discovery, status=running），
-// 经 paper_llm_strategy_route / paper_llm_strategy_package 调用生成包与审计，结果写入该步 result。
+// 经 paper_llm_strategy_route → 本地 ARIS CLI（skill）调用生成包与审计，结果写入该步 result。
 func (j *TopicDiscoveryJob) Run(ctx context.Context) {
 	rows, err := j.steps.ListByStatusAndStage(ctx, "running", "topic_discovery", scanLimit)
 	if err != nil {

@@ -434,14 +434,8 @@ CREATE TABLE IF NOT EXISTS `paper_llm_model_config` (
 
 CREATE TABLE IF NOT EXISTS `paper_llm_strategy_package` (
   `id`                BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '策略包 ID',
-  `code`              VARCHAR(64)  NOT NULL COMMENT '包键：builtin|aris|…',
+  `code`              VARCHAR(64)  NOT NULL COMMENT '包键：aris|…（本地 CLI）',
   `name`              VARCHAR(128) NOT NULL COMMENT '展示名',
-  `provider_kind`     VARCHAR(16)  NOT NULL DEFAULT 'inline' COMMENT 'inline|http|process',
-  `base_url`          VARCHAR(512) DEFAULT NULL COMMENT 'http 策略服务 Origin',
-  `auth_type`         VARCHAR(32)  NOT NULL DEFAULT 'none' COMMENT 'none|bearer|hmac',
-  `auth_secret_ref`   VARCHAR(256) DEFAULT NULL COMMENT '平台密钥引用',
-  `manifest_version`  VARCHAR(32)  DEFAULT NULL COMMENT '能力清单版本',
-  `capabilities`      JSON         DEFAULT NULL COMMENT '能力 id 列表',
   `status`            VARCHAR(16)  NOT NULL DEFAULT 'active' COMMENT 'active|disabled',
   `created_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`        DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -1023,13 +1017,12 @@ INSERT INTO `paper_llm_model_config` (
   'active'
 );
 
-INSERT INTO `paper_llm_strategy_package` (`code`, `name`, `provider_kind`, `manifest_version`, `capabilities`, `status`)
+INSERT INTO `paper_llm_strategy_package` (`code`, `name`, `status`)
 VALUES
-  ('builtin', '内置（过渡内联）', 'inline', '1', JSON_ARRAY('topic.stage.default', 'topic.stage.topic_generate', 'topic.stage.topic_audit', 'topic.stage.experiment_plan'), 'active'),
-  ('aris', 'ARIS 本地（inline CLI）', 'inline', '1', JSON_ARRAY('idea-creator', 'research-review', 'idea-discovery', 'research-lit'), 'active')
+  ('aris', 'ARIS 本地 CLI', 'active')
 ON DUPLICATE KEY UPDATE `name` = VALUES(`name`), `status` = VALUES(`status`);
 
-SET @pkg_builtin := (SELECT `id` FROM `paper_llm_strategy_package` WHERE `code` = 'builtin' LIMIT 1);
+SET @pkg_aris := (SELECT `id` FROM `paper_llm_strategy_package` WHERE `code` = 'aris' LIMIT 1);
 SET @paper_llm_model_id := (
   SELECT c.`id` FROM `paper_llm_model_config` c
   WHERE c.`status` = 'active'
@@ -1040,11 +1033,11 @@ SET @paper_llm_model_id := (
 INSERT INTO `paper_llm_strategy_route` (
   `behavior_key`, `module`, `action`, `strategy_package_id`, `capability_id`, `default_model_config_id`, `status`
 ) VALUES
-  ('topic.stage.default', 'topic_discovery', 'default', @pkg_builtin, 'topic.stage.default', IFNULL(@paper_llm_model_id, 0), 'active'),
-  ('topic.stage.topic_generate', 'topic_discovery', 'topic_generate', @pkg_builtin, 'topic.stage.topic_generate', IFNULL(@paper_llm_model_id, 0), 'active'),
-  ('topic.stage.topic_audit', 'topic_discovery', 'topic_audit', @pkg_builtin, 'topic.stage.topic_audit', IFNULL(@paper_llm_model_id, 0), 'active'),
-  ('topic.stage.experiment_plan', 'experiment_plan', 'experiment_plan', @pkg_builtin, 'topic.stage.experiment_plan', IFNULL(@paper_llm_model_id, 0), 'active'),
-  ('topic.discovery.run', 'topic_discovery', 'run', @pkg_builtin, 'topic.discovery.run', IFNULL(@paper_llm_model_id, 0), 'active')
+  ('topic.stage.default', 'topic_discovery', 'default', @pkg_aris, 'idea-creator', IFNULL(@paper_llm_model_id, 0), 'active'),
+  ('topic.stage.topic_generate', 'topic_discovery', 'topic_generate', @pkg_aris, 'idea-creator', IFNULL(@paper_llm_model_id, 0), 'active'),
+  ('topic.stage.topic_audit', 'topic_discovery', 'topic_audit', @pkg_aris, 'research-review', IFNULL(@paper_llm_model_id, 0), 'active'),
+  ('topic.stage.experiment_plan', 'experiment_plan', 'experiment_plan', @pkg_aris, 'experiment-bridge', IFNULL(@paper_llm_model_id, 0), 'active'),
+  ('topic.discovery.run', 'topic_discovery', 'run', @pkg_aris, 'idea-discovery', IFNULL(@paper_llm_model_id, 0), 'active')
 ON DUPLICATE KEY UPDATE
   `strategy_package_id` = VALUES(`strategy_package_id`),
   `default_model_config_id` = VALUES(`default_model_config_id`),

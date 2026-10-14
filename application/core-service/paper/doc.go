@@ -7,7 +7,6 @@ import (
 	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/internal/jsonx"
 	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/literature"
 	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/literaturereview"
-	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/llm"
 	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/manuscript"
 	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/step"
 	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/submission"
@@ -23,8 +22,7 @@ type (
 	ExperimentPlanService         = experimentplan.ExperimentPlanService
 	PaperFigureService            = figure.PaperFigureService
 	ManuscriptSubmissionService   = submission.ManuscriptSubmissionService
-	LLMChatService                = llm.LLMChatService
-	LiteratureDownloadItem        = literature.LiteratureDownloadItem
+	LiteratureDownloadItem = literature.LiteratureDownloadItem
 )
 
 var (
@@ -36,7 +34,6 @@ var (
 	NewExperimentPlanService        = experimentplan.NewExperimentPlanService
 	NewPaperFigureService           = figure.NewPaperFigureService
 	NewManuscriptSubmissionService  = submission.NewManuscriptSubmissionService
-	NewLLMChatService               = llm.NewLLMChatService
 
 	LoadStepExtra    = step.LoadStepExtra
 	MergeStepExtra   = step.MergeStepExtra

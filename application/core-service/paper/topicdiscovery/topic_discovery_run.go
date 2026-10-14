@@ -3,7 +3,6 @@ package topicdiscovery
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -63,7 +62,6 @@ type TopicDiscoveryRunService struct {
 	litSearch    *literature.LiteratureSearchService
 	llmRepo      repository.PaperLLMRepo
 	strategyRepo repository.PaperStrategyRepo
-	llm          *llm.LLMChatService
 }
 
 func NewTopicDiscoveryRunService(
@@ -76,7 +74,6 @@ func NewTopicDiscoveryRunService(
 	litSearch *literature.LiteratureSearchService,
 	llmRepo repository.PaperLLMRepo,
 	strategyRepo repository.PaperStrategyRepo,
-	llm *llm.LLMChatService,
 ) *TopicDiscoveryRunService {
 	return &TopicDiscoveryRunService{
 		manuscripts:  manuscripts,
@@ -88,7 +85,6 @@ func NewTopicDiscoveryRunService(
 		litSearch:    litSearch,
 		llmRepo:      llmRepo,
 		strategyRepo: strategyRepo,
-		llm:          llm,
 	}
 }
 
@@ -641,16 +637,6 @@ func (s *TopicDiscoveryRunService) stageContext(ctx context.Context, userID uint
 	return strings.Join(parts, "\n\n"), nil
 }
 
-type stageLLMResolve struct {
-	model          *entity.PaperLLMModelConfig
-	route          *entity.PaperStrategyRoute
-	behaviorKey    string
-	capabilityID   string
-	strategyPkgID  uint64
-	system         string
-	userPrefix     string
-}
-
 func (s *TopicDiscoveryRunService) contentLocaleForStep(ctx context.Context, step *entity.PaperOutputTopicStep) string {
 	if s == nil || step == nil || step.ManuscriptID == 0 || s.manuscripts == nil {
 		return "en"
@@ -660,31 +646,6 @@ func (s *TopicDiscoveryRunService) contentLocaleForStep(ctx context.Context, ste
 		return "en"
 	}
 	return lang.NormalizeContentLanguage(ms.ContentLanguage)
-}
-
-func (s *TopicDiscoveryRunService) callStageLLM(
-	ctx context.Context,
-	step *entity.PaperOutputTopicStep,
-	stageCode string,
-	vars map[string]string,
-	userExtra string,
-) (string, llm.LLMUsage, error) {
-	locale := s.contentLocaleForStep(ctx, step)
-	resolved, err := s.resolveStageLLM(ctx, stageCode, vars, locale)
-	if err != nil {
-		persistStepLLMInput(step, stageCode, "", llmUserMessage("", userExtra), "")
-		return "", llm.LLMUsage{}, err
-	}
-	user := llmUserMessage(resolved.userPrefix, userExtra)
-	modelName := resolved.model.ModelName
-	persistStepLLMInput(step, stageCode, resolved.system, user, modelName)
-	start := time.Now()
-	text, usage, err := s.llm.Complete(ctx, resolved.model, resolved.system, user)
-	s.persistLLMCallLog(ctx, step.ManuscriptID, stageCode, resolved, resolved.system, user, text, usage, int(time.Since(start).Milliseconds()), err)
-	if err != nil {
-		persistStepLLMInput(step, stageCode, resolved.system, user, modelName)
-	}
-	return text, usage, err
 }
 
 func llmUserMessage(userPrefix, userExtra string) string {
@@ -697,172 +658,6 @@ func llmUserMessage(userPrefix, userExtra string) string {
 		return user
 	}
 	return user + "\n\n" + extra
-}
-
-// persistStepLLMInput 将发给模型的 system/user 写入 step.input_params（主存储），并在 extra 保留 llm_* 副本便于接口展示。
-func persistStepLLMInput(step *entity.PaperOutputTopicStep, stageCode, system, user, modelName string) {
-	if step == nil {
-		return
-	}
-	llmInput := map[string]any{
-		"stage_code":    stageCode,
-		"system_prompt": system,
-		"user_prompt":   user,
-	}
-	if strings.TrimSpace(modelName) != "" {
-		llmInput["model_name"] = modelName
-	}
-
-	if stageCode == "retrieve" && len(step.InputParams) > 0 {
-		existing := map[string]any{}
-		_ = json.Unmarshal(step.InputParams, &existing)
-		if existing == nil {
-			existing = map[string]any{}
-		}
-		existing["llm_request"] = llmInput
-		step.InputParams = jsonx.MustJSON(existing)
-	} else {
-		step.InputParams = jsonx.MustJSON(llmInput)
-	}
-
-	meta := paperstep.LoadStepExtra(step)
-	meta = paperstep.MergeStepExtra(meta, map[string]any{
-		"llm_stage_code": stageCode,
-		"llm_system":     strings.TrimSpace(system),
-		"llm_user":       strings.TrimSpace(user),
-		"llm_model_name": strings.TrimSpace(modelName),
-	})
-	step.Extra = jsonx.MustJSON(meta)
-}
-
-func (s *TopicDiscoveryRunService) persistLLMCallLog(
-	ctx context.Context,
-	manuscriptID uint64,
-	stageCode string,
-	resolved *stageLLMResolve,
-	system, user, responseText string,
-	usage llm.LLMUsage,
-	latencyMs int,
-	callErr error,
-) {
-	if resolved == nil || resolved.model == nil {
-		return
-	}
-	status := int16(200)
-	if callErr != nil {
-		status = int16(500)
-		var re *errorx.RespErr
-		if errors.As(callErr, &re) && re != nil && re.Code > 0 && re.Code <= 32767 {
-			status = int16(re.Code)
-		}
-	}
-	stage := stageCode
-	var modelCfgID *uint
-	if resolved.model.ID > 0 {
-		id := resolved.model.ID
-		modelCfgID = &id
-	}
-	var behaviorKey *string
-	if strings.TrimSpace(resolved.behaviorKey) != "" {
-		bk := resolved.behaviorKey
-		behaviorKey = &bk
-	}
-	var strategyPkgID *uint64
-	if resolved.strategyPkgID > 0 {
-		id := resolved.strategyPkgID
-		strategyPkgID = &id
-	}
-	var capabilityID *string
-	if strings.TrimSpace(resolved.capabilityID) != "" {
-		cid := resolved.capabilityID
-		capabilityID = &cid
-	}
-	var promptTok, completionTok *int
-	if usage.PromptTokens > 0 {
-		promptTok = &usage.PromptTokens
-	}
-	if usage.CompletionTokens > 0 {
-		completionTok = &usage.CompletionTokens
-	}
-	reqPayload := map[string]any{
-		"stage_code":    stageCode,
-		"system_prompt": strings.TrimSpace(system),
-		"user_prompt":   strings.TrimSpace(user),
-	}
-	respPayload := map[string]any{
-		"text": strings.TrimSpace(responseText),
-	}
-	if callErr != nil {
-		respPayload["error"] = callErr.Error()
-	}
-	row := &entity.PaperLLMCallLog{
-		ManuscriptID:      manuscriptID,
-		StageCode:         &stage,
-		BehaviorKey:       behaviorKey,
-		StrategyPackageID: strategyPkgID,
-		CapabilityID:      capabilityID,
-		ModelConfigID:     modelCfgID,
-		ModelName:         resolved.model.ModelName,
-		RequestJSON:      jsonx.MustJSON(reqPayload),
-		ResponseJSON:     jsonx.MustJSON(respPayload),
-		PromptTokens:     promptTok,
-		CompletionTokens: completionTok,
-		LatencyMs:        latencyMs,
-		Status:           status,
-		CreatedAt:        time.Now(),
-	}
-	_ = s.llmRepo.InsertCallLog(ctx, row)
-}
-
-func (s *TopicDiscoveryRunService) resolveStageLLM(ctx context.Context, stageCode string, vars map[string]string, locale string) (*stageLLMResolve, error) {
-	locale = lang.NormalizeContentLanguage(locale)
-	stageBehavior := behaviorKeyForTopicStage(stageCode)
-	route, err := s.resolveStrategyRoute(ctx, stageBehavior)
-	if err != nil {
-		return nil, err
-	}
-	if route == nil {
-		return nil, errorx.ErrLLMNotConfigured.WithDetail("缺少 paper_llm_strategy_route（behavior_key=" + stageBehavior + "）")
-	}
-	pkg := route.Package
-	if pkg == nil && s.strategyRepo != nil {
-		pkg, _ = s.strategyRepo.FindPackageByID(ctx, route.StrategyPackageID)
-	}
-	if pkg != nil && pkg.ProviderKind == entity.StrategyProviderHTTP {
-		return nil, errorx.ErrLLMNotConfigured.WithDetail(
-			"策略包 " + pkg.Code + " 为 http 远程服务，尚未接入 Invoke（behavior_key=" + stageBehavior + "）",
-		)
-	}
-	modelConfigID := llm.ModelConfigIDFromRoute(route)
-	model, err := s.llmRepo.ResolveActiveModel(ctx, modelConfigID)
-	if err != nil {
-		return nil, err
-	}
-	if model == nil {
-		return nil, errorx.ErrLLMNotConfigured.WithDetail(
-			"缺少 paper_llm_model_config（route.default_model_config_id=" +
-				fmt.Sprintf("%d", modelConfigID) + " 且无 active 默认端点）",
-		)
-	}
-	renderVars := lang.MergePromptVars(vars, locale)
-	system := llm.RenderPromptTemplate(builtinSystemPrompt(locale), renderVars)
-	userTmpl := llm.RenderPromptTemplate(builtinStageUserTemplate(stageCode, locale), renderVars)
-	if userTmpl == "" {
-		userTmpl = stageCode
-	}
-	capID := route.CapabilityID
-	if capID == "" {
-		capID = stageBehavior
-	}
-	return &stageLLMResolve{
-		model:         model,
-		route:         route,
-		behaviorKey:   stageBehavior,
-		capabilityID:  capID,
-		strategyPkgID: route.StrategyPackageID,
-		system:        system,
-		userPrefix:    userTmpl,
-	}, nil
 }
 
 func (s *TopicDiscoveryRunService) resolveStrategyRoute(ctx context.Context, behaviorKey string) (*entity.PaperStrategyRoute, error) {
