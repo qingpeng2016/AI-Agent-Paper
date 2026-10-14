@@ -1,0 +1,86 @@
+/* 列表「操作」列：与文献管理 · 分类管理 ul-table 一致（表头与首个按钮左对齐） */
+.ul-col-actions,
+.wf-lit-col-actions,
+.ms-col-actions,
+.wf-lit-ref-col-action {
+  text-align: left;
+  white-space: nowrap;
+}
+
+.ul-btn-link {
+  padding: 5px 10px 5px 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: #6366f1;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+  border-radius: 7px;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+
+.ul-btn-link:hover:not(:disabled) {
+  background: #eef2ff;
+  text-decoration-thickness: 1.5px;
+}
+
+/* 文献综述等「生成」入口（与管理/删除的靛蓝链接区分） */
+.ul-btn-link--generate {
+  color: #059669;
+  text-decoration-color: rgba(5, 150, 105, 0.55);
+}
+
+.ul-btn-link--generate:hover:not(:disabled) {
+  background: #d1fae5;
+}
+
+.ul-btn-link:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ul-col-actions .ul-btn-link + .ul-btn-link,
+.wf-lit-col-actions .ul-btn-link + .ul-btn-link,
+.ms-col-actions .ul-btn-link + .ul-btn-link {
+  margin-left: 4px;
+}
+
+/* 表头「操作」：与 .ul-btn-link 同盒模型（无左 padding），与下方首按钮文字左对齐 */
+.ul-actions-head {
+  display: inline-block;
+  padding: 5px 10px 5px 0;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: #64748b;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  outline: none;
+  text-decoration: none;
+  cursor: help;
+  vertical-align: middle;
+}
+
+th.ul-col-actions,
+th.wf-lit-col-actions,
+th.ms-col-actions,
+th.wf-lit-ref-col-action {
+  font-weight: inherit;
+  color: inherit;
+}
+
+th.ul-col-actions .el-tooltip__trigger,
+th.wf-lit-col-actions .el-tooltip__trigger,
+th.ms-col-actions .el-tooltip__trigger,
+th.wf-lit-ref-col-action .el-tooltip__trigger {
+  display: inline-block;
+  padding: 0;
+  border: none;
+  background: transparent;
+  vertical-align: middle;
+}

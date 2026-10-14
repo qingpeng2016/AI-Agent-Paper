@@ -64,6 +64,12 @@ defineProps<{
       <circle cx="12" cy="8" r="3.5" />
       <path d="M5 20c0-3.5 3.1-6 7-6s7 2.5 7 6" />
     </template>
+    <!-- 课程汇报：演示屏 -->
+    <template v-else-if="moduleId === 'course-report'">
+      <rect x="3" y="5" width="18" height="12" rx="2" />
+      <path d="M8 19h8M12 17v2" />
+      <path d="M7 9h10M7 12h6" opacity="0.55" />
+    </template>
     <!-- 环境配置：齿轮 -->
     <template v-else-if="moduleId === 'environment'">
       <circle cx="12" cy="12" r="3" />

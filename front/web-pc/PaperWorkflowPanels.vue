@@ -39,6 +39,7 @@ import {
 } from '@/api/experimentPlans'
 import { DEMO_FIGURES, DEMO_MANUSCRIPT } from './demoModuleOutputs'
 import PaperListPagination from './PaperListPagination.vue'
+import PaperTableActionsHead from './PaperTableActionsHead.vue'
 import PaperSelect from './PaperSelect.vue'
 import {
   LITERATURE_SOURCE_OPTIONS,
@@ -283,7 +284,7 @@ async function runPaperWriteFullPipeline() {
     await reloadPaperWriteDependencies()
     await new Promise((r) => setTimeout(r, 600))
     resultVisible.value = { ...resultVisible.value, 'paper-writing': true }
-    ElMessage.success('已触发写作全流程（演示占位）')
+    ElMessage.success('论文生成已触发（演示占位）')
   } finally {
     paperWriteRunStatus.value = 'idle'
   }
@@ -1143,28 +1144,8 @@ defineExpose({
             <th class="wf-lit-col-meta wf-lit-col-from-head">来源</th>
             <th class="wf-lit-col-meta wf-lit-col-status">状态</th>
             <th class="wf-lit-col-meta wf-lit-col-version">版本</th>
-            <th class="wf-lit-col-actions">
-              <div class="wf-lit-actions">
-                <span class="wf-lit-head-slot">
-                  <button
-                    type="button"
-                    tabindex="-1"
-                    aria-hidden="true"
-                    class="paper-btn-generate paper-btn--compact wf-lit-width-ruler"
-                  >
-                    生成
-                  </button>
-                  <span class="wf-lit-col-head-label">操作</span>
-                </span>
-                <button
-                  type="button"
-                  tabindex="-1"
-                  aria-hidden="true"
-                  class="paper-btn-danger paper-btn--compact wf-lit-width-ruler"
-                >
-                  删除
-                </button>
-              </div>
+            <th class="wf-lit-col-actions ul-col-actions">
+              <PaperTableActionsHead tip="可对文献综述执行生成、管理或删除" />
             </th>
           </tr>
         </thead>
@@ -1193,28 +1174,18 @@ defineExpose({
             <td class="wf-lit-col-meta wf-lit-col-version">
               <span class="wf-output-version">{{ formatLiteratureReviewVersion(item) }}</span>
             </td>
-            <td class="wf-lit-col-actions">
-              <div class="wf-lit-actions">
-                <button
-                  type="button"
-                  class="paper-btn--compact"
-                  :class="
-                    literatureReviewNeedsGenerateRun(item)
-                      ? 'paper-btn-generate'
-                      : 'paper-btn-primary'
-                  "
-                  @click="onLitReviewRowPrimaryAction(item)"
-                >
-                  {{ literatureReviewNeedsGenerateRun(item) ? '生成' : '管理' }}
-                </button>
-                <button
-                  type="button"
-                  class="paper-btn-danger paper-btn--compact"
-                  @click="openDeleteLitReviewConfirm(item)"
-                >
-                  删除
-                </button>
-              </div>
+            <td class="wf-lit-col-actions ul-col-actions">
+              <button
+                type="button"
+                class="ul-btn-link"
+                :class="{ 'ul-btn-link--generate': literatureReviewNeedsGenerateRun(item) }"
+                @click="onLitReviewRowPrimaryAction(item)"
+              >
+                {{ literatureReviewNeedsGenerateRun(item) ? '生成' : '管理' }}
+              </button>
+              <button type="button" class="ul-btn-link" @click="openDeleteLitReviewConfirm(item)">
+                删除
+              </button>
             </td>
           </tr>
         </tbody>
@@ -1543,28 +1514,8 @@ defineExpose({
             <th class="wf-exp-col-created">创建时间</th>
             <th class="wf-exp-col-status">状态</th>
             <th class="wf-exp-col-version wf-lit-col-version">版本</th>
-            <th class="wf-lit-col-actions">
-              <div class="wf-lit-actions">
-                <span class="wf-lit-head-slot">
-                  <button
-                    type="button"
-                    tabindex="-1"
-                    aria-hidden="true"
-                    class="paper-btn-primary paper-btn--compact wf-lit-width-ruler"
-                  >
-                    管理
-                  </button>
-                  <span class="wf-lit-col-head-label">操作</span>
-                </span>
-                <button
-                  type="button"
-                  tabindex="-1"
-                  aria-hidden="true"
-                  class="paper-btn-danger paper-btn--compact wf-lit-width-ruler"
-                >
-                  删除
-                </button>
-              </div>
+            <th class="wf-lit-col-actions ul-col-actions">
+              <PaperTableActionsHead tip="可对实验方案执行管理或删除" />
             </th>
           </tr>
         </thead>
@@ -1585,23 +1536,13 @@ defineExpose({
             <td class="wf-exp-col-version wf-lit-col-version">
               <span class="wf-output-version">{{ formatExperimentPlanVersion(item) }}</span>
             </td>
-            <td class="wf-lit-col-actions">
-              <div class="wf-lit-actions">
-                <button
-                  type="button"
-                  class="paper-btn-primary paper-btn--compact"
-                  @click="openExpPlanBundleView(item)"
-                >
-                  管理
-                </button>
-                <button
-                  type="button"
-                  class="paper-btn-danger paper-btn--compact"
-                  @click="openDeleteExpPlanConfirm(item)"
-                >
-                  删除
-                </button>
-              </div>
+            <td class="wf-lit-col-actions ul-col-actions">
+              <button type="button" class="ul-btn-link" @click="openExpPlanBundleView(item)">
+                管理
+              </button>
+              <button type="button" class="ul-btn-link" @click="openDeleteExpPlanConfirm(item)">
+                删除
+              </button>
             </td>
           </tr>
         </tbody>
@@ -1757,7 +1698,8 @@ defineExpose({
 
   <!-- 论文写作：ARIS Workflow 3（plan → write → compile → polish → audit） -->
   <div v-else-if="moduleId === 'paper-writing'" class="wf-stack wf-paper-write-stack">
-    <section class="wf-panel wf-paper-write-head">
+    <section class="wf-panel wf-paper-write-shell">
+      <header class="wf-paper-write-shell-head">
       <div class="wf-paper-write-head-row">
         <div class="wf-paper-write-head-main">
           <h2 class="wf-title wf-title--module-head wf-paper-write-ms-headline">
@@ -1774,23 +1716,11 @@ defineExpose({
         <div class="wf-paper-write-head-actions">
           <span class="wf-meta">{{ paperWriteVenueLabel }}</span>
           <span
-            class="wf-status-pill wf-status-pill--inline"
-            :class="
-              paperWriteRunStatus === 'running'
-                ? 'wf-status-pill--progress'
-                : 'wf-status-pill--muted'
-            "
+            v-if="paperWriteRunStatus === 'running'"
+            class="wf-status-pill wf-status-pill--inline wf-status-pill--progress"
           >
-            {{ paperWriteRunStatus === 'running' ? 'running' : 'idle' }}
+            运行中…
           </span>
-          <button
-            type="button"
-            class="paper-btn-generate"
-            :disabled="paperWriteRunStatus === 'running'"
-            @click="runPaperWriteFullPipeline"
-          >
-            {{ paperWriteRunStatus === 'running' ? '运行中…' : '运行全流程' }}
-          </button>
         </div>
       </div>
 
@@ -1853,11 +1783,11 @@ defineExpose({
           </button>
         </div>
       </div>
-    </section>
+      </header>
 
-    <div class="wf-paper-write-layout">
+      <div class="wf-paper-write-layout">
       <aside class="wf-paper-write-sidebar">
-        <section class="wf-panel wf-paper-write-sidebar-panel wf-paper-write-sidebar-panel--merged">
+        <div class="wf-paper-write-sidebar-inner wf-paper-write-sidebar-panel--merged">
           <div class="wf-paper-write-sidebar-block">
             <h3 class="wf-paper-write-sidebar-title">写作阶段</h3>
             <nav class="wf-paper-write-phase-nav" aria-label="写作阶段">
@@ -1876,9 +1806,6 @@ defineExpose({
                 </span>
               </button>
             </nav>
-            <p class="wf-meta wf-paper-write-flow-hint">
-              全流程：plan → 图表模块 → write → compile → polish → audit
-            </p>
           </div>
           <div class="wf-paper-write-sidebar-block wf-paper-write-sidebar-block--checkpoints">
             <h3 class="wf-paper-write-sidebar-title wf-paper-write-sidebar-title--tight">人工检查点</h3>
@@ -1889,10 +1816,10 @@ defineExpose({
               <li class="wf-paper-write-checklist-item">编译通过后再开润色循环</li>
             </ul>
           </div>
-        </section>
+        </div>
       </aside>
 
-      <section class="wf-panel wf-paper-write-main">
+      <div class="wf-paper-write-main">
         <header class="wf-paper-write-main-head">
           <h3 class="wf-title">{{ paperWritePhaseHeading }}</h3>
           <button
@@ -2096,8 +2023,9 @@ defineExpose({
             </table>
           </template>
         </div>
-      </section>
-    </div>
+      </div>
+      </div>
+    </section>
   </div>
 
   <Teleport to="body">
@@ -2185,7 +2113,9 @@ defineExpose({
                     <th>题名</th>
                     <th>作者</th>
                     <th>年份</th>
-                    <th class="wf-lit-ref-col-action">操作</th>
+                    <th class="wf-lit-ref-col-action">
+                      <PaperTableActionsHead tip="查看参考文献详情" />
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -2206,7 +2136,7 @@ defineExpose({
                     <td class="wf-lit-ref-col-action">
                       <button
                         type="button"
-                        class="paper-btn-primary paper-btn--compact"
+                        class="ul-btn-link"
                         @click.stop="openLitReviewRefDetail(ref)"
                       >
                         查看
@@ -2834,7 +2764,6 @@ defineExpose({
 .wf-lit-table--lit-review .wf-lit-col-actions {
   width: 18%;
   min-width: 0;
-  text-align: right;
 }
 
 .wf-lit-table--lit-review .wf-lit-col-status .wf-status-pill {
@@ -2901,6 +2830,12 @@ defineExpose({
 .wf-lit-table--exp-plan .wf-exp-col-version .wf-output-version {
   padding: 3px 8px;
   font-size: 13px;
+}
+
+.wf-lit-table--exp-plan .wf-lit-col-actions {
+  width: 20%;
+  min-width: 0;
+  vertical-align: middle;
 }
 
 .wf-lit-table--lit-review .wf-lit-col-version .wf-output-version,
@@ -3094,64 +3029,6 @@ defineExpose({
   line-height: 1.6;
   color: #64748b;
   text-align: center;
-}
-
-.wf-lit-col-actions {
-  min-width: 148px;
-  text-align: right;
-}
-
-.wf-lit-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  justify-content: flex-end;
-}
-
-.wf-lit-list-panel thead .wf-lit-actions {
-  flex-wrap: nowrap;
-}
-
-.wf-lit-list-panel .wf-lit-actions .paper-btn-primary.paper-btn--compact,
-.wf-lit-list-panel .wf-lit-actions .paper-btn-generate.paper-btn--compact,
-.wf-lit-list-panel .wf-lit-actions .paper-btn-danger.paper-btn--compact {
-  padding: 5px 10px;
-  font-size: 13px;
-  font-weight: 600;
-  border-radius: 7px;
-  line-height: 1.4;
-}
-
-.wf-lit-head-slot {
-  position: relative;
-  display: inline-flex;
-  flex-shrink: 0;
-  min-width: 3.25rem;
-}
-
-.wf-lit-width-ruler {
-  visibility: hidden;
-  pointer-events: none;
-}
-
-.wf-lit-action-placeholder {
-  visibility: hidden;
-  pointer-events: none;
-  user-select: none;
-}
-
-.wf-lit-col-head-label {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 6px 8px;
-  font-size: 14px;
-  font-weight: 700;
-  color: #64748b;
-  white-space: nowrap;
-  pointer-events: none;
 }
 
 .wf-lit-delete-overlay,
@@ -3526,7 +3403,6 @@ defineExpose({
 
 .wf-lit-ref-col-action {
   width: 5.5rem;
-  text-align: right;
   white-space: nowrap;
 }
 
@@ -3990,10 +3866,15 @@ defineExpose({
   border-collapse: collapse;
 }
 
-.wf-table th,
-.wf-table td {
+.wf-table:not(.wf-lit-table) th,
+.wf-table:not(.wf-lit-table) td {
   padding: 8px 10px;
   text-align: left;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.wf-table.wf-lit-table th,
+.wf-table.wf-lit-table td {
   border-bottom: 1px solid #e2e8f0;
 }
 
@@ -4118,7 +3999,25 @@ defineExpose({
 }
 
 .wf-paper-write-stack {
-  gap: 16px;
+  gap: 0;
+}
+
+.wf-paper-write-shell {
+  padding: 0;
+  overflow: hidden;
+}
+
+.wf-paper-write-shell-head {
+  padding: 20px 22px 16px;
+  border-bottom: 1px solid #e8eaf0;
+}
+
+.wf-paper-write-shell-head .wf-title--module-head {
+  margin-bottom: 0;
+}
+
+.wf-paper-write-shell-head > .wf-meta:first-of-type {
+  margin: 12px 22px 0;
 }
 
 .wf-paper-write-head-row {
@@ -4213,13 +4112,18 @@ defineExpose({
 
   display: grid;
   grid-template-columns: 280px minmax(0, 1fr);
-  gap: 16px;
+  gap: 0;
   align-items: stretch;
 }
 
 @media (max-width: 960px) {
   .wf-paper-write-layout {
     grid-template-columns: 1fr;
+  }
+
+  .wf-paper-write-sidebar {
+    border-right: none;
+    border-bottom: 1px solid #e8eaf0;
   }
 }
 
@@ -4228,25 +4132,26 @@ defineExpose({
   flex-direction: column;
   gap: 0;
   min-height: 100%;
+  border-right: 1px solid #e8eaf0;
+}
+
+.wf-paper-write-sidebar-inner.wf-paper-write-sidebar-panel--merged {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  height: 100%;
+  min-height: var(--wf-paper-write-work-min-h);
+  padding: 16px 16px 18px;
 }
 
 .wf-paper-write-sidebar-panel {
   padding: 16px;
 }
 
-.wf-paper-write-sidebar-panel--merged {
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
-  height: 100%;
-  min-height: var(--wf-paper-write-work-min-h);
-}
-
 .wf-paper-write-sidebar-block--checkpoints {
   flex: 1;
   margin-top: 0;
-  padding-top: 12px;
-  border-top: 1px solid #e2e8f0;
+  padding-top: 14px;
 }
 
 .wf-paper-write-sidebar-title {
@@ -4320,16 +4225,6 @@ defineExpose({
   color: #64748b;
 }
 
-.wf-paper-write-flow-hint {
-  margin: 12px 0 0;
-  padding-top: 12px;
-  border-top: 1px solid #e2e8f0;
-}
-
-.wf-paper-write-sidebar-panel--merged .wf-paper-write-flow-hint {
-  margin-bottom: 0;
-}
-
 .wf-paper-write-checklist {
   margin: 0;
   padding: 0;
@@ -4367,6 +4262,7 @@ defineExpose({
   box-sizing: border-box;
   height: 100%;
   min-height: var(--wf-paper-write-work-min-h);
+  background: #fff;
 }
 
 .wf-paper-write-main-head {
@@ -4375,11 +4271,16 @@ defineExpose({
   gap: 12px;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 16px 0;
+  padding: 16px 20px 0;
+}
+
+.wf-paper-write-main-head .wf-title {
+  margin: 0;
+  font-size: 16px;
 }
 
 .wf-paper-write-main-body {
-  padding: 16px;
+  padding: 16px 20px 22px;
 }
 
 .wf-paper-write-stats {

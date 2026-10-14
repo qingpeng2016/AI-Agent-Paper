@@ -12,6 +12,7 @@ import {
   type PaperUserLiteratureItem,
 } from '@/api/userLiterature'
 import PaperListPagination from './PaperListPagination.vue'
+import PaperTableActionsHead from './PaperTableActionsHead.vue'
 
 const props = defineProps<{
   active: boolean
@@ -203,7 +204,9 @@ watch(
             <th>论文标题</th>
             <th>关联文献</th>
             <th>创建时间</th>
-            <th class="ul-col-actions">操作</th>
+            <th class="ul-col-actions">
+              <PaperTableActionsHead tip="按论文管理关联文献" />
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -423,26 +426,6 @@ watch(
 .ul-col-created {
   font-variant-numeric: tabular-nums;
   color: #334155;
-}
-
-.ul-col-actions {
-  text-align: right;
-  white-space: nowrap;
-}
-
-.ul-btn-link {
-  padding: 5px 10px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #6366f1;
-  cursor: pointer;
-  background: transparent;
-  border: none;
-  border-radius: 7px;
-}
-
-.ul-btn-link:hover {
-  background: #eef2ff;
 }
 
 .ul-cat-manage-panel {

@@ -9,6 +9,7 @@ export type PaperModuleId =
   | 'invite-rebate'
   | 'personal-center'
   | 'environment'
+  | 'course-report'
 
 export type PaperModuleMeta = {
   id: PaperModuleId
@@ -67,9 +68,18 @@ export const PAPER_MODULES: PaperModuleMeta[] = [
     label: '环境配置',
     description: '默认科研偏好与文献策略；保存后对「选题发现」等工作流预填生效',
   },
+  {
+    id: 'course-report',
+    label: '课程汇报',
+    description: '课程作业与汇报材料：大纲、幻灯片与讲稿（演示占位）',
+  },
 ]
 
-export type PaperModuleGroupId = 'topic-experiment' | 'writing' | 'resources'
+export type PaperModuleGroupId =
+  | 'topic-experiment'
+  | 'writing'
+  | 'course-presentation'
+  | 'resources'
 
 export type PaperModuleGroup = {
   id: PaperModuleGroupId
@@ -93,6 +103,11 @@ export const PAPER_MODULE_GROUPS: PaperModuleGroup[] = [
     id: 'writing',
     label: '论文与数据',
     moduleIds: ['my-manuscripts', 'user-literature', 'figure-generation'],
+  },
+  {
+    id: 'course-presentation',
+    label: '课程与汇报',
+    moduleIds: ['course-report'],
   },
   {
     id: 'resources',

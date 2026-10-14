@@ -14,6 +14,7 @@ import {
   type PaperFigureItem,
 } from '@/api/figures'
 import PaperListPagination from './PaperListPagination.vue'
+import PaperTableActionsHead from './PaperTableActionsHead.vue'
 import PaperSelect from './PaperSelect.vue'
 import PaperFigureCategoryPanel from './PaperFigureCategoryPanel.vue'
 
@@ -294,7 +295,9 @@ void loadPage(1)
             <th>创建时间</th>
             <th>来源</th>
             <th>格式</th>
-            <th class="ul-col-actions">操作</th>
+            <th class="ul-col-actions">
+              <PaperTableActionsHead tip="查看图表详情" />
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -785,11 +788,6 @@ void loadPage(1)
   text-transform: lowercase;
 }
 
-.ul-col-actions {
-  text-align: right;
-  white-space: nowrap;
-}
-
 .ul-from-tag {
   display: inline-block;
   padding: 3px 10px;
@@ -817,21 +815,6 @@ void loadPage(1)
 .ul-from-tag--default {
   color: #475569;
   background: #f1f5f9;
-}
-
-.ul-btn-link {
-  padding: 5px 10px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #6366f1;
-  cursor: pointer;
-  background: transparent;
-  border: none;
-  border-radius: 7px;
-}
-
-.ul-btn-link:hover {
-  background: #eef2ff;
 }
 
 .ul-modal-backdrop {

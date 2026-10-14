@@ -196,6 +196,16 @@
 .paper-create-ms-panel .paper-message-box__form .paper-input {
   height: 44px;
   line-height: 1.5;
+  background: #fff;
+  color: var(--atm-text, #1e1b4b);
+}
+
+.paper-create-ms-panel .paper-message-box__form .paper-input::placeholder {
+  color: #94a3b8;
+}
+
+.paper-create-ms-panel .paper-message-box__form .paper-input:focus {
+  background: #fff;
 }
 
 .paper-create-ms-panel .paper-create-ms-lang {
@@ -210,6 +220,68 @@
 
 .paper-create-ms-panel .paper-message-box__btns {
   padding: 20px 28px 28px;
+}
+
+.paper-create-ms-upload-lead {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #64748b;
+}
+
+.paper-create-ms-upload-file-input {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.paper-create-ms-upload-drop {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 88px;
+  padding: 16px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  background: #f8fafc;
+  cursor: pointer;
+  text-align: center;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.paper-create-ms-upload-drop:hover:not(.paper-create-ms-upload-drop--disabled) {
+  border-color: #94a3b8;
+  background: #f1f5f9;
+}
+
+.paper-create-ms-upload-drop--has-file {
+  border-style: solid;
+  border-color: #bfdbfe;
+  background: #eff6ff;
+}
+
+.paper-create-ms-upload-drop--disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.paper-create-ms-upload-hint {
+  margin: 0;
+  font-size: 14px;
+  color: #64748b;
+}
+
+.paper-create-ms-upload-name {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--atm-text);
+  word-break: break-all;
 }
 
 .paper-modal-header {

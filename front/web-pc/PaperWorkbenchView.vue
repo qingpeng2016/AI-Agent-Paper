@@ -52,6 +52,7 @@ import PaperFigureManagementPanel from './PaperFigureManagementPanel.vue'
 import PaperInviteRebatePanel from './PaperInviteRebatePanel.vue'
 import PaperPersonalCenterPanel from './PaperPersonalCenterPanel.vue'
 import PaperEnvironmentPanel from './PaperEnvironmentPanel.vue'
+import PaperCourseReportPanel from './PaperCourseReportPanel.vue'
 import PaperSelect from './PaperSelect.vue'
 import PaperMultiSelect from './PaperMultiSelect.vue'
 import PaperWorkflowPanels from './PaperWorkflowPanels.vue'
@@ -154,7 +155,8 @@ const showGenericModuleLoading = computed(
     activeModule.value !== 'experiment-planning' &&
     activeModule.value !== 'paper-writing' &&
     activeModule.value !== 'user-literature' &&
-    activeModule.value !== 'figure-generation',
+    activeModule.value !== 'figure-generation' &&
+    activeModule.value !== 'course-report',
 )
 
 const topicDiscoveryPageLoading = computed(
@@ -278,11 +280,45 @@ const createManuscriptForm = reactive<{ disciplineCode: string; title: string; c
 })
 let createManuscriptDialogResolve: ((ok: boolean) => void) | null = null
 
+const createManuscriptUploadFile = ref<File | null>(null)
+const createManuscriptUploadInputRef = ref<HTMLInputElement | null>(null)
+
+function resetCreateManuscriptUpload() {
+  createManuscriptUploadFile.value = null
+  if (createManuscriptUploadInputRef.value) createManuscriptUploadInputRef.value.value = ''
+}
+
+function openCreateManuscriptUploadPicker() {
+  if (createManuscriptSubmitting.value) return
+  createManuscriptUploadInputRef.value?.click()
+}
+
+function onCreateManuscriptUploadChange(e: Event) {
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0] ?? null
+  createManuscriptUploadFile.value = file
+  if (file && !createManuscriptForm.title.trim()) {
+    createManuscriptForm.title = file.name.replace(/\.[^.]+$/, '')
+  }
+}
+
+function onCreateManuscriptUploadDrop(e: DragEvent) {
+  if (createManuscriptSubmitting.value) return
+  e.preventDefault()
+  const file = e.dataTransfer?.files?.[0] ?? null
+  if (!file) return
+  createManuscriptUploadFile.value = file
+  if (!createManuscriptForm.title.trim()) {
+    createManuscriptForm.title = file.name.replace(/\.[^.]+$/, '')
+  }
+}
+
 async function openCreateManuscriptDialog(): Promise<boolean> {
   await reloadTopicDiscoveryFormOptions()
   createManuscriptForm.disciplineCode = ''
   createManuscriptForm.title = ''
   createManuscriptForm.contentLanguage = 'en'
+  resetCreateManuscriptUpload()
   createManuscriptDialogVisible.value = true
   return new Promise((resolve) => {
     createManuscriptDialogResolve = resolve
@@ -318,8 +354,12 @@ async function submitCreateManuscriptDialog() {
     )
     applyManuscriptListFromApi(data)
     topicForm.disciplineCode = createManuscriptForm.disciplineCode
+    const pendingUpload = createManuscriptUploadFile.value
     closeCreateManuscriptDialog(true)
     ElMessage.success('论文已创建')
+    if (pendingUpload) {
+      ElMessage.info(`上传论文「${pendingUpload.name}」功能即将接入`)
+    }
   } catch (e) {
     ElMessage.error(e instanceof Error ? e.message : '创建论文失败')
   } finally {
@@ -582,6 +622,20 @@ async function onManuscriptChange(id: string) {
   }
 }
 
+async function onStartWritingFromMyManuscripts(manuscriptId: string) {
+  const id = manuscriptId.trim()
+  if (!id || !/^\d+$/.test(id)) {
+    ElMessage.warning('请从列表中选择已创建的论文')
+    return
+  }
+  if (manuscriptSwitching.value) return
+  if (id !== activeManuscriptId.value) {
+    await onManuscriptChange(id)
+    if (activeManuscriptId.value !== id) return
+  }
+  selectModule('paper-writing')
+}
+
 function onManuscriptsListUpdate(list: PaperManuscriptItem[]) {
   manuscripts.value = list
   persistManuscripts()
@@ -633,6 +687,7 @@ const isMyManuscriptsModule = computed(() => activeModule.value === 'my-manuscri
 const isUserLiteratureModule = computed(() => activeModule.value === 'user-literature')
 const isFigureGenerationModule = computed(() => activeModule.value === 'figure-generation')
 const isInviteRebateModule = computed(() => activeModule.value === 'invite-rebate')
+const isCourseReportModule = computed(() => activeModule.value === 'course-report')
 const isPersonalCenterModule = computed(() => activeModule.value === 'personal-center')
 const isEnvironmentModule = computed(() => activeModule.value === 'environment')
 const isUtilityModule = computed(
@@ -642,19 +697,20 @@ const isUtilityModule = computed(
     isFigureGenerationModule.value ||
     isEnvironmentModule.value ||
     isInviteRebateModule.value ||
+    isCourseReportModule.value ||
     isPersonalCenterModule.value,
 )
 const isTopicDiscoveryModule = computed(() => activeModule.value === 'topic-discovery')
 
 const isLiteratureReviewModule = computed(() => activeModule.value === 'literature-review')
 const isExperimentPlanningModule = computed(() => activeModule.value === 'experiment-planning')
+const isPaperWritingModule = computed(() => activeModule.value === 'paper-writing')
 
 /** 仅本篇工作流模块展示顶栏「当前论文」切换（全局模块如我的论文/文献管理不展示） */
 const MANUSCRIPT_CONTEXT_MODULE_IDS = [
   'topic-discovery',
   'literature-review',
   'experiment-planning',
-  'paper-writing',
 ] as const satisfies readonly PaperModuleId[]
 
 const showManuscriptContextInHeader = computed(() =>
@@ -925,6 +981,9 @@ const primaryActionLabel = computed(() => {
     if (litReviewReadyForExperimentPlan.value) return '生成实验计划'
     if (litReviewDoneForManuscript.value && experimentPlanDoneForManuscript.value) return '再次运行'
     return '运行'
+  }
+  if (isPaperWritingModule.value) {
+    return running.value ? '生成中…' : '生成论文'
   }
   return running.value ? '运行中…' : '运行'
 })
@@ -1849,14 +1908,17 @@ async function onPrimaryAction() {
           mod !== 'environment' &&
           mod !== 'my-manuscripts' &&
           mod !== 'user-literature' &&
-          mod !== 'figure-generation'
+          mod !== 'figure-generation' &&
+          mod !== 'course-report'
         ) {
           recordModuleOperationLog(mod, `运行「${currentMeta.value.label}」`)
         }
         const successHint =
           mod === 'literature-review' && msId && !experimentPlanDoneForManuscript.value
             ? `「${currentMeta.value.label}」已生成 · 可点顶栏「生成实验计划」继续`
-            : `「${currentMeta.value.label}」已完成演示运行 · 论文「${currentManuscript.value?.title ?? '未命名'}」`
+            : mod === 'paper-writing'
+              ? `论文「${currentManuscript.value?.title ?? '未命名'}」生成任务已提交（演示）`
+              : `「${currentMeta.value.label}」已完成演示运行 · 论文「${currentManuscript.value?.title ?? '未命名'}」`
         ElMessage.success(successHint)
       }
     } finally {
@@ -1927,6 +1989,7 @@ watch(
                 class="paper-input"
                 type="text"
                 maxlength="256"
+                placeholder="请输入论文名称"
                 @keyup.enter="submitCreateManuscriptDialog"
               />
             </div>
@@ -1951,6 +2014,39 @@ watch(
                   />
                   中文
                 </label>
+              </div>
+            </div>
+            <div>
+              <span class="paper-label">上传论文（可选）</span>
+              <p class="paper-create-ms-upload-lead">
+                支持 PDF、Word、LaTeX 源码包等；选中后可用文件名预填论文名称。
+              </p>
+              <div
+                class="paper-create-ms-upload-drop"
+                :class="{
+                  'paper-create-ms-upload-drop--has-file': !!createManuscriptUploadFile,
+                  'paper-create-ms-upload-drop--disabled': createManuscriptSubmitting,
+                }"
+                role="button"
+                tabindex="0"
+                @click="openCreateManuscriptUploadPicker"
+                @keydown.enter.prevent="openCreateManuscriptUploadPicker"
+                @keydown.space.prevent="openCreateManuscriptUploadPicker"
+                @dragover.prevent
+                @drop.prevent="onCreateManuscriptUploadDrop"
+              >
+                <input
+                  ref="createManuscriptUploadInputRef"
+                  type="file"
+                  class="paper-create-ms-upload-file-input"
+                  accept=".pdf,.doc,.docx,.tex,.zip,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  :disabled="createManuscriptSubmitting"
+                  @change="onCreateManuscriptUploadChange"
+                />
+                <p v-if="!createManuscriptUploadFile" class="paper-create-ms-upload-hint">
+                  点击或拖拽文件到此处
+                </p>
+                <p v-else class="paper-create-ms-upload-name">{{ createManuscriptUploadFile.name }}</p>
               </div>
             </div>
           </div>
@@ -2520,6 +2616,8 @@ watch(
         v-else-if="activeModule === 'my-manuscripts'"
         :key="`my-manuscripts-${moduleContentKey}`"
         :active-manuscript-id="activeManuscriptId"
+        :manuscript-switching="manuscriptSwitching"
+        @start-writing="onStartWritingFromMyManuscripts($event.id)"
       />
 
       <PaperUserLiteraturePanel
@@ -2539,6 +2637,11 @@ watch(
         :key="`environment-${moduleContentKey}`"
         :env-preference="envPreference"
         @environment-saved="onEnvironmentSaved"
+      />
+
+      <PaperCourseReportPanel
+        v-else-if="activeModule === 'course-report'"
+        :key="`course-report-${moduleContentKey}`"
       />
 
       <PaperInviteRebatePanel

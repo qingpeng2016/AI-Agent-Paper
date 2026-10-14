@@ -13,6 +13,7 @@ import {
   type PaperUserLiteratureItem,
 } from '@/api/userLiterature'
 import PaperListPagination from './PaperListPagination.vue'
+import PaperTableActionsHead from './PaperTableActionsHead.vue'
 import PaperUserLiteratureCategoryByManuscriptPanel from './PaperUserLiteratureCategoryByManuscriptPanel.vue'
 
 export type CategoryManageSubTabId = 'by-name' | 'by-manuscript'
@@ -328,7 +329,9 @@ watch(
           <tr>
             <th>分类名称</th>
             <th>创建时间</th>
-            <th class="ul-col-actions">操作</th>
+            <th class="ul-col-actions">
+              <PaperTableActionsHead tip="管理分类下的文献或编辑分类名称" />
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -698,26 +701,6 @@ watch(
   font-variant-numeric: tabular-nums;
 }
 
-.ul-col-actions {
-  text-align: right;
-  white-space: nowrap;
-}
-
-.ul-btn-link {
-  padding: 5px 10px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #6366f1;
-  cursor: pointer;
-  background: transparent;
-  border: none;
-  border-radius: 7px;
-}
-
-.ul-btn-link:hover {
-  background: #eef2ff;
-}
-
 .ul-cat-form-field {
   display: flex;
   flex-direction: column;
@@ -865,7 +848,4 @@ watch(
   color: #64748b;
 }
 
-.ul-col-actions .ul-btn-link + .ul-btn-link {
-  margin-left: 4px;
-}
 </style>

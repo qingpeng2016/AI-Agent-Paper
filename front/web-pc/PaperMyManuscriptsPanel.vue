@@ -8,6 +8,7 @@ import {
   type PaperManuscriptApiItem,
 } from '@/api/manuscripts'
 import PaperListPagination from './PaperListPagination.vue'
+import PaperTableActionsHead from './PaperTableActionsHead.vue'
 
 type SubmissionDialogTabId = 'submit' | 'revise'
 
@@ -23,7 +24,17 @@ const submissionDialog = ref<{
 
 const props = defineProps<{
   activeManuscriptId: string
+  manuscriptSwitching?: boolean
 }>()
+
+const emit = defineEmits<{
+  startWriting: [item: PaperManuscriptApiItem]
+}>()
+
+function onStartWritingClick(item: PaperManuscriptApiItem) {
+  if (props.manuscriptSwitching) return
+  emit('startWriting', item)
+}
 
 const items = ref<PaperManuscriptApiItem[]>([])
 const total = ref(0)
@@ -117,7 +128,9 @@ void loadPage(1)
             <th>创建时间</th>
             <th>学科</th>
             <th>状态</th>
-            <th class="ms-col-actions">操作</th>
+            <th class="ms-col-actions ul-col-actions">
+              <PaperTableActionsHead tip="进入写作或投稿流程" />
+            </th>
           </tr>
         </thead>
         <tbody>
@@ -131,12 +144,16 @@ void loadPage(1)
               <span v-if="item.is_current" class="ms-pill ms-pill--current">当前</span>
               <span v-else class="ms-muted">—</span>
             </td>
-            <td class="ms-col-actions">
+            <td class="ms-col-actions ul-col-actions">
               <button
                 type="button"
-                class="paper-btn-primary paper-btn--compact"
-                @click="openSubmissionDialog(item)"
+                class="ul-btn-link"
+                :disabled="manuscriptSwitching"
+                @click="onStartWritingClick(item)"
               >
+                写作
+              </button>
+              <button type="button" class="ul-btn-link" @click="openSubmissionDialog(item)">
                 投稿
               </button>
             </td>
@@ -310,7 +327,7 @@ void loadPage(1)
 }
 
 .ms-table col.ms-col-actions {
-  width: 14%;
+  width: 18%;
 }
 
 .ms-table th,
@@ -345,11 +362,6 @@ void loadPage(1)
   overflow: hidden;
   color: #475569;
   text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ms-col-actions {
-  text-align: right;
   white-space: nowrap;
 }
 
