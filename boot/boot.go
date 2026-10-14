@@ -9,6 +9,7 @@ import (
 	botscheduleconfig "github.com/qingpeng2016/ai-agent-paper/application/core-service/bot_schedule_config"
 	inviteRebateSvc "github.com/qingpeng2016/ai-agent-paper/application/core-service/invite_rebate"
 	papersvc "github.com/qingpeng2016/ai-agent-paper/application/core-service/paper"
+	paperuserlit "github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/userliterature"
 	couponSvc "github.com/qingpeng2016/ai-agent-paper/application/core-service/coupon"
 	trackingSvc "github.com/qingpeng2016/ai-agent-paper/application/core-service/tracking"
 	"github.com/qingpeng2016/ai-agent-paper/application/core-service/user"
@@ -64,7 +65,7 @@ func BuildContainer() *dig.Container {
 	_ = c.Provide(papersvc.NewManuscriptService)
 	_ = c.Provide(papersvc.NewLiteratureReviewService)
 	_ = c.Provide(papersvc.NewExperimentPlanService)
-	_ = c.Provide(papersvc.NewUserLiteratureService)
+	_ = c.Provide(paperuserlit.NewService)
 	_ = c.Provide(papersvc.NewPaperFigureService)
 	_ = c.Provide(papersvc.NewManuscriptSubmissionService)
 	_ = c.Provide(papersvc.NewLLMChatService)

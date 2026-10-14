@@ -1,7 +1,7 @@
 package handler
 
 import (
-	papersvc "github.com/qingpeng2016/ai-agent-paper/application/core-service/paper"
+	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/userliterature"
 	"github.com/qingpeng2016/ai-agent-paper/common/dederi/gin/middleware"
 	"github.com/qingpeng2016/ai-agent-paper/common/dederi/gin/response"
 	"github.com/qingpeng2016/ai-agent-paper/common/errorx"
@@ -10,10 +10,10 @@ import (
 )
 
 type PaperUserLiteratureHandler struct {
-	svc *papersvc.UserLiteratureService
+	svc *userliterature.Service
 }
 
-func NewPaperUserLiteratureHandler(svc *papersvc.UserLiteratureService) *PaperUserLiteratureHandler {
+func NewPaperUserLiteratureHandler(svc *userliterature.Service) *PaperUserLiteratureHandler {
 	return &PaperUserLiteratureHandler{svc: svc}
 }
 
@@ -29,7 +29,7 @@ func (h *PaperUserLiteratureHandler) GetUserLiterature(c *gin.Context) {
 	if q.Page < 1 {
 		q.Page = 1
 	}
-	filter, err := papersvc.ParseUserLiteratureListFilter(q.Q, q.CategoryID, q.ManuscriptID)
+	filter, err := userliterature.ParseUserLiteratureListFilter(q.Q, q.CategoryID, q.ManuscriptID)
 	if err != nil {
 		response.ResponseErr(c, err)
 		return

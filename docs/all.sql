@@ -1026,7 +1026,7 @@ INSERT INTO `paper_llm_model_config` (
 INSERT INTO `paper_llm_strategy_package` (`code`, `name`, `provider_kind`, `manifest_version`, `capabilities`, `status`)
 VALUES
   ('builtin', '内置（过渡内联）', 'inline', '1', JSON_ARRAY('topic.stage.default', 'topic.stage.topic_generate', 'topic.stage.topic_audit', 'topic.stage.experiment_plan'), 'active'),
-  ('aris', 'ARIS 策略服务', 'http', NULL, NULL, 'disabled')
+  ('aris', 'ARIS 本地（inline CLI）', 'inline', '1', JSON_ARRAY('idea-creator', 'research-review', 'idea-discovery', 'research-lit'), 'active')
 ON DUPLICATE KEY UPDATE `name` = VALUES(`name`), `status` = VALUES(`status`);
 
 SET @pkg_builtin := (SELECT `id` FROM `paper_llm_strategy_package` WHERE `code` = 'builtin' LIMIT 1);
