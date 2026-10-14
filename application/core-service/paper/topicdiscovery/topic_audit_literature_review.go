@@ -109,7 +109,8 @@ func (s *TopicDiscoveryRunService) persistLiteratureReviewFromLLM(
 		From:         "generated",
 		Format:       "md",
 	}
-	row.Title = &title
+	dbTitle := truncateForDBTitle(title)
+	row.Title = &dbTitle
 	row.ContentMedium = &content
 	row.PdfURI = &pdfRel
 	row.WordURI = &docxRel

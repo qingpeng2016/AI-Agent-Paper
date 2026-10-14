@@ -2,6 +2,7 @@ package notification
 
 import (
 	"context"
+	"strings"
 
 	"github.com/qingpeng2016/ai-agent-paper/common/dederi/logger"
 	"github.com/qingpeng2016/ai-agent-paper/conf"
@@ -29,8 +30,12 @@ func NewNotificationManager() *NotificationManager {
 	if larkConf.NotifyWebhookURL != "" {
 		notifyClient = NewLarkClient(larkConf.NotifyWebhookURL)
 	}
-	if larkConf.ErrorWebhookURL != "" {
-		errorClient = NewLarkClient(larkConf.ErrorWebhookURL)
+	errorWebhook := strings.TrimSpace(larkConf.ErrorWebhookURL)
+	if errorWebhook == "" {
+		errorWebhook = strings.TrimSpace(larkConf.AlertWebhookURL)
+	}
+	if errorWebhook != "" {
+		errorClient = NewLarkClient(errorWebhook)
 	}
 
 	return &NotificationManager{
@@ -59,9 +64,13 @@ func (nm *NotificationManager) SendWarningAlert(ctx context.Context, warningMsg 
 	return nm.alertClient.SendWarningAlertWithOrder(ctx, larkConf.ServiceName, warningMsg, fields)
 }
 
-// SendErrorAlertWithOrder 发送错误报警（保持字段顺序，error_webhook_url）
+// SendErrorAlertWithOrder 发送错误报警（error_webhook_url；未配置时回退 alert_webhook_url）
 func (nm *NotificationManager) SendErrorAlertWithOrder(ctx context.Context, errorMsg string, fields []FieldPair) error {
-	if nm.errorClient == nil {
+	client := nm.errorClient
+	if client == nil {
+		client = nm.alertClient
+	}
+	if client == nil {
 		logger.InfoZ(ctx, "error-notification-disabled", zap.String("type", "error"))
 		return nil
 	}
@@ -69,7 +78,7 @@ func (nm *NotificationManager) SendErrorAlertWithOrder(ctx context.Context, erro
 	if larkConf == nil {
 		return nil
 	}
-	return nm.errorClient.SendErrorAlertWithOrder(ctx, larkConf.ServiceName, errorMsg, fields)
+	return client.SendErrorAlertWithOrder(ctx, larkConf.ServiceName, errorMsg, fields)
 }
 
 // SendInfoAlert 发送信息通知（notify_webhook_url）
@@ -95,7 +104,7 @@ func (nm *NotificationManager) IsNotifyEnabled() bool {
 	return nm.notifyClient != nil
 }
 
-// IsErrorEnabled 错误群是否启用
+// IsErrorEnabled 错误群是否启用（含 alert 回退）
 func (nm *NotificationManager) IsErrorEnabled() bool {
-	return nm.errorClient != nil
+	return nm.errorClient != nil || nm.alertClient != nil
 }

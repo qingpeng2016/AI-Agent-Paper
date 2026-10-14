@@ -76,9 +76,9 @@ type Notification struct {
 }
 
 type LarkNotification struct {
-	AlertWebhookURL  string `mapstructure:"alert_webhook_url"`
+	AlertWebhookURL  string `mapstructure:"alert_webhook_url"`  // SendErrorLog 默认目标；未配 error_webhook_url 时亦用于错误报警
 	NotifyWebhookURL string `mapstructure:"notify_webhook_url"`
-	ErrorWebhookURL  string `mapstructure:"error_webhook_url"`
+	ErrorWebhookURL  string `mapstructure:"error_webhook_url"` // 可选；为空则与 alert_webhook_url 相同
 	ServiceName      string `mapstructure:"service_name"`
 	Timeout          int    `mapstructure:"timeout"`
 }

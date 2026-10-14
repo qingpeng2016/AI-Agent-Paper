@@ -442,6 +442,10 @@ func (s *TopicDiscoveryRunService) executeStage(ctx context.Context, userID uint
 	if step.Status == "completed" {
 		return nil
 	}
+	// 第三步仅由 POST confirm-round 完成，流水线不得将其标为 running/completed。
+	if stageCode == "topic_confirm" {
+		return nil
+	}
 	stageStarted := time.Now()
 	// retrieve 须在 stageRetrieve 写入 result/extra 后再落库 running，否则 PDF bot 会扫到「running 且无 result」误杀。
 	if stageCode != "retrieve" {
@@ -458,11 +462,6 @@ func (s *TopicDiscoveryRunService) executeStage(ctx context.Context, userID uint
 		execErr = s.stageRetrieve(ctx, step, input)
 	case "topic_discovery":
 		execErr = s.stageBeginTopicDiscoveryAsync(ctx, userID, runVersion, step)
-	case "topic_confirm":
-		if step.Status == "completed" {
-			return nil
-		}
-		return nil
 	default:
 		execErr = errorx.ErrTopicStepInvalid
 	}

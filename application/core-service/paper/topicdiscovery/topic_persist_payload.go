@@ -4,7 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 )
+
+// paperOutputTitleMaxRunes 与 paper_output_literature_review / experiment_plan 的 title VARCHAR(256) 一致（按字符截断）。
+const paperOutputTitleMaxRunes = 256
 
 func isContentFormatHint(s string) bool {
 	switch strings.ToLower(strings.TrimSpace(s)) {
@@ -154,4 +158,23 @@ func formatTopicExperimentPlanMarkdown(plan map[string]any) string {
 	}
 	raw, _ := json.MarshalIndent(plan, "", "  ")
 	return string(raw)
+}
+
+func truncateForDBTitle(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return s
+	}
+	if utf8.RuneCountInString(s) <= paperOutputTitleMaxRunes {
+		return s
+	}
+	rs := []rune(s)
+	if len(rs) <= paperOutputTitleMaxRunes {
+		return s
+	}
+	trim := paperOutputTitleMaxRunes - 1
+	if trim < 1 {
+		trim = 1
+	}
+	return string(rs[:trim]) + "…"
 }

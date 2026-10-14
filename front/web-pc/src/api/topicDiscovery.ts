@@ -250,6 +250,27 @@ export type TopicDiscoveryRunResponse = {
 }
 
 /** 三步均 completed（或 run_status=completed）：终态，不再把 retrieve 输入回填到表单 */
+/** 选题 generate 包里的 experiment_plan 多为结构化字段（无 title/summary），供轮次预览用 */
+export function experimentPlanPreviewFromPayload(
+  plan: Record<string, unknown> | undefined,
+  ideaTitles: string[] = [],
+): { title: string; summary: string; hasPlan: boolean } {
+  if (!plan || typeof plan !== 'object') {
+    return { title: '', summary: '', hasPlan: false }
+  }
+  const keys = Object.keys(plan).filter((k) => {
+    const v = plan[k]
+    return v != null && v !== '' && !(Array.isArray(v) && v.length === 0)
+  })
+  const hasPlan = keys.length > 0
+  let title = String(plan.title ?? '').trim()
+  if (!title && ideaTitles[0]) title = ideaTitles[0]
+  let summary = String(plan.summary ?? '').trim()
+  if (!summary) summary = String(plan.success_criteria ?? plan.features ?? plan.evaluation ?? '').trim()
+  if (summary.length > 512) summary = `${summary.slice(0, 512)}…`
+  return { title, summary, hasPlan }
+}
+
 /** 第三步 confirm-round 写入后，从 topic_confirm 步 result/extra 取 literature_review_id */
 export function topicConfirmLiteratureReviewId(
   data: TopicDiscoveryRunResponse | null | undefined,

@@ -351,7 +351,8 @@ func (s *TopicDiscoveryRunService) persistTopicExperimentPlan(
 		InputParams:  inputSnap,
 		Meta:         meta,
 	}
-	row.Title = &title
+	dbTitle := truncateForDBTitle(title)
+	row.Title = &dbTitle
 	row.ContentMedium = &content
 	row.PdfURI = &pdfRel
 	row.WordURI = &docxRel

@@ -35,6 +35,7 @@ func GetGlobalNotificationManager() *NotificationManager {
 	return globalNotificationManager
 }
 
+// SendErrorLog 写 Error 日志并推送 Lark（error_webhook_url，未配置则用 alert_webhook_url）。
 func SendErrorLog(ctx context.Context, msg string, fields ...zap.Field) {
 	if !skipErrorAlert(ctx) {
 		sendErrorLogAlert(ctx, msg, fields...)

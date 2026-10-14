@@ -6,8 +6,10 @@ import (
 	"strings"
 
 	"github.com/qingpeng2016/ai-agent-paper/common/errorx"
+	"github.com/qingpeng2016/ai-agent-paper/common/notification"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 // ApiResp 统一 HTTP JSON 响应包装。
@@ -31,6 +33,17 @@ func localeFromGin(c *gin.Context) string {
 
 // ResponseErr 统一错误响应处理（按 X-Locale / ?locale= 返回对应语言 message）
 func ResponseErr(c *gin.Context, err error) {
+	if errorx.ShouldAlertHTTPError(err) {
+		path := c.FullPath()
+		if path == "" {
+			path = c.Request.URL.Path
+		}
+		notification.SendErrorLog(c.Request.Context(), "http-api-error",
+			zap.String("path", path),
+			zap.String("method", c.Request.Method),
+			zap.Error(err),
+		)
+	}
 	locale := localeFromGin(c)
 	var bizErr *errorx.RespErr
 	if errors.As(err, &bizErr) {

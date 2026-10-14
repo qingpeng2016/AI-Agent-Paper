@@ -17,6 +17,7 @@ import {
   inferVenueCodesFromText,
   isTopicRunTerminalCompleted,
   topicConfirmLiteratureReviewId,
+  experimentPlanPreviewFromPayload,
   type TopicDiscoveryRunResponse,
   type TopicDiscoveryStepDTO,
 } from '@/api/topicDiscovery'
@@ -934,6 +935,7 @@ type TopicDiscoveryIterationView = {
   litSummary: string
   planTitle: string
   planSummary: string
+  hasExperimentPlan: boolean
   ideaTitles: string[]
 }
 
@@ -954,15 +956,18 @@ const topicDiscoveryIterations = computed((): TopicDiscoveryIterationView[] => {
     const lr = (gen.literature_review ?? {}) as Record<string, unknown>
     const plan = (gen.experiment_plan ?? {}) as Record<string, unknown>
     const ideas = (gen.ideas as Array<{ title?: string }>) ?? []
+    const ideaTitles = ideas.map((i) => String(i.title ?? '').trim()).filter(Boolean)
+    const planPreview = experimentPlanPreviewFromPayload(plan, ideaTitles)
     out.push({
       round,
       passed,
       auditSummary: String(audit.summary ?? '').trim(),
       litTitle: String(lr.title ?? '').trim(),
       litSummary: String(lr.summary ?? '').trim(),
-      planTitle: String(plan.title ?? '').trim(),
-      planSummary: String(plan.summary ?? '').trim(),
-      ideaTitles: ideas.map((i) => String(i.title ?? '').trim()).filter(Boolean),
+      planTitle: planPreview.title,
+      planSummary: planPreview.summary,
+      hasExperimentPlan: planPreview.hasPlan,
+      ideaTitles,
     })
   }
   out.sort((a, b) => a.round - b.round)
@@ -2774,12 +2779,15 @@ watch(
                 {{ item.litTitle || '（无标题）' }}
                 <span v-if="item.litSummary"> — {{ item.litSummary.slice(0, 160) }}</span>
               </p>
-              <p v-if="item.planTitle || item.planSummary" class="paper-round-line">
+              <p v-if="item.hasExperimentPlan || item.planTitle || item.planSummary" class="paper-round-line">
                 <strong>实验：</strong>
-                {{ item.planTitle || '（无标题）' }}
+                {{ item.planTitle || '（实验方案）' }}
                 <span v-if="item.planSummary"> — {{ item.planSummary.slice(0, 120) }}</span>
               </p>
-              <p v-else-if="!item.planTitle && !item.planSummary" class="paper-round-line paper-round-muted">
+              <p
+                v-else-if="!item.hasExperimentPlan && !item.planTitle && !item.planSummary"
+                class="paper-round-line paper-round-muted"
+              >
                 实验：本方向无需实验或未生成方案
               </p>
               <ul v-if="item.ideaTitles.length" class="paper-round-ideas">
