@@ -1376,7 +1376,7 @@ defineExpose({
                   <span class="paper-check-row">
                     <span>每次运行随机参考文献</span>
                     <ElTooltip
-                      content="勾选后，每次运行随机获取第三方论文，否则会顺序获取第三方论文多次可能是一样的"
+                      content="勾选后，每次随机获取第三方论文，否则会顺序获取，可能多次获取论文是一样"
                       placement="top"
                     >
                       <button

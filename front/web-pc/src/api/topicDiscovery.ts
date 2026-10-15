@@ -200,9 +200,7 @@ export function applyStoredTopicRunInputToForm(
   if (intensity) form.intensity = intensity
   const audit = String(p.audit_level ?? '').trim()
   if (audit) form.auditLevel = audit
-  if (typeof p.human_checkpoint === 'boolean') {
-    form.humanCheckpoint = p.human_checkpoint
-  }
+  form.humanCheckpoint = true
   if (typeof p.random_references === 'boolean') {
     form.randomReferences = p.random_references
   }

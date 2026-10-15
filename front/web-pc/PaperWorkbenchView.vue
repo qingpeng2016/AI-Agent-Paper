@@ -696,7 +696,7 @@ loadExperimentPlanFlagsFromStorage()
 }
 topicForm.intensity = envPreference.intensity
 topicForm.auditLevel = envPreference.auditLevel
-topicForm.humanCheckpoint = envPreference.humanCheckpoint
+topicForm.humanCheckpoint = true
 
 const activeManuscripts = computed(() => manuscripts.value.filter((m) => m.status === 'active'))
 
@@ -806,7 +806,7 @@ function onEnvironmentSaved() {
   }
   topicForm.intensity = envPreference.intensity
   topicForm.auditLevel = envPreference.auditLevel
-  topicForm.humanCheckpoint = envPreference.humanCheckpoint
+  topicForm.humanCheckpoint = true
   recordModuleOperationLog('environment', '保存环境配置')
 }
 
@@ -1477,7 +1477,7 @@ function buildTopicRunRequest(action: 'start' | 'continue') {
     source_codes: [...topicForm.sourceCodes],
     intensity: topicForm.intensity,
     audit_level: topicForm.auditLevel,
-    human_checkpoint: topicForm.humanCheckpoint,
+    human_checkpoint: true,
     random_references: topicForm.randomReferences,
     user_literature_ids:
       topicForm.userLiteratureIds.length > 0 ? [...topicForm.userLiteratureIds] : undefined,
@@ -2593,7 +2593,7 @@ watch(
             <span class="paper-check-row">
               <span>每次运行随机参考文献</span>
               <ElTooltip
-                content="勾选后，每次运行随机获取第三方论文，否则会顺序获取第三方论文多次可能是一样的"
+                content="勾选后，每次随机获取第三方论文，否则会顺序获取，可能多次获取论文是一样"
                 placement="top"
               >
                 <button
@@ -2640,11 +2640,12 @@ watch(
         <div class="paper-field paper-field--block paper-field--after-sources">
           <span class="paper-label">人工检查</span>
           <div class="paper-check-group">
-            <label class="paper-check paper-check--inline">
+            <label class="paper-check paper-check--inline paper-check--locked">
               <input
-                v-model="topicForm.humanCheckpoint"
                 type="checkbox"
-                :disabled="topicRunBusy || currentTopicRun.status === 'checkpoint'"
+                checked
+                disabled
+                aria-checked="true"
               />
               <span>人工检查点</span>
             </label>
@@ -3921,6 +3922,12 @@ watch(
 
 .paper-check--inline > span {
   line-height: 16px;
+}
+
+.paper-check--locked {
+  opacity: 0.72;
+  cursor: not-allowed;
+  user-select: none;
 }
 
 .paper-check--nested {

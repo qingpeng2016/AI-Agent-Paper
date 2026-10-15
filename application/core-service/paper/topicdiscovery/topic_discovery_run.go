@@ -330,7 +330,7 @@ func (s *TopicDiscoveryRunService) prepareRun(ctx context.Context, userID uint, 
 		SourceCodes:       req.SourceCodes,
 		Intensity:         intensityCode,
 		AuditLevel:        auditCode,
-		HumanCheckpoint:   req.HumanCheckpoint,
+		HumanCheckpoint:   true,
 		RandomReferences:  req.RandomReferences,
 		UserLiteratureIDs: userLitIDs,
 		MaxPapers:         int(intensity.MaxPapers),
@@ -683,16 +683,7 @@ func (s *TopicDiscoveryRunService) buildRunView(manuscriptID uint64, runVersion 
 		RunVersion:   runVersion,
 		Steps:        make([]response.TopicDiscoveryStepView, 0, len(rows)),
 	}
-	var human bool
-	for _, r := range rows {
-		if len(r.InputParams) > 0 {
-			var in topicRunInput
-			if json.Unmarshal(r.InputParams, &in) == nil {
-				human = in.HumanCheckpoint
-			}
-		}
-	}
-	view.HumanCheckpoint = human
+	view.HumanCheckpoint = true
 
 	runStatus := "completed"
 	for _, r := range rows {
