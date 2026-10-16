@@ -29,10 +29,18 @@ func topicDocumentExportRelPaths(subdir string, userID uint, at time.Time) (pdfR
 }
 
 func storageSubdirRoot(subdir, envKey string) string {
+	var root string
 	if v := strings.TrimSpace(os.Getenv(envKey)); v != "" {
-		return v
+		root = v
+	} else {
+		root = filepath.Join(StorageRoot(), subdir)
 	}
-	return filepath.Join(StorageRoot(), subdir)
+	ensureDirAbs(root)
+	abs, err := filepath.Abs(root)
+	if err == nil && abs != "" {
+		return abs
+	}
+	return root
 }
 
 // WriteTopicDocumentExportFiles 在 storage/{subdir}/ 下写入 PDF 与 Word。

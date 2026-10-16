@@ -18,6 +18,18 @@ const (
 	submissionDataStorageSubdir  = "submission-data"
 )
 
+func ensureDirAbs(path string) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		abs = path
+	}
+	_ = os.MkdirAll(abs, 0o755)
+}
+
 // PaperConfRoot 项目 conf 根目录（默认仓库下 conf/）。
 func PaperConfRoot() string {
 	if v := strings.TrimSpace(os.Getenv("PAPER_CONF_ROOT")); v != "" {
@@ -39,26 +51,34 @@ func PaperConfRoot() string {
 
 // PaperInoutRoot 项目 inout 根目录（ARIS invoke 等工作区；默认仓库下 inout/）。
 func PaperInoutRoot() string {
+	var root string
 	if v := strings.TrimSpace(os.Getenv("PAPER_ARIS_WORK_ROOT")); v != "" {
-		return v
-	}
-	if v := strings.TrimSpace(os.Getenv("PAPER_INOUT_ROOT")); v != "" {
-		return v
-	}
-	candidates := []string{PaperInoutDirName, filepath.Join("AI-Agent-Paper", PaperInoutDirName)}
-	if wd, err := os.Getwd(); err == nil {
-		candidates = append(candidates, filepath.Join(wd, PaperInoutDirName))
-	}
-	for _, c := range candidates {
-		if st, err := os.Stat(c); err == nil && st.IsDir() {
-			abs, _ := filepath.Abs(c)
-			return abs
+		root = v
+	} else if v := strings.TrimSpace(os.Getenv("PAPER_INOUT_ROOT")); v != "" {
+		root = v
+	} else {
+		candidates := []string{PaperInoutDirName, filepath.Join("AI-Agent-Paper", PaperInoutDirName)}
+		if wd, err := os.Getwd(); err == nil {
+			candidates = append(candidates, filepath.Join(wd, PaperInoutDirName))
+		}
+		for _, c := range candidates {
+			if st, err := os.Stat(c); err == nil && st.IsDir() {
+				abs, _ := filepath.Abs(c)
+				root = abs
+				break
+			}
+		}
+		if root == "" {
+			abs, _ := filepath.Abs(PaperInoutDirName)
+			root = abs
 		}
 	}
-	// 尚无目录时创建默认 inout（相对 cwd）
-	abs, _ := filepath.Abs(PaperInoutDirName)
-	_ = os.MkdirAll(abs, 0o755)
-	return abs
+	ensureDirAbs(root)
+	abs, _ := filepath.Abs(root)
+	if abs != "" {
+		return abs
+	}
+	return root
 }
 
 // ArisInvokeWorkRoot 与 PaperInoutRoot 相同（invoke 会话目录直接挂在 inout 下）。
@@ -66,12 +86,18 @@ func ArisInvokeWorkRoot() string {
 	return PaperInoutRoot()
 }
 
-// StorageRoot 项目本地 storage 根目录（相对工作目录）。
+// StorageRoot 项目本地 storage 根目录（默认 storage/，不存在则创建）。
 func StorageRoot() string {
+	root := "storage"
 	if v := strings.TrimSpace(os.Getenv("PAPER_STORAGE_ROOT")); v != "" {
-		return v
+		root = v
 	}
-	return "storage"
+	ensureDirAbs(root)
+	abs, _ := filepath.Abs(root)
+	if abs != "" {
+		return abs
+	}
+	return root
 }
 
 // StorageLocalAbsPath rel 为相对 storage/ 的路径（如 paper-files/x.pdf）。
@@ -82,18 +108,34 @@ func StorageLocalAbsPath(relPath string) string {
 
 // PaperFilesStorageRoot 论文相关文件（原文献 PDF 等）：storage/paper-files
 func PaperFilesStorageRoot() string {
+	var root string
 	if v := strings.TrimSpace(os.Getenv("PAPER_LITERATURE_STORAGE")); v != "" {
-		return v
+		root = v
+	} else {
+		root = filepath.Join(StorageRoot(), paperFilesStorageSubdir)
 	}
-	return filepath.Join(StorageRoot(), paperFilesStorageSubdir)
+	ensureDirAbs(root)
+	abs, _ := filepath.Abs(root)
+	if abs != "" {
+		return abs
+	}
+	return root
 }
 
 // ExperimentDataStorageRoot 实验数据：storage/experiment-data
 func ExperimentDataStorageRoot() string {
+	var root string
 	if v := strings.TrimSpace(os.Getenv("PAPER_EXPERIMENT_DATA_STORAGE")); v != "" {
-		return v
+		root = v
+	} else {
+		root = filepath.Join(StorageRoot(), experimentDataStorageSubdir)
 	}
-	return filepath.Join(StorageRoot(), experimentDataStorageSubdir)
+	ensureDirAbs(root)
+	abs, _ := filepath.Abs(root)
+	if abs != "" {
+		return abs
+	}
+	return root
 }
 
 // ExperimentDataLocalRelPath 相对 storage/ 的实验数据路径。
