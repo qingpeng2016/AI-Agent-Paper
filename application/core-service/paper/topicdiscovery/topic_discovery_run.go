@@ -346,6 +346,10 @@ func (s *TopicDiscoveryRunService) prepareRun(ctx context.Context, userID uint, 
 	if err != nil {
 		return topicRunInput{}, errorx.ErrParamsError
 	}
+	sourceCodes, err := s.validateTopicLiteratureSourceSelection(ctx, req.SourceCodes, true)
+	if err != nil {
+		return topicRunInput{}, err
+	}
 	input := topicRunInput{
 		DisciplineCode:    strings.TrimSpace(req.DisciplineCode),
 		Keywords:          keywords,
@@ -353,7 +357,7 @@ func (s *TopicDiscoveryRunService) prepareRun(ctx context.Context, userID uint, 
 		Direction:         direction,
 		Venue:             venue,
 		VenueCodes:        venueCodes,
-		SourceCodes:       req.SourceCodes,
+		SourceCodes:       sourceCodes,
 		Intensity:         intensityCode,
 		AuditLevel:        auditCode,
 		HumanCheckpoint:   !mustIdeaDiscoveryConfig().Platform.AutoProceed,

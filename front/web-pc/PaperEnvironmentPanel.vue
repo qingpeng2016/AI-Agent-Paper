@@ -2,7 +2,10 @@
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import PaperSelect from './PaperSelect.vue'
-import { useTopicDiscoveryFormOptions } from '@/composables/useTopicDiscoveryFormOptions'
+import {
+  useTopicDiscoveryFormOptions,
+  validateTopicLiteratureSourceCodes,
+} from '@/composables/useTopicDiscoveryFormOptions'
 import {
   ENV_PREFERENCE_STORAGE_KEY,
   type EnvironmentPreferenceForm,
@@ -35,6 +38,14 @@ function isLiteratureSourceChecked(code: string) {
 }
 
 function toggleLiteratureSource(code: string, checked: boolean) {
+  if (checked) {
+    const err = validateTopicLiteratureSourceCodes([code])
+    if (err) {
+      if (err.includes('暂不支持') || err.includes('已停用')) ElMessage.error(err)
+      else ElMessage.warning(err)
+      return
+    }
+  }
   const set = new Set(props.envPreference.literatureSourceCodes)
   if (checked) set.add(code)
   else set.delete(code)
@@ -42,8 +53,10 @@ function toggleLiteratureSource(code: string, checked: boolean) {
 }
 
 async function saveEnvironment() {
-  if (props.envPreference.literatureSourceCodes.length === 0) {
-    ElMessage.warning('请至少选择一个文献来源')
+  const litErr = validateTopicLiteratureSourceCodes(props.envPreference.literatureSourceCodes)
+  if (litErr) {
+    if (litErr.includes('暂不支持') || litErr.includes('已停用')) ElMessage.error(litErr)
+    else ElMessage.warning(litErr)
     return
   }
   envSaving.value = true
@@ -105,6 +118,7 @@ async function saveEnvironment() {
             <input
               type="checkbox"
               :checked="isLiteratureSourceChecked(src.code)"
+              :disabled="src.status !== 'active'"
               @change="toggleLiteratureSource(src.code, ($event.target as HTMLInputElement).checked)"
             />
             <span>{{ src.label }}</span>

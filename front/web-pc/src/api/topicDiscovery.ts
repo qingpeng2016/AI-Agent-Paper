@@ -25,6 +25,8 @@ export type TopicDiscoveryFormOptionsResponse = {
     label: string
     sort: number
     default_selected: boolean
+    status?: string
+    topic_run_enabled?: boolean
   }>
   venues?: Array<{
     code: string
@@ -46,6 +48,8 @@ export type LiteratureSourceOption = {
   label: string
   sort: number
   defaultSelected: boolean
+  status: string
+  topicRunEnabled: boolean
 }
 
 type ApiEnvelope<T> = { code: number; message?: string; data: T }
@@ -432,7 +436,9 @@ function pickDefaultCode(items: Array<{ code: string; is_default?: boolean }>): 
 export function defaultLiteratureSourceCodesFromOptions(
   sources: LiteratureSourceOption[],
 ): string[] {
-  return sources.filter((s) => s.defaultSelected).map((s) => s.code)
+  return sources
+    .filter((s) => s.defaultSelected && s.status === 'active')
+    .map((s) => s.code)
 }
 
 export async function fetchTopicDiscoveryFormOptions(): Promise<{
@@ -472,6 +478,11 @@ export async function fetchTopicDiscoveryFormOptions(): Promise<{
       label: x.label,
       sort: x.sort,
       defaultSelected: Boolean(x.default_selected),
+      status: String(x.status ?? 'active'),
+      topicRunEnabled:
+        x.topic_run_enabled !== undefined
+          ? Boolean(x.topic_run_enabled)
+          : String(x.status ?? 'active') === 'active' && x.code === 'arxiv',
     }))
   const venueOptions = (d.venues ?? [])
     .slice()

@@ -42,3 +42,14 @@ func (r *PaperLiteraturePlatformImpl) ListActiveOrdered(ctx context.Context) ([]
 	}
 	return rows, nil
 }
+
+func (r *PaperLiteraturePlatformImpl) ListAllOrdered(ctx context.Context) ([]entity.PaperLiteraturePlatform, error) {
+	var rows []entity.PaperLiteraturePlatform
+	err := r.db.WithContext(ctx).
+		Order("sort ASC, id ASC").
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	return rows, nil
+}

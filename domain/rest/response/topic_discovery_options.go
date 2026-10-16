@@ -20,6 +20,8 @@ type TopicDiscoveryLiteratureSourceOption struct {
 	Label           string `json:"label"`
 	Sort            int    `json:"sort"`
 	DefaultSelected bool   `json:"default_selected"`
+	Status          string `json:"status"`
+	TopicRunEnabled bool   `json:"topic_run_enabled"`
 }
 
 type TopicDiscoveryDisciplineOption struct {

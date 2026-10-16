@@ -85,10 +85,11 @@ func (s *TopicDiscoveryOptionsService) GetFormOptions(ctx context.Context) (*res
 		})
 	}
 
-	sources, err := s.litSource.ListActiveOrdered(ctx)
+	sources, err := s.litSource.ListAllOrdered(ctx)
 	if err != nil {
 		return nil, err
 	}
+	const nativeIdeaDiscovery = true
 	out.LiteratureSources = make([]response.TopicDiscoveryLiteratureSourceOption, 0, len(sources))
 	for _, src := range sources {
 		out.LiteratureSources = append(out.LiteratureSources, response.TopicDiscoveryLiteratureSourceOption{
@@ -96,6 +97,8 @@ func (s *TopicDiscoveryOptionsService) GetFormOptions(ctx context.Context) (*res
 			Label:           src.Name,
 			Sort:            src.Sort,
 			DefaultSelected: src.DefaultSelected,
+			Status:          src.Status,
+			TopicRunEnabled: topicLiteratureSourceRunEnabled(src.Status, src.Code, nativeIdeaDiscovery),
 		})
 	}
 

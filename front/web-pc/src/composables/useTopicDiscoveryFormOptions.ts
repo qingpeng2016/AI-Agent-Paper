@@ -43,9 +43,11 @@ function applyFallbackOptions() {
     label: s.label,
     sort: i + 1,
     defaultSelected: fallbackDefaultSelected.has(s.code),
+    status: 'active',
+    topicRunEnabled: s.code === 'arxiv',
   }))
   defaultLiteratureSourceCodes.value = literatureSourceOptions.value
-    .filter((s) => s.defaultSelected)
+    .filter((s) => s.defaultSelected && s.status === 'active')
     .map((s) => s.code)
 }
 
@@ -67,6 +69,31 @@ export function applyDefaultLiteratureSourceCodes(target: { literatureSourceCode
   if (codes.length > 0) {
     target.literatureSourceCodes = [...codes]
   }
+}
+
+export function findLiteratureSourceOption(code: string): LiteratureSourceOption | undefined {
+  return literatureSourceOptions.value.find((o) => o.code === code)
+}
+
+/** 选题表单文献来源校验；返回错误文案，通过则 null */
+export function validateTopicLiteratureSourceCodes(codes: string[]): string | null {
+  const selected = codes.map((c) => c.trim()).filter(Boolean)
+  if (selected.length === 0) {
+    return '请至少选择一个文献来源'
+  }
+  for (const code of selected) {
+    const opt = findLiteratureSourceOption(code)
+    if (!opt) {
+      return '所选文献来源无效或已停用'
+    }
+    if (opt.status !== 'active') {
+      return `文献来源「${opt.label}」已停用`
+    }
+    if (!opt.topicRunEnabled) {
+      return `文献来源「${opt.label}」暂不支持当前选题流程`
+    }
+  }
+  return null
 }
 
 export function applyCatalogIntensityAuditDefaults(target: {
@@ -149,5 +176,7 @@ export function useTopicDiscoveryFormOptions() {
     literatureSourceLabel,
     applyDefaultLiteratureSources,
     applyDefaultLiteratureSourceCodes,
+    findLiteratureSourceOption,
+    validateTopicLiteratureSourceCodes,
   }
 }
