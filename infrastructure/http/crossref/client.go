@@ -52,7 +52,7 @@ func (c *Client) search(ctx context.Context, query string, rows, offset int) ([]
 		"rows":   strconv.Itoa(rows),
 		"offset": strconv.Itoa(offset),
 	}
-	resp, err := c.http.Get(ctx, c.baseURL, params, map[string]string{"Accept": "application/json"})
+	resp, err := c.http.GetLiterature(ctx, c.baseURL, params, map[string]string{"Accept": "application/json"})
 	if err != nil {
 		return nil, 0, httpx.LogLiteratureTransportError(ctx, "crossref", "search", c.baseURL, err)
 	}

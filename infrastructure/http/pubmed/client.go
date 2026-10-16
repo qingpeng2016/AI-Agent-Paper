@@ -68,7 +68,7 @@ func (c *Client) esearch(ctx context.Context, query string, offset, limit int) (
 		params["retmax"] = "0"
 	}
 	url := c.baseURL + "/esearch.fcgi"
-	resp, err := c.http.Get(ctx, url, params, nil)
+	resp, err := c.http.GetLiterature(ctx, url, params, nil)
 	if err != nil {
 		return nil, 0, httpx.LogLiteratureTransportError(ctx, "pubmed", "esearch", url, err)
 	}
@@ -126,7 +126,7 @@ func (c *Client) esummary(ctx context.Context, ids []string) ([]httpentity.PubMe
 		"retmode": "json",
 	}
 	url := c.baseURL + "/esummary.fcgi"
-	resp, err := c.http.Get(ctx, url, params, nil)
+	resp, err := c.http.GetLiterature(ctx, url, params, nil)
 	if err != nil {
 		return nil, httpx.LogLiteratureTransportError(ctx, "pubmed", "esummary", url, err)
 	}

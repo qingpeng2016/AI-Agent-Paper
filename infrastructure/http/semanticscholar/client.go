@@ -63,7 +63,7 @@ func (c *Client) search(ctx context.Context, q httpentity.SemanticScholarSearchQ
 	if c.apiKey != "" {
 		headers["x-api-key"] = c.apiKey
 	}
-	resp, err := c.http.Get(ctx, c.baseURL, params, headers)
+	resp, err := c.http.GetLiterature(ctx, c.baseURL, params, headers)
 	if err != nil {
 		return nil, 0, httpx.LogLiteratureTransportError(ctx, "semantic_scholar", "search", c.baseURL, err)
 	}

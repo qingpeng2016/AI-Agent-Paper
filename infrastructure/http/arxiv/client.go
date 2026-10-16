@@ -56,7 +56,7 @@ func (c *Client) searchFeed(ctx context.Context, q httpentity.ArxivSearchQuery) 
 		maxResults = 1
 	}
 	apiURL := fmt.Sprintf("%s?search_query=%s&start=%d&max_results=%d", c.baseURL, searchQuery, start, maxResults)
-	resp, err := c.http.Get(ctx, apiURL, nil, nil)
+	resp, err := c.http.GetLiterature(ctx, apiURL, nil, nil)
 	if err != nil {
 		return nil, 0, httpx.LogLiteratureTransportError(ctx, "arxiv", "search", apiURL, err)
 	}

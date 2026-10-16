@@ -62,7 +62,7 @@ func (c *Client) search(ctx context.Context, q httpentity.OpenAlexSearchQuery) (
 	if c.mailto != "" {
 		headers["User-Agent"] = "AI-Agent-Paper/1.0 (mailto:" + c.mailto + ")"
 	}
-	resp, err := c.http.Get(ctx, c.baseURL, params, headers)
+	resp, err := c.http.GetLiterature(ctx, c.baseURL, params, headers)
 	if err != nil {
 		return nil, 0, httpx.LogLiteratureTransportError(ctx, "openalex", "search", c.baseURL, err)
 	}
