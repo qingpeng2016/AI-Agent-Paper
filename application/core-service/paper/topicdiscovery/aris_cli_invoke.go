@@ -235,6 +235,16 @@ func arisInvokeTimeout() time.Duration {
 	return 24 * time.Hour
 }
 
+// buildARISNativeCLIArgs 对齐 `aris --help`：非交互为 `aris [--model M] --output-format json prompt TEXT`。
+func buildARISNativeCLIArgs(prompt string) []string {
+	args := []string{"--output-format", "json"}
+	if m := strings.TrimSpace(os.Getenv("PAPER_ARIS_CLI_MODEL")); m != "" {
+		args = append(args, "--model", m)
+	}
+	args = append(args, "prompt", prompt)
+	return args
+}
+
 func runARISCLI(ctx context.Context, workspace, prompt string) (stdout, stderr string, err error) {
 	executor := strings.ToLower(strings.TrimSpace(os.Getenv("PAPER_ARIS_EXECUTOR")))
 	if executor == "" {
@@ -253,7 +263,7 @@ func runARISCLI(ctx context.Context, workspace, prompt string) (stdout, stderr s
 
 	var args []string
 	if executor == "aris" || filepath.Base(cli) == "aris" {
-		args = []string{"--print", "--output-format", "json", prompt}
+		args = buildARISNativeCLIArgs(prompt)
 	} else {
 		args = []string{"-p", prompt, "--output-format", "json"}
 		if strings.TrimSpace(os.Getenv("PAPER_ARIS_CLAUDE_TOOLS")) == "0" {
