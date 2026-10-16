@@ -353,7 +353,7 @@ func (s *TopicDiscoveryRunService) prepareRun(ctx context.Context, userID uint, 
 		SourceCodes:       req.SourceCodes,
 		Intensity:         intensityCode,
 		AuditLevel:        auditCode,
-		HumanCheckpoint:   !mustIdeaDiscoveryConfig().Platform.InterStepHumanCheckpoint,
+		HumanCheckpoint:   !mustIdeaDiscoveryConfig().Platform.PauseAfterRetrieve,
 		RandomReferences:  req.RandomReferences,
 		UserLiteratureIDs: userLitIDs,
 		MaxPapers:         int(intensity.MaxPapers),
@@ -433,7 +433,7 @@ func (s *TopicDiscoveryRunService) executeFromStage(ctx context.Context, userID 
 		stage := topicDiscoveryStages[i]
 		if stage == "retrieve" {
 			_ = s.skipRetrieveForNativeRun(ctx, userID, runVersion)
-			if !mustIdeaDiscoveryConfig().Platform.RequireRetrieveBeforeIdeaDiscovery {
+			if !mustIdeaDiscoveryConfig().Platform.RequireRetrieve {
 				continue
 			}
 		}
@@ -443,7 +443,7 @@ func (s *TopicDiscoveryRunService) executeFromStage(ctx context.Context, userID 
 		if st, _ := s.runningStageCode(ctx, userID, runVersion); st != "" {
 			return nil
 		}
-		if mustIdeaDiscoveryConfig().Platform.InterStepHumanCheckpoint {
+		if mustIdeaDiscoveryConfig().Platform.PauseAfterRetrieve {
 			return nil
 		}
 		if stage == "retrieve" {
@@ -451,7 +451,7 @@ func (s *TopicDiscoveryRunService) executeFromStage(ctx context.Context, userID 
 				_ = s.OnRetrieveCompleted(ctx, userID, runVersion)
 			}
 		}
-		if stage == "retrieve" && !mustIdeaDiscoveryConfig().Platform.RequireRetrieveBeforeIdeaDiscovery {
+		if stage == "retrieve" && !mustIdeaDiscoveryConfig().Platform.RequireRetrieve {
 			idea, _ := s.steps.GetStep(ctx, uint64(userID), runVersion, "idea_discovery")
 			if idea != nil && strings.TrimSpace(idea.Status) == "pending" {
 				_ = s.stageBeginTopicDiscoveryAsync(ctx, userID, runVersion, idea)
@@ -724,7 +724,7 @@ func (s *TopicDiscoveryRunService) buildRunView(manuscriptID uint64, runVersion 
 		RunVersion:   runVersion,
 		Steps:        make([]response.TopicDiscoveryStepView, 0, len(rows)),
 	}
-	view.HumanCheckpoint = mustIdeaDiscoveryConfig().Platform.InterStepHumanCheckpoint
+	view.HumanCheckpoint = mustIdeaDiscoveryConfig().Platform.PauseAfterRetrieve
 
 	runStatus := "completed"
 	for _, r := range rows {

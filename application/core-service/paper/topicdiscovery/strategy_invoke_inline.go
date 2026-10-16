@@ -103,13 +103,6 @@ func (s *TopicDiscoveryRunService) buildTopicStrategyInvokeContext(
 	round, maxRounds int,
 	prevBundle, prevAudit json.RawMessage,
 ) StrategyInvokeContext {
-	var corpus json.RawMessage
-	cfg := mustIdeaDiscoveryConfig()
-	if cfg.Platform.InjectStagedLiterature {
-		if ret, err := s.steps.GetStep(ctx, uint64(userID), runVersion, "retrieve"); err == nil && ret != nil && len(ret.Result) > 0 {
-			corpus = enrichCorpusWithRetrieveExtra(json.RawMessage(ret.Result), ret.Extra)
-		}
-	}
 	return StrategyInvokeContext{
 		ManuscriptID:    step.ManuscriptID,
 		UserID:          uint64(userID),
@@ -119,7 +112,7 @@ func (s *TopicDiscoveryRunService) buildTopicStrategyInvokeContext(
 		Keywords:        input.Keywords,
 		VenueCodes:      input.VenueCodes,
 		VenueLabel:      input.Venue,
-		Corpus:          corpus,
+		Corpus:          nil,
 		PrevBundle:      prevBundle,
 		PrevAudit:       prevAudit,
 		Round:           round,

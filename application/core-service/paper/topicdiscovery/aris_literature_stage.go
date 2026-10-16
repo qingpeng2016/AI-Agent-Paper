@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/literature"
+	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/repository"
 )
 
 const arisLiteratureSubdir = "literature"
@@ -65,28 +66,160 @@ func parseLiteratureDownloadsFromCorpus(corpus json.RawMessage) []literature.Lit
 	return items
 }
 
+// SyncRunLiteratureToInoutWorkspace 将 retrieve 下载 + 用户「我的文献」PDF 复制到 inout/.../paper/literature/。
+func (s *TopicDiscoveryRunService) SyncRunLiteratureToInoutWorkspace(
+	ctx context.Context,
+	userID uint,
+	runVersion int,
+	userLitRepo repository.PaperUserLiteratureRepo,
+) (int, error) {
+	if s == nil || s.steps == nil {
+		return 0, nil
+	}
+	ret, err := s.steps.GetStep(ctx, uint64(userID), runVersion, "retrieve")
+	if err != nil || ret == nil {
+		return 0, err
+	}
+	items, err := s.collectRunLiteratureItems(ctx, userID, runVersion, userLitRepo)
+	if err != nil {
+		return 0, err
+	}
+	paperRoot := ARISRunPaperRoot(uint64(userID), ret.ManuscriptID, runVersion)
+	return syncLiteratureItemsToPaperRoot(paperRoot, items)
+}
+
+func syncLiteratureItemsToPaperRoot(paperRoot string, items []literature.LiteratureDownloadItem) (int, error) {
+	if len(items) == 0 {
+		return 0, nil
+	}
+	corpus, err := json.Marshal(map[string]any{"literature_downloads": items})
+	if err != nil {
+		return 0, err
+	}
+	staged, err := stageRetrieveLiteraturePDFs(paperRoot, json.RawMessage(corpus))
+	if err != nil {
+		return 0, err
+	}
+	if err := writeLiteratureStagingManifest(paperRoot, staged); err != nil {
+		return 0, err
+	}
+	return len(staged), nil
+}
+
+func (s *TopicDiscoveryRunService) collectRunLiteratureItems(
+	ctx context.Context,
+	userID uint,
+	runVersion int,
+	userLitRepo repository.PaperUserLiteratureRepo,
+) ([]literature.LiteratureDownloadItem, error) {
+	ret, err := s.steps.GetStep(ctx, uint64(userID), runVersion, "retrieve")
+	if err != nil || ret == nil {
+		return nil, err
+	}
+	items := literature.ParseLiteratureDownloads(ret.Extra)
+	items = appendUserLiteratureDownloadItems(ctx, s, userLitRepo, userID, runVersion, items)
+	return dedupeLiteratureDownloadItems(items), nil
+}
+
+func appendUserLiteratureDownloadItems(
+	ctx context.Context,
+	s *TopicDiscoveryRunService,
+	userLitRepo repository.PaperUserLiteratureRepo,
+	userID uint,
+	runVersion int,
+	base []literature.LiteratureDownloadItem,
+) []literature.LiteratureDownloadItem {
+	if userLitRepo == nil || s == nil {
+		return base
+	}
+	input, err := s.loadRunInput(ctx, userID, runVersion)
+	if err != nil || len(input.UserLiteratureIDs) == 0 {
+		return base
+	}
+	want := make(map[uint64]struct{}, len(input.UserLiteratureIDs))
+	for _, id := range input.UserLiteratureIDs {
+		if id > 0 {
+			want[id] = struct{}{}
+		}
+	}
+	rows, err := userLitRepo.ListActiveByUser(ctx, uint64(userID))
+	if err != nil {
+		return base
+	}
+	out := append([]literature.LiteratureDownloadItem(nil), base...)
+	for _, row := range rows {
+		if _, ok := want[row.ID]; !ok {
+			continue
+		}
+		if row.FileExt != "pdf" && !strings.HasSuffix(strings.ToLower(row.FileName), ".pdf") {
+			continue
+		}
+		rel := ""
+		if row.StorageURI != nil {
+			rel = strings.TrimSpace(*row.StorageURI)
+		}
+		if rel == "" {
+			continue
+		}
+		out = append(out, literature.LiteratureDownloadItem{
+			ExternalKey: fmt.Sprintf("user-lit-%d", row.ID),
+			LocalPath:   filepath.ToSlash(rel),
+		})
+	}
+	return out
+}
+
+func dedupeLiteratureDownloadItems(items []literature.LiteratureDownloadItem) []literature.LiteratureDownloadItem {
+	if len(items) == 0 {
+		return items
+	}
+	seen := make(map[string]struct{}, len(items))
+	out := make([]literature.LiteratureDownloadItem, 0, len(items))
+	for _, it := range items {
+		key := strings.TrimSpace(it.LocalPath)
+		if key == "" {
+			key = strings.TrimSpace(it.ExternalKey)
+		}
+		if key == "" {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, it)
+	}
+	return out
+}
+
 // stageRetrieveStepLiteratureToWorkspace 把 retrieve 步已落盘 PDF 同步到本 run 的 paperRoot/literature/。
 func stageRetrieveStepLiteratureToWorkspace(paperRoot string, s *TopicDiscoveryRunService, ctx context.Context, userID uint, runVersion int) error {
 	if s == nil || s.steps == nil {
 		return nil
 	}
-	ret, err := s.steps.GetStep(ctx, uint64(userID), runVersion, "retrieve")
-	if err != nil || ret == nil || len(ret.Extra) == 0 {
-		return nil
-	}
-	items := literature.ParseLiteratureDownloads(ret.Extra)
-	if len(items) == 0 {
-		return nil
-	}
-	corpus, err := json.Marshal(map[string]any{"literature_downloads": items})
+	items, err := s.collectRunLiteratureItems(ctx, userID, runVersion, nil)
 	if err != nil {
 		return err
 	}
-	staged, err := stageRetrieveLiteraturePDFs(paperRoot, json.RawMessage(corpus))
-	if err != nil {
-		return err
+	_, err = syncLiteratureItemsToPaperRoot(paperRoot, items)
+	return err
+}
+
+func literatureStagingFileName(externalKey, platformRel string) string {
+	if ek := strings.TrimSpace(externalKey); ek != "" {
+		base := sanitizePathSegment(ek)
+		if base != "" {
+			if !strings.HasSuffix(strings.ToLower(base), ".pdf") {
+				base += ".pdf"
+			}
+			return base
+		}
 	}
-	return writeLiteratureStagingManifest(paperRoot, staged)
+	name := filepath.Base(platformRel)
+	if name == "" || name == "." {
+		return "literature.pdf"
+	}
+	return name
 }
 
 // stageRetrieveLiteraturePDFs 将平台 storage 中的 PDF 放入 ARIS workspace 的 literature/（research-lit 默认识别路径）。
@@ -110,10 +243,7 @@ func stageRetrieveLiteraturePDFs(paperRoot string, corpus json.RawMessage) ([]ar
 		if err != nil || st.Size() == 0 {
 			continue
 		}
-		name := filepath.Base(rel)
-		if name == "" || name == "." {
-			name = sanitizePathSegment(it.ExternalKey) + ".pdf"
-		}
+		name := literatureStagingFileName(it.ExternalKey, rel)
 		dst := filepath.Join(litDir, name)
 		if err := linkOrCopyPDF(src, dst); err != nil {
 			return staged, fmt.Errorf("stage pdf %s: %w", it.ExternalKey, err)

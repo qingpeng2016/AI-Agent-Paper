@@ -51,7 +51,7 @@ func runARISTool(paperRoot, scriptRel string, args ...string) (stdout, stderr st
 	return outBuf.String(), errBuf.String(), nil
 }
 
-func ensureIdeaDiscoveryRunStateStarted(paperRoot, runID string, cfg ARISIdeaDiscoveryConfig) error {
+func ensureIdeaDiscoveryRunStateStarted(paperRoot, runID string) error {
 	statePath := filepath.Join(paperRoot, ".aris", "runs", runID+".json")
 	if st, err := os.Stat(statePath); err == nil && st.Size() > 0 {
 		return nil
@@ -63,14 +63,10 @@ func ensureIdeaDiscoveryRunStateStarted(paperRoot, runID string, cfg ARISIdeaDis
 	if executor == "" {
 		executor = "claude"
 	}
-	phases := cfg.runStatePhasesCSV()
 	args := []string{
 		"start", ".", runID,
-		"--phases", phases,
+		"--phases", ideaDiscoveryRunStatePhasesCSV(),
 		"--executor", executor,
-	}
-	if cfg.RunState.ProvisionalAdvances {
-		args = append(args, "--provisional-advances")
 	}
 	_, _, err := runARISTool(paperRoot, "tools/run_state.py", args...)
 	return err

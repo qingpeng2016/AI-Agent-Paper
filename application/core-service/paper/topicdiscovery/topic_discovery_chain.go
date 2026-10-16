@@ -11,7 +11,7 @@ import (
 // skipRetrieveForNativeRun 原生模式：不跑平台检索，标记 retrieve 完成以便进入 idea_discovery。
 func (s *TopicDiscoveryRunService) skipRetrieveForNativeRun(ctx context.Context, userID uint, runVersion int) error {
 	cfg := mustIdeaDiscoveryConfig()
-	if cfg.Platform.RequireRetrieveBeforeIdeaDiscovery {
+	if cfg.Platform.RequireRetrieve {
 		return nil
 	}
 	step, err := s.steps.GetStep(ctx, uint64(userID), runVersion, "retrieve")
@@ -32,10 +32,10 @@ func (s *TopicDiscoveryRunService) skipRetrieveForNativeRun(ctx context.Context,
 	return s.steps.SaveStep(ctx, step)
 }
 
-// OnRetrieveCompleted retrieve 完成后自动进入原生 /idea-discovery（需 auto_chain_retrieve 且未开平台级检查点）。
+// OnRetrieveCompleted retrieve 完成后自动进入 idea_discovery（仅 pause_after_retrieve=false 时）。
 func (s *TopicDiscoveryRunService) OnRetrieveCompleted(ctx context.Context, userID uint, runVersion int) error {
 	cfg := mustIdeaDiscoveryConfig()
-	if cfg.Platform.InterStepHumanCheckpoint || !cfg.Platform.AutoChainRetrieve || !cfg.Platform.RequireRetrieveBeforeIdeaDiscovery {
+	if cfg.Platform.PauseAfterRetrieve || !cfg.Platform.RequireRetrieve {
 		return nil
 	}
 	idea, err := s.steps.GetStep(ctx, uint64(userID), runVersion, "idea_discovery")

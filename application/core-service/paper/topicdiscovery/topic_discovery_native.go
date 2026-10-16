@@ -13,7 +13,6 @@ import (
 	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/lang"
 	paperstep "github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/step"
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
-	"github.com/qingpeng2016/ai-agent-paper/domain/rest/request"
 	"gopkg.in/yaml.v3"
 )
 
@@ -35,7 +34,7 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 ) error {
 	cfg := mustIdeaDiscoveryConfig()
 
-	if cfg.Platform.RequireRetrieveBeforeIdeaDiscovery {
+	if cfg.Platform.RequireRetrieve {
 		ret, err := s.steps.GetStep(ctx, uint64(userID), runVersion, "retrieve")
 		if err != nil || ret == nil || strings.TrimSpace(ret.Status) != "completed" {
 			return fmt.Errorf("retrieve 未完成")
@@ -52,12 +51,12 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 	if err := stageRetrieveStepLiteratureToWorkspace(paperRoot, s, ctx, userID, runVersion); err != nil {
 		return fmt.Errorf("stage retrieve literature: %w", err)
 	}
-	if err := ensureIdeaDiscoveryRunStateStarted(paperRoot, runID, cfg); err != nil {
+	if err := ensureIdeaDiscoveryRunStateStarted(paperRoot, runID); err != nil {
 		return fmt.Errorf("run_state start: %w", err)
 	}
 
 	invokeCtx := s.buildTopicStrategyInvokeContext(ctx, userID, runVersion, step, input, 1, 1, nil, nil)
-	maxChain := cfg.Invoke.MaxInvokesPerRun
+	maxChain := cfg.Platform.MaxArisPerBot
 	chainInTick := 0
 
 	for {
@@ -112,7 +111,7 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 			return s.finishIdeaDiscoveryAfterGate(ctx, step, userID, runVersion, route, paperRoot, runID, cfg)
 		}
 
-		if !cfg.Skill.AutoProceed {
+		if !cfg.Platform.AutoProceed {
 			meta = paperstep.LoadStepExtra(step)
 			meta["aris_awaiting_checkpoint"] = true
 			meta["aris_pause_after_phase"] = pendingPhase
@@ -165,13 +164,13 @@ func (s *TopicDiscoveryRunService) handleIdeaDiscoveryInvokeFailure(
 	retries++
 	meta["aris_invoke_retries"] = retries
 	meta["aris_invoke_last_error"] = invokeErr.Error()
-	if retries <= cfg.Invoke.MaxInvokeRetries && isRetriableIdeaDiscoveryInvokeError(invokeErr) {
+	if retries <= ideaDiscoveryMaxInvokeRetries && isRetriableIdeaDiscoveryInvokeError(invokeErr) {
 		meta["async_llm"] = true
 		delete(meta, "aris_awaiting_checkpoint")
 		step.Extra = jsonx.MustJSON(meta)
 		step.Status = "running"
 		step.CompletedAt = nil
-		sum := fmt.Sprintf("Idea Discovery CLI 中断，将自动续跑（%d/%d）", retries, cfg.Invoke.MaxInvokeRetries)
+		sum := fmt.Sprintf("Idea Discovery CLI 中断，将自动续跑（%d/%d）", retries, ideaDiscoveryMaxInvokeRetries)
 		step.SummaryText = &sum
 		_ = s.steps.SaveStep(ctx, step)
 		return nil
@@ -199,7 +198,7 @@ func (s *TopicDiscoveryRunService) finishIdeaDiscoveryAfterGate(
 	paperRoot, runID string,
 	cfg ARISIdeaDiscoveryConfig,
 ) error {
-	gate, gateErr := runIdeaDiscoveryEvidenceGate(paperRoot, runID, cfg.Gate.Report)
+	gate, gateErr := runIdeaDiscoveryEvidenceGate(paperRoot, runID, cfg.Artifacts.IdeaReport)
 	result := map[string]any{
 		"pipeline":        "aris_idea_discovery_native",
 		"behavior_key":    BehaviorIdeaDiscoveryRun,
@@ -208,7 +207,7 @@ func (s *TopicDiscoveryRunService) finishIdeaDiscoveryAfterGate(
 		"gate_passed":     gate.Passed,
 		"gate_stdout":     gate.Stdout,
 		"gate_blocked":    gate.Reasons,
-		"artifact_config": cfg.Artifacts,
+		"artifact_config": cfg.artifactConfigMap(),
 	}
 	mergeNativeIdeaDiscoveryArtifacts(result, paperRoot, cfg)
 	aggregate, _ := s.BuildIdeaDiscoveryAggregateResult(ctx, userID, runVersion)
@@ -250,13 +249,6 @@ func (s *TopicDiscoveryRunService) finishIdeaDiscoveryAfterGate(
 	step.CompletedAt = &done
 	if err := s.steps.SaveStep(ctx, step); err != nil {
 		return err
-	}
-	if cfg.Platform.AutoPersistAfterGate {
-		_, _ = s.ConfirmTopicRound(ctx, userID, request.TopicDiscoveryConfirmRoundRequest{
-			ManuscriptID:  step.ManuscriptID,
-			RunVersion:    runVersion,
-			SelectedRound: 1,
-		})
 	}
 	return nil
 }
@@ -333,18 +325,7 @@ func PrepareNativeIdeaDiscoveryWorkspace(paperRoot string, input topicRunInput, 
 	dir := compactDirectionForPrompt(input)
 	kw := keywordsLine(input)
 	venue := strings.TrimSpace(input.Venue)
-	briefRel := strings.TrimSpace(cfg.Artifacts.ResearchBrief)
-	if briefRel == "" {
-		briefRel = "RESEARCH_BRIEF.md"
-	}
-	litDir := strings.TrimSpace(cfg.Artifacts.LiteratureDir)
-	if litDir == "" {
-		litDir = "literature"
-	}
-	corpusRel := strings.TrimSpace(cfg.Artifacts.CorpusJSON)
-	if corpusRel == "" {
-		corpusRel = ".paper/corpus.json"
-	}
+	_ = locale
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Research Brief\n\n")
 	fmt.Fprintf(&b, "## Direction\n%s\n\n", dir)
@@ -354,14 +335,9 @@ func PrepareNativeIdeaDiscoveryWorkspace(paperRoot string, input topicRunInput, 
 	if venue != "" {
 		fmt.Fprintf(&b, "## Target venue\n%s\n\n", venue)
 	}
-	if cfg.Platform.InjectStagedLiterature {
-		if locale == "zh" {
-			fmt.Fprintf(&b, "## Notes\n")
-			fmt.Fprintf(&b, "- 可选本地库：`"+litDir+"/`、`"+corpusRel+"`（由平台 inject_staged_literature 注入）。\n")
-		} else {
-			fmt.Fprintf(&b, "## Notes\n")
-			fmt.Fprintf(&b, "- Optional local library: `"+litDir+"/`, `"+corpusRel+"` (platform inject only).\n")
-		}
+	briefRel := strings.TrimSpace(cfg.Artifacts.ResearchBrief)
+	if briefRel == "" {
+		briefRel = "RESEARCH_BRIEF.md"
 	}
 	return os.WriteFile(filepath.Join(paperRoot, briefRel), []byte(b.String()), 0o644)
 }
@@ -375,7 +351,7 @@ func (s *TopicDiscoveryRunService) BuildIdeaDiscoveryAggregateResult(ctx context
 	}
 	paperRoot := ARISRunPaperRoot(uint64(userID), mid, runVersion)
 	finalProposal := readFileMax(filepath.Join(paperRoot, cfg.Artifacts.FinalProposal), 512000)
-	expPlan := readFileMax(filepath.Join(paperRoot, cfg.Artifacts.ExperimentPlan), 256000)
+	expPlan := readFileMax(filepath.Join(paperRoot, cfg.Artifacts.ExperimentPlan), 512000)
 	ideaReport := readFileMax(filepath.Join(paperRoot, cfg.Artifacts.IdeaReport), 512000)
 
 	litBody := finalProposal

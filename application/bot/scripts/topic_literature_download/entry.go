@@ -242,6 +242,19 @@ func (j *TopicLiteratureDownloadJob) finishSuccess(ctx context.Context, step *en
 		notification.SendErrorLog(ctx, "topic-literature-download-save-failed", zap.Uint64("step_id", step.ID), zap.Error(err))
 		return ""
 	}
+	if j.runs != nil {
+		staged, syncErr := j.runs.SyncRunLiteratureToInoutWorkspace(ctx, uint(step.UserID), step.RunVersion, j.userLit)
+		if syncErr != nil {
+			notification.SendErrorLog(ctx, "topic-literature-inout-sync-failed",
+				zap.Uint64("step_id", step.ID),
+				zap.Error(syncErr))
+		} else {
+			logger.InfoZ(ctx, "topic-literature-inout-sync",
+				zap.Uint64("step_id", step.ID),
+				zap.Int("staged_pdfs", staged),
+				zap.String("paper_root_hint", fmt.Sprintf("user_%d/manuscript_%d/run_%d/paper/literature", step.UserID, step.ManuscriptID, step.RunVersion)))
+		}
+	}
 	notification.SendNotifyLog(ctx, "topic-literature-download-completed",
 		zap.Uint64("step_id", step.ID),
 		zap.Int("pdf_on_disk", pdfN),

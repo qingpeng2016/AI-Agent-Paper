@@ -28,7 +28,7 @@ func (s *TopicDiscoveryRunService) stageBeginTopicDiscoveryAsync(
 	step *entity.PaperOutputTopicStep,
 ) error {
 	cfg := mustIdeaDiscoveryConfig()
-	if cfg.Platform.RequireRetrieveBeforeIdeaDiscovery {
+	if cfg.Platform.RequireRetrieve {
 		ret, err := s.steps.GetStep(ctx, uint64(userID), runVersion, "retrieve")
 		if err != nil || ret == nil || strings.TrimSpace(ret.Status) != "completed" {
 			return fmt.Errorf("retrieve 未完成，无法开始选题发现")
