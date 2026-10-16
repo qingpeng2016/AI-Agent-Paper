@@ -211,6 +211,54 @@ proc_is_app_run_bot() {
   return 1
 }
 
+proc_is_app_run_user() {
+  local pid="\$1" cmd cwd
+  cmd=\$(read_proc_cmdline "\${pid}" 2>/dev/null || true)
+  cwd=\$(proc_cwd "\${pid}")
+  [[ -n "\${cmd}" ]] || return 1
+  if [[ "\${cmd}" == *"--run_bot=true"* || "\${cmd}" == *"--run_bot=1"* ]]; then
+    return 1
+  fi
+  if [[ "\${cmd}" == *"--run_bot=false"* || "\${cmd}" == *"--run_bot=0"* ]]; then
+    if [[ "\${cwd}" == "\${APP_DIR}" ]]; then
+      return 0
+    fi
+    if [[ "\${cmd}" == *"main.go"* || "\${cmd}" == *"\${MALL_BIN_NAME}"* || "\${cmd}" == *"ai-agent-paper"* ]]; then
+      return 0
+    fi
+  fi
+  if [[ "\${cwd}" == "\${APP_DIR}" ]]; then
+    if [[ "\${cmd}" == *"/bin/\${MALL_BIN_NAME}"* || "\${cmd}" == *"\${MALL_BIN_NAME}"* ]]; then
+      [[ "\${cmd}" == *"--run_bot=false"* || "\${cmd}" == *"--run_bot=0"* ]] && return 0
+    fi
+  fi
+  return 1
+}
+
+kill_all_run_user_processes() {
+  local sig="\${1:-TERM}" pid cmd
+  echo ">>> [服务器] 清理 run_bot=false 进程（\${APP_DIR}）"
+  if [[ -f "\${PID_FILE}" ]]; then
+    pid=\$(tr -d '[:space:]' <"\${PID_FILE}" 2>/dev/null || true)
+    if [[ -n "\${pid}" ]]; then
+      kill "-\${sig}" "\${pid}" 2>/dev/null || true
+    fi
+    rm -f "\${PID_FILE}"
+  fi
+  for pid_path in /proc/[0-9]*; do
+    [[ -e "\${pid_path}" ]] || continue
+    pid=\${pid_path#/proc/}
+    [[ "\${pid}" =~ ^[0-9]+\$ ]] || continue
+    proc_is_app_run_user "\${pid}" || continue
+    cmd=\$(read_proc_cmdline "\${pid}" 2>/dev/null || true)
+    echo ">>> [服务器] kill -\${sig} pid=\${pid} \${cmd}"
+    kill "-\${sig}" "\${pid}" 2>/dev/null || true
+  done
+  if [[ -n "\${LISTEN_PORT}" ]]; then
+    kill_port_listeners "\${LISTEN_PORT}" "\${sig}"
+  fi
+}
+
 kill_all_run_bot_processes() {
   local sig="\${1:-TERM}" pid cmd
   echo ">>> [服务器] 清理 run_bot=true 进程（\${APP_DIR}）"
@@ -237,24 +285,15 @@ stop_mall() {
   if [[ "\${RUN_BOT}" == "true" ]]; then
     kill_all_run_bot_processes TERM
   else
-    if [[ -f "\${PID_FILE}" ]]; then
-      old_pid=\$(tr -d '[:space:]' <"\${PID_FILE}" 2>/dev/null || true)
-      kill -TERM "\${old_pid}" 2>/dev/null || true
-      rm -f "\${PID_FILE}"
-    fi
-    kill_matching TERM
-  fi
-  if [[ "\${RUN_BOT}" == "false" && -n "\${LISTEN_PORT}" ]]; then
-    kill_port_listeners "\${LISTEN_PORT}" TERM
+    kill_all_run_user_processes TERM
   fi
   sleep 2
   if [[ "\${RUN_BOT}" == "true" ]]; then
     kill_all_run_bot_processes KILL
   else
-    kill_matching KILL
+    kill_all_run_user_processes KILL
   fi
   if [[ "\${RUN_BOT}" == "false" && -n "\${LISTEN_PORT}" ]]; then
-    kill_port_listeners "\${LISTEN_PORT}" KILL
     sleep 1
     if port_in_use "\${LISTEN_PORT}"; then
       echo "ERROR: [服务器] 端口 \${LISTEN_PORT} 仍被占用，无法启动 API：" >&2
@@ -331,6 +370,11 @@ start_mall() {
     kill_all_run_bot_processes TERM
     sleep 2
     kill_all_run_bot_processes KILL
+    sleep 1
+  else
+    kill_all_run_user_processes TERM
+    sleep 2
+    kill_all_run_user_processes KILL
     sleep 1
   fi
   : >"\${LOG_FILE}"
