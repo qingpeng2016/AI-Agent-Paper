@@ -133,6 +133,43 @@ func PersistDownloadedUserLiterature(
 	return repo.Create(ctx, row)
 }
 
+// PersistIngestedUserLiteraturePDF ARIS /research-lit 等写入 storage 后入库（无 retrieve literature_hits）。
+func PersistIngestedUserLiteraturePDF(
+	ctx context.Context,
+	repo repository.PaperUserLiteratureRepo,
+	userID uint64,
+	externalKey, from, title, storageRel string,
+) error {
+	if repo == nil || userID == 0 {
+		return nil
+	}
+	rel := strings.TrimSpace(storageRel)
+	if rel == "" {
+		rel = LiteratureLocalRelPath(externalKey)
+	}
+	abs := LiteratureLocalAbsPath(rel)
+	st, err := os.Stat(abs)
+	if err != nil || st.Size() == 0 {
+		return nil
+	}
+	from = strings.TrimSpace(from)
+	if from == "" {
+		from = entity.UserLiteratureFromArxiv
+	}
+	if strings.TrimSpace(title) == "" {
+		title = externalKey
+	}
+	wrap, _ := json.Marshal(map[string]any{
+		"literature_hits": []StoredLiteratureHit{{
+			ExternalKey: externalKey,
+			Title:       title,
+			SourceCode:  from,
+		}},
+	})
+	item := LiteratureDownloadItem{ExternalKey: externalKey, LocalPath: rel}
+	return PersistDownloadedUserLiterature(ctx, repo, userID, wrap, item)
+}
+
 // SyncDownloadedUserLiterature 批量同步已成功落盘的下载项。
 func SyncDownloadedUserLiterature(
 	ctx context.Context,

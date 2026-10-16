@@ -34,13 +34,6 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 ) error {
 	cfg := mustIdeaDiscoveryConfig()
 
-	if cfg.Platform.RequireRetrieve {
-		ret, err := s.steps.GetStep(ctx, uint64(userID), runVersion, "retrieve")
-		if err != nil || ret == nil || strings.TrimSpace(ret.Status) != "completed" {
-			return fmt.Errorf("retrieve 未完成")
-		}
-	}
-
 	route, err := s.requireTopicStrategyRoute(ctx, BehaviorIdeaDiscoveryRun)
 	if err != nil {
 		return err
@@ -48,9 +41,6 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 
 	paperRoot := ARISRunPaperRoot(uint64(userID), step.ManuscriptID, runVersion)
 	runID := resolveIdeaDiscoveryRunID(step, input)
-	if err := stageRetrieveStepLiteratureToWorkspace(paperRoot, s, ctx, userID, runVersion); err != nil {
-		return fmt.Errorf("stage retrieve literature: %w", err)
-	}
 	if err := ensureIdeaDiscoveryRunStateStarted(paperRoot, runID); err != nil {
 		return fmt.Errorf("run_state start: %w", err)
 	}
@@ -109,6 +99,9 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 		}
 		if pendingPhase == "" {
 			return s.finishIdeaDiscoveryAfterGate(ctx, step, userID, runVersion, route, paperRoot, runID, cfg)
+		}
+		if isResearchLitPhaseDone(paperRoot, runID) {
+			_, _ = s.ingestARISWorkspaceLiterature(ctx, userID, runVersion, step.ManuscriptID, paperRoot, cfg)
 		}
 
 		if !cfg.Platform.AutoProceed {
@@ -258,6 +251,7 @@ func (s *TopicDiscoveryRunService) finishIdeaDiscoveryAfterGate(
 	step.Result = jsonx.MustJSON(meta)
 
 	done := time.Now()
+	_, _ = s.ingestARISWorkspaceLiterature(ctx, userID, runVersion, step.ManuscriptID, paperRoot, cfg)
 	if !gate.Passed {
 		reason := "idea_discovery_gate 未 PASS"
 		if gateErr != nil {

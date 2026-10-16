@@ -7,7 +7,9 @@ import (
 	"strings"
 
 	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/literature"
+	"github.com/qingpeng2016/ai-agent-paper/common/dederi/logger"
 	"github.com/qingpeng2016/ai-agent-paper/domain/rest/response"
+	"go.uber.org/zap"
 )
 
 const (
@@ -228,6 +230,11 @@ func (s *TopicDiscoveryRunService) retrieveLiteratureRandom(
 
 		var total int
 		var countErr error
+		logger.InfoZ(ctx, "topic-retrieve-random-round",
+			zap.Int("round", round+1),
+			zap.String("source_code", code),
+			zap.Int("hits_so_far", len(hits)))
+
 		if cached, ok := countBySource[code]; ok {
 			total, countErr = cached.total, cached.err
 		} else {

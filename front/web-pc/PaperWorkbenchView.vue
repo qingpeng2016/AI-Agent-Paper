@@ -2594,7 +2594,7 @@ watch(
           <label class="paper-field">
             <span class="paper-label">执行强度</span>
             <PaperSelect v-model="topicForm.intensity" :options="intensityOptions" />
-            <span class="paper-hint">控制 retrieve 文献数量与检索深度；选题发现为原生 /idea-discovery 单流水线（非 exec_rounds 双 invoke）。</span>
+            <span class="paper-hint">控制 /idea-discovery 深度；文献由 ARIS /research-lit（web + arXiv 下载）拉取，不再走平台 retrieve。</span>
           </label>
 
           <label class="paper-field">
@@ -2605,45 +2605,6 @@ watch(
         </div>
 
         <div class="paper-field paper-field--block paper-field--section-gap">
-          <span class="paper-label">文献来源</span>
-          <div class="paper-check-group">
-            <label
-              v-for="src in literatureSourceOptions"
-              :key="src.code"
-              class="paper-check paper-check--inline"
-            >
-              <input
-                type="checkbox"
-                :checked="isTopicSourceChecked(src.code)"
-                @change="toggleTopicSource(src.code, ($event.target as HTMLInputElement).checked)"
-              />
-              <span>{{ src.label }}</span>
-            </label>
-          </div>
-          <label class="paper-check paper-check--nested">
-            <input
-              v-model="topicForm.randomReferences"
-              type="checkbox"
-              :disabled="topicRunBusy || currentTopicRun.status === 'checkpoint'"
-            />
-            <span class="paper-check-row">
-              <span>每次运行随机参考文献</span>
-              <ElTooltip
-                content="勾选后，每次随机获取第三方论文，否则会顺序获取，可能多次获取论文是一样"
-                placement="top"
-              >
-                <button
-                  type="button"
-                  class="paper-field-help"
-                  aria-label="随机参考文献说明"
-                  @click.prevent
-                >
-                  ?
-                </button>
-              </ElTooltip>
-            </span>
-          </label>
-
           <div class="paper-my-literature-block">
             <span class="paper-label">我的文献</span>
             <div class="paper-my-literature-row">

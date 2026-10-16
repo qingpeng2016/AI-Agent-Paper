@@ -404,12 +404,11 @@ export type ArisIdeaDiscoveryPhaseId = (typeof ARIS_IDEA_DISCOVERY_PHASES)[numbe
 
 export const ARIS_IDEA_DISCOVERY_PHASES_LABEL = ARIS_IDEA_DISCOVERY_PHASES.join(' → ')
 
-/** UI 两步：语料准备合并在 retrieve（无检查点）；主流程为原生 /idea-discovery */
+/** UI：平台 retrieve 关闭时，文献由 ARIS /research-lit 拉取；前端只展示核心阶段 + 确认 */
 export const TOPIC_DISCOVERY_FLOW_STEPS: TopicFlowStepDef[] = [
-  { stageCode: 'retrieve', label: '语料准备（检索 + PDF）', checkpointKey: 'retrieve_ready' },
   {
     stageCode: 'idea_discovery',
-    label: '核心阶段',
+    label: '选题发现（/idea-discovery · web 文献）',
     checkpointKey: 'idea_discovery_ready',
   },
   { stageCode: 'topic_confirm', label: '确认并完成', checkpointKey: 'topic_confirm_ready' },

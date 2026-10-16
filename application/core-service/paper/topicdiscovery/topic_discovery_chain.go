@@ -10,10 +10,6 @@ import (
 
 // skipRetrieveForNativeRun 原生模式：不跑平台检索，标记 retrieve 完成以便进入 idea_discovery。
 func (s *TopicDiscoveryRunService) skipRetrieveForNativeRun(ctx context.Context, userID uint, runVersion int) error {
-	cfg := mustIdeaDiscoveryConfig()
-	if cfg.Platform.RequireRetrieve {
-		return nil
-	}
 	step, err := s.steps.GetStep(ctx, uint64(userID), runVersion, "retrieve")
 	if err != nil || step == nil {
 		return err
@@ -26,16 +22,16 @@ func (s *TopicDiscoveryRunService) skipRetrieveForNativeRun(ctx context.Context,
 	step.ExecProgressPct = 100
 	now := time.Now()
 	step.CompletedAt = &now
-	step.Result = jsonx.MustJSON(map[string]any{"skipped": true, "reason": "native_no_platform_retrieve"})
+	step.Result = jsonx.MustJSON(map[string]any{
+		"skipped": true,
+		"reason":  "native_aris_web_literature",
+		"note":    "文献由 /idea-discovery → /research-lit（sources: web）拉取并入库",
+	})
 	return s.steps.SaveStep(ctx, step)
 }
 
-// OnRetrieveCompleted retrieve 完成后自动进入 idea_discovery（仅 pause_after_retrieve=false 时）。
+// OnRetrieveCompleted retrieve 完成后若 idea_discovery 仍 pending 则启动（兼容旧平台 PDF bot 路径）。
 func (s *TopicDiscoveryRunService) OnRetrieveCompleted(ctx context.Context, userID uint, runVersion int) error {
-	cfg := mustIdeaDiscoveryConfig()
-	if cfg.Platform.PauseAfterRetrieve || !cfg.Platform.RequireRetrieve {
-		return nil
-	}
 	idea, err := s.steps.GetStep(ctx, uint64(userID), runVersion, "idea_discovery")
 	if err != nil || idea == nil {
 		return err

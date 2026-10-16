@@ -5,7 +5,6 @@ import (
 	"encoding/xml"
 	"fmt"
 	"net/http"
-	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -46,7 +45,6 @@ func (c *Client) Count(ctx context.Context, query string) (int, error) {
 }
 
 func (c *Client) searchFeed(ctx context.Context, q httpentity.ArxivSearchQuery) ([]httpentity.ArxivPaper, int, error) {
-	searchQuery := url.QueryEscape("all:" + q.Query)
 	start := q.Start
 	if start < 0 {
 		start = 0
@@ -55,7 +53,7 @@ func (c *Client) searchFeed(ctx context.Context, q httpentity.ArxivSearchQuery) 
 	if maxResults <= 0 {
 		maxResults = 1
 	}
-	apiURL := fmt.Sprintf("%s?search_query=%s&start=%d&max_results=%d", c.baseURL, searchQuery, start, maxResults)
+	apiURL := arxivAPIURL(c.baseURL, q.Query, start, maxResults)
 	resp, err := c.http.GetLiterature(ctx, apiURL, nil, nil)
 	if err != nil {
 		return nil, 0, httpx.LogLiteratureTransportError(ctx, "arxiv", "search", apiURL, err)

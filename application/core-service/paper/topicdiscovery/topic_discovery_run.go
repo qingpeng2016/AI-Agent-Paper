@@ -59,6 +59,7 @@ type TopicDiscoveryRunService struct {
 	litSearch    *literature.LiteratureSearchService
 	llmRepo      repository.PaperLLMRepo
 	strategyRepo repository.PaperStrategyRepo
+	userLit      repository.PaperUserLiteratureRepo
 }
 
 func NewTopicDiscoveryRunService(
@@ -71,6 +72,7 @@ func NewTopicDiscoveryRunService(
 	litSearch *literature.LiteratureSearchService,
 	llmRepo repository.PaperLLMRepo,
 	strategyRepo repository.PaperStrategyRepo,
+	userLit repository.PaperUserLiteratureRepo,
 ) *TopicDiscoveryRunService {
 	return &TopicDiscoveryRunService{
 		manuscripts:  manuscripts,
@@ -82,6 +84,7 @@ func NewTopicDiscoveryRunService(
 		litSearch:    litSearch,
 		llmRepo:      llmRepo,
 		strategyRepo: strategyRepo,
+		userLit:      userLit,
 	}
 }
 
@@ -353,7 +356,7 @@ func (s *TopicDiscoveryRunService) prepareRun(ctx context.Context, userID uint, 
 		SourceCodes:       req.SourceCodes,
 		Intensity:         intensityCode,
 		AuditLevel:        auditCode,
-		HumanCheckpoint:   !mustIdeaDiscoveryConfig().Platform.PauseAfterRetrieve,
+		HumanCheckpoint:   !mustIdeaDiscoveryConfig().Platform.AutoProceed,
 		RandomReferences:  req.RandomReferences,
 		UserLiteratureIDs: userLitIDs,
 		MaxPapers:         int(intensity.MaxPapers),
@@ -433,29 +436,13 @@ func (s *TopicDiscoveryRunService) executeFromStage(ctx context.Context, userID 
 		stage := topicDiscoveryStages[i]
 		if stage == "retrieve" {
 			_ = s.skipRetrieveForNativeRun(ctx, userID, runVersion)
-			if !mustIdeaDiscoveryConfig().Platform.RequireRetrieve {
-				continue
-			}
+			continue
 		}
 		if err := s.executeStage(ctx, userID, runVersion, input, stage); err != nil {
 			return err
 		}
 		if st, _ := s.runningStageCode(ctx, userID, runVersion); st != "" {
 			return nil
-		}
-		if mustIdeaDiscoveryConfig().Platform.PauseAfterRetrieve {
-			return nil
-		}
-		if stage == "retrieve" {
-			if ret, _ := s.steps.GetStep(ctx, uint64(userID), runVersion, "retrieve"); ret != nil && strings.TrimSpace(ret.Status) == "completed" {
-				_ = s.OnRetrieveCompleted(ctx, userID, runVersion)
-			}
-		}
-		if stage == "retrieve" && !mustIdeaDiscoveryConfig().Platform.RequireRetrieve {
-			idea, _ := s.steps.GetStep(ctx, uint64(userID), runVersion, "idea_discovery")
-			if idea != nil && strings.TrimSpace(idea.Status) == "pending" {
-				_ = s.stageBeginTopicDiscoveryAsync(ctx, userID, runVersion, idea)
-			}
 		}
 	}
 	return nil
@@ -709,7 +696,7 @@ func (s *TopicDiscoveryRunService) buildRunView(manuscriptID uint64, runVersion 
 		RunVersion:   runVersion,
 		Steps:        make([]response.TopicDiscoveryStepView, 0, len(rows)),
 	}
-	view.HumanCheckpoint = mustIdeaDiscoveryConfig().Platform.PauseAfterRetrieve
+	view.HumanCheckpoint = !mustIdeaDiscoveryConfig().Platform.AutoProceed
 
 	runStatus := "completed"
 	for _, r := range rows {

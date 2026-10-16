@@ -33,11 +33,10 @@ type ideaDiscoveryArtifacts struct {
 }
 
 type ideaDiscoveryPlatform struct {
-	PauseAfterRetrieve bool   `yaml:"pause_after_retrieve"`
-	AutoProceed        bool   `yaml:"auto_proceed"`
-	Sources            string `yaml:"sources"`
-	MaxArisPerBot      int    `yaml:"max_aris_per_bot"`
-	RequireRetrieve    bool   `yaml:"require_retrieve"`
+	AutoProceed   bool   `yaml:"auto_proceed"`
+	Sources       string `yaml:"sources"`
+	ArxivDownload bool   `yaml:"arxiv_download"`
+	MaxArisPerBot int    `yaml:"max_aris_per_bot"`
 }
 
 type ideaDiscoveryWorkspace struct {
@@ -131,11 +130,10 @@ func defaultARISIdeaDiscoveryConfig() ARISIdeaDiscoveryConfig {
 		Artifacts: defaultIdeaDiscoveryArtifacts(),
 		Workspace: defaultIdeaDiscoveryWorkspace(),
 		Platform: ideaDiscoveryPlatform{
-			PauseAfterRetrieve: true,
-			AutoProceed:        false,
-			Sources:            "local",
-			MaxArisPerBot:      1,
-			RequireRetrieve:    true,
+			AutoProceed:   false,
+			Sources:       "web",
+			ArxivDownload: true,
+			MaxArisPerBot: 1,
 		},
 	}
 }
@@ -266,9 +264,13 @@ func (c ARISIdeaDiscoveryConfig) formatSkillArgumentsLine(paperRoot, dir, venue 
 		ap = "true"
 	}
 	composed := strings.TrimSpace(c.Artifacts.IdeaReport)
+	arxivDL := "false"
+	if c.Platform.ArxivDownload {
+		arxivDL = "true"
+	}
 	line := fmt.Sprintf(
-		`%s — venue: %s, AUTO_PROCEED: %s, RESUMABLE: true, ARXIV_DOWNLOAD: false, render html: true, compact: false, composed: %s`,
-		dir, venue, ap, composed,
+		`%s — venue: %s, AUTO_PROCEED: %s, RESUMABLE: true, ARXIV_DOWNLOAD: %s, render html: true, compact: false, composed: %s`,
+		dir, venue, ap, arxivDL, composed,
 	)
 	if src := strings.TrimSpace(c.Platform.Sources); src != "" {
 		line += fmt.Sprintf(`, sources: %s`, src)

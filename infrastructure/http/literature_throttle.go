@@ -3,15 +3,20 @@ package http
 import (
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/go-resty/resty/v2"
+	"github.com/qingpeng2016/ai-agent-paper/conf"
 )
 
 // LiteratureOutboundMinInterval 文献检索 API 与 PDF 下载等对外 HTTP 的最小间隔。
 const LiteratureOutboundMinInterval = 2 * time.Second
+
+// literatureHTTPRequestTimeout 文献第三方 API 常比 LLM 接口更慢，单独放宽（仍不低于 http_timeout_sec）。
+const literatureHTTPRequestTimeout = 90 * time.Second
 
 const literatureHTTPMaxAttempts = 4
 
@@ -62,7 +67,53 @@ func literatureRetryableStatus(code int) bool {
 	return code == http.StatusTooManyRequests || code == http.StatusServiceUnavailable
 }
 
-// GetLiterature 文献第三方 GET：串行 + 最小间隔；429/503 退避重试。
+func literatureRetryableTransport(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+	return false
+}
+
+func (c *Client) getForLiterature(ctx context.Context, url string, query map[string]string, headers map[string]string) (*resty.Response, error) {
+	rc := c.restyForContext(ctx)
+	if _, hasDeadline := ctx.Deadline(); !hasDeadline {
+		rc = resty.New()
+		timeout := conf.GetHTTPTimeout()
+		if timeout < literatureHTTPRequestTimeout {
+			timeout = literatureHTTPRequestTimeout
+		}
+		rc.SetTimeout(timeout)
+	}
+	req := rc.R().SetContext(ctx)
+	if query != nil {
+		req.SetQueryParams(query)
+	}
+	for k, v := range headers {
+		req.SetHeader(k, v)
+	}
+	req.SetHeader("User-Agent", "AI-Agent-Paper/1.0")
+	return req.Get(url)
+}
+
+func literatureShouldRetry(lastErr error, attempt int) bool {
+	if attempt >= literatureHTTPMaxAttempts-1 {
+		return false
+	}
+	var retry literatureRetryHTTP
+	if errors.As(lastErr, &retry) {
+		return true
+	}
+	return literatureRetryableTransport(lastErr)
+}
+
+// GetLiterature 文献第三方 GET：串行 + 最小间隔；429/503 与超时类错误退避重试。
 func (c *Client) GetLiterature(ctx context.Context, url string, query map[string]string, headers map[string]string) (*resty.Response, error) {
 	var resp *resty.Response
 	var lastErr error
@@ -75,7 +126,7 @@ func (c *Client) GetLiterature(ctx context.Context, url string, query map[string
 		}
 		lastErr = WithLiteratureOutbound(ctx, func() error {
 			var e error
-			resp, e = c.Get(ctx, url, query, headers)
+			resp, e = c.getForLiterature(ctx, url, query, headers)
 			if e != nil {
 				return e
 			}
@@ -87,11 +138,9 @@ func (c *Client) GetLiterature(ctx context.Context, url string, query map[string
 		if lastErr == nil {
 			return resp, nil
 		}
-		var retry literatureRetryHTTP
-		if errors.As(lastErr, &retry) && attempt < literatureHTTPMaxAttempts-1 {
-			continue
+		if !literatureShouldRetry(lastErr, attempt) {
+			break
 		}
-		break
 	}
 	if lastErr != nil {
 		var retry literatureRetryHTTP
