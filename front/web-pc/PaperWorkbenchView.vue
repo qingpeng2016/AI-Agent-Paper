@@ -40,6 +40,7 @@ import {
   PAPER_MODULES,
   appendOperationLog,
   TOPIC_DISCOVERY_FLOW_STEPS,
+  ARIS_IDEA_DISCOVERY_PHASES_LABEL,
   getPaperModuleMeta,
   type EnvironmentPreferenceForm,
   type PaperManuscriptItem,
@@ -48,6 +49,11 @@ import {
   type TopicDiscoveryForm,
   type TopicFlowStepStatus,
 } from './types'
+import {
+  arisIdeaDiscoveryPhaseRows,
+  arisPhaseStatusLabel,
+  type ArisPhaseUiRow,
+} from './arisIdeaDiscoveryPhases'
 import { DEMO_MODULE_TOKEN_ESTIMATES } from './demoOperationLogs'
 import PaperModuleNavIcon from './PaperModuleNavIcon.vue'
 import PaperMyManuscriptsPanel from './PaperMyManuscriptsPanel.vue'
@@ -105,11 +111,10 @@ const CHECKPOINT_COPY: Record<TopicCheckpointKey, Omit<TopicCheckpointView, 'key
     ],
   },
   idea_discovery_ready: {
-    title: 'Idea Discovery 原生流水线',
+    title: 'Idea Discovery 段间检查点',
     lines: [
-      '已完成 /idea-discovery（research-lit → idea-creator → novelty-check → research-review → research-refine-pipeline）',
-      '产物路径见 conf/aris_idea_discovery.yaml（默认 IDEA_REPORT / FINAL_PROPOSAL / EXPERIMENT_PLAN）',
-      '确认后继续写入文献综述与实验方案表',
+      'ARIS 共 5 段（见下方子进度）；conf 中 auto_proceed: false 时，每段结束需点「确认并继续」',
+      '产物路径见 conf/aris_idea_discovery.yaml',
     ],
   },
   topic_discovery_ready: {
@@ -1021,12 +1026,36 @@ function buildTopicCheckpointView(
   if (!def?.checkpointKey) return null
   const dto = raw?.steps.find((s) => s.stage_code === pauseStage)
   const lines = linesFromApiStep(dto)
+  const base = lines.length ? lines : CHECKPOINT_COPY[def.checkpointKey].lines
+  if (pauseStage === 'idea_discovery' || pauseStage === 'topic_discovery') {
+    const phaseLines = arisIdeaDiscoveryPhaseRows(raw?.steps, raw?.run_status)
+      .filter((r) => r.status === 'waiting_confirm' || r.status === 'completed')
+      .map((r) => `${r.id}：${arisPhaseStatusLabel(r.status)}`)
+    if (phaseLines.length) {
+      return {
+        key: def.checkpointKey,
+        title: 'Idea Discovery · 段间检查点',
+        lines: [...phaseLines, ...base].slice(0, 12),
+      }
+    }
+  }
   return {
     key: def.checkpointKey,
     title: def.label,
-    lines: lines.length ? lines : CHECKPOINT_COPY[def.checkpointKey].lines,
+    lines: base,
   }
 }
+
+const topicArisPhaseRows = computed((): ArisPhaseUiRow[] =>
+  arisIdeaDiscoveryPhaseRows(
+    topicDiscoveryApiRun.value?.steps,
+    topicDiscoveryApiRun.value?.run_status,
+  ),
+)
+
+const topicArisPhaseAwaitingConfirm = computed(() =>
+  topicArisPhaseRows.value.some((r) => r.status === 'waiting_confirm'),
+)
 
 const topicCheckpointPanel = computed((): TopicCheckpointView | null => {
   if (!topicShowCheckpointPanel.value) return null
@@ -1191,20 +1220,28 @@ function stepStatusFromApi(raw: string): TopicFlowStepStatus {
 
 const TOPIC_STEP_RUNNING_HINT: Record<string, string> = {
   retrieve: '文献 PDF 下载与入库中…',
-  idea_discovery: 'ARIS /idea-discovery 原生全流程…',
-  topic_discovery: 'ARIS /idea-discovery 原生全流程…',
+  idea_discovery: `ARIS ${ARIS_IDEA_DISCOVERY_PHASES_LABEL}…`,
+  topic_discovery: `ARIS ${ARIS_IDEA_DISCOVERY_PHASES_LABEL}…`,
   topic_confirm: '等待确认并入库…',
   generate_ideas: 'AI 脑暴选题与新颖性分析中…',
   audit: 'AI 审查结论与文献综述生成中…',
 }
 
 function topicStepRunningHint(stageCode: string) {
+  if (stageCode === 'idea_discovery' || stageCode === 'topic_discovery') {
+    const running = topicArisPhaseRows.value.find((r) => r.status === 'running')
+    const waiting = topicArisPhaseRows.value.find((r) => r.status === 'waiting_confirm')
+    if (waiting) return `段间暂停 · 下一段 ${waiting.id} 待确认并继续`
+    if (running) return `当前段 ${running.id} 运行中…`
+    const dto = topicDiscoveryApiRun.value?.steps.find(
+      (s) => s.stage_code === 'idea_discovery' || s.stage_code === 'topic_discovery',
+    )
+    const pct = dto?.exec_progress_pct
+    if (typeof pct === 'number' && pct > 0) return `Idea Discovery 总进度约 ${pct}%`
+    return TOPIC_STEP_RUNNING_HINT.idea_discovery
+  }
   const base = TOPIC_STEP_RUNNING_HINT[stageCode] ?? 'AI 模型运行中…'
-  const dto = topicDiscoveryApiRun.value?.steps.find(
-    (s) =>
-      s.stage_code === stageCode ||
-      (stageCode === 'idea_discovery' && s.stage_code === 'topic_discovery'),
-  )
+  const dto = topicDiscoveryApiRun.value?.steps.find((s) => s.stage_code === stageCode)
   const pct = dto?.exec_progress_pct
   if (typeof pct === 'number' && pct > 0) {
     return `${base} ${pct}%`
@@ -2771,6 +2808,30 @@ watch(
               <span v-if="step.status === 'running'" class="paper-flow-step-running" role="status">
                 {{ topicStepRunningHint(step.stageCode) }}
               </span>
+              <ul
+                v-if="step.stageCode === 'idea_discovery' || step.stageCode === 'topic_discovery'"
+                class="paper-flow-subphases"
+                aria-label="Idea Discovery 分段进度"
+              >
+                <li
+                  v-for="row in topicArisPhaseRows"
+                  :key="row.id"
+                  class="paper-flow-subphase"
+                  :class="`paper-flow-subphase--${row.status}`"
+                >
+                  <span class="paper-flow-subphase-name">{{ row.id }}</span>
+                  <span class="paper-flow-subphase-status">{{ arisPhaseStatusLabel(row.status) }}</span>
+                </li>
+              </ul>
+              <p
+                v-if="
+                  (step.stageCode === 'idea_discovery' || step.stageCode === 'topic_discovery') &&
+                  topicArisPhaseAwaitingConfirm
+                "
+                class="paper-flow-subphases-note"
+              >
+                本段已结束，请点击下方「确认并继续」进入下一段（auto_proceed: false 时重复 5 段）。
+              </p>
             </div>
           </li>
         </ol>
@@ -3533,6 +3594,60 @@ watch(
   font-size: 14px;
   font-weight: 600;
   color: var(--atm-text, #1e1b4b);
+}
+
+.paper-flow-subphases {
+  list-style: none;
+  margin: 0.35rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  width: 100%;
+}
+
+.paper-flow-subphase {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  padding: 0.2rem 0.45rem;
+  border-radius: 4px;
+  background: var(--paper-surface-muted, rgba(0, 0, 0, 0.04));
+  color: var(--paper-text-secondary, #666);
+}
+
+.paper-flow-subphase-name {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  word-break: break-all;
+}
+
+.paper-flow-subphase-status {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+}
+
+.paper-flow-subphase--completed {
+  opacity: 0.85;
+}
+
+.paper-flow-subphase--running {
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--paper-text, #222);
+}
+
+.paper-flow-subphase--waiting_confirm {
+  background: rgba(245, 158, 11, 0.15);
+  color: #b45309;
+}
+
+.paper-flow-subphases-note {
+  margin: 0.35rem 0 0;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: #b45309;
 }
 
 .paper-flow-step-tag {

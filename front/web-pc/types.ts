@@ -391,15 +391,28 @@ export type TopicFlowStepDef = {
   checkpointKey: TopicCheckpointKey
 }
 
+/** ARIS /idea-discovery run_state 五 phase（与 SKILL.md / conf 写死列表一致） */
+export const ARIS_IDEA_DISCOVERY_PHASES = [
+  'research-lit',
+  'idea-creator',
+  'novelty-check',
+  'research-review',
+  'research-refine-pipeline',
+] as const
+
+export type ArisIdeaDiscoveryPhaseId = (typeof ARIS_IDEA_DISCOVERY_PHASES)[number]
+
+export const ARIS_IDEA_DISCOVERY_PHASES_LABEL = ARIS_IDEA_DISCOVERY_PHASES.join(' → ')
+
 /** UI 两步：语料准备合并在 retrieve（无检查点）；主流程为原生 /idea-discovery */
 export const TOPIC_DISCOVERY_FLOW_STEPS: TopicFlowStepDef[] = [
   { stageCode: 'retrieve', label: '语料准备（检索 + PDF）', checkpointKey: 'retrieve_ready' },
   {
     stageCode: 'idea_discovery',
-    label: '/idea-discovery（原生 SKILL 全流程）',
+    label: '核心阶段',
     checkpointKey: 'idea_discovery_ready',
   },
-  { stageCode: 'topic_confirm', label: '入库（gate 后自动）', checkpointKey: 'topic_confirm_ready' },
+  { stageCode: 'topic_confirm', label: '确认并完成', checkpointKey: 'topic_confirm_ready' },
 ]
 
 export type TopicFlowStepStatus =
