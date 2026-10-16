@@ -8,7 +8,8 @@ import (
 	"github.com/go-resty/resty/v2"
 )
 
-const literatureMinRequestInterval = time.Second
+// LiteratureOutboundMinInterval 文献检索 API 与 PDF 下载等对外 HTTP 的最小间隔。
+const LiteratureOutboundMinInterval = 2 * time.Second
 
 var (
 	literatureReqMu     sync.Mutex
@@ -26,21 +27,32 @@ func sleepContext(ctx context.Context, d time.Duration) error {
 	}
 }
 
-// GetLiterature 文献第三方 GET；全局串行，任意两次请求结束到下一次开始至少间隔 literatureMinRequestInterval。
-func (c *Client) GetLiterature(ctx context.Context, url string, query map[string]string, headers map[string]string) (*resty.Response, error) {
+// WithLiteratureOutbound 全局串行：距上次文献相关 HTTP 结束至少间隔 LiteratureOutboundMinInterval 后再执行 fn。
+func WithLiteratureOutbound(ctx context.Context, fn func() error) error {
 	literatureReqMu.Lock()
 	defer literatureReqMu.Unlock()
 
 	if !literatureReqLastAt.IsZero() {
-		wait := literatureMinRequestInterval - time.Since(literatureReqLastAt)
+		wait := LiteratureOutboundMinInterval - time.Since(literatureReqLastAt)
 		if wait > 0 {
 			if err := sleepContext(ctx, wait); err != nil {
-				return nil, err
+				return err
 			}
 		}
 	}
 
-	resp, err := c.Get(ctx, url, query, headers)
+	err := fn()
 	literatureReqLastAt = time.Now()
+	return err
+}
+
+// GetLiterature 文献第三方 GET（走 WithLiteratureOutbound）。
+func (c *Client) GetLiterature(ctx context.Context, url string, query map[string]string, headers map[string]string) (*resty.Response, error) {
+	var resp *resty.Response
+	err := WithLiteratureOutbound(ctx, func() error {
+		var e error
+		resp, e = c.Get(ctx, url, query, headers)
+		return e
+	})
 	return resp, err
 }

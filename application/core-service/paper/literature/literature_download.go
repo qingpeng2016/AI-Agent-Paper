@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/qingpeng2016/ai-agent-paper/common/notification"
+	httpx "github.com/qingpeng2016/ai-agent-paper/infrastructure/http"
 	"go.uber.org/zap"
 )
 
@@ -38,33 +39,40 @@ func DownloadLiteraturePDF(ctx context.Context, pdfURL, absPath string) error {
 		req.URL.RawQuery = q.Encode()
 	}
 	client := &http.Client{Timeout: 120 * time.Second}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
+	var statusCode int
+	err = httpx.WithLiteratureOutbound(ctx, func() error {
+		resp, doErr := client.Do(req)
+		if doErr != nil {
+			return doErr
+		}
+		defer resp.Body.Close()
+		statusCode = resp.StatusCode
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("download http %d", resp.StatusCode)
+		}
+		tmp := absPath + ".part"
+		f, createErr := os.Create(tmp)
+		if createErr != nil {
+			return createErr
+		}
+		_, copyErr := io.Copy(f, resp.Body)
+		closeErr := f.Close()
+		if copyErr != nil {
+			_ = os.Remove(tmp)
+			return copyErr
+		}
+		if closeErr != nil {
+			_ = os.Remove(tmp)
+			return closeErr
+		}
+		return os.Rename(tmp, absPath)
+	})
+	if err != nil && statusCode != 0 && statusCode != http.StatusOK {
 		notification.SendErrorLog(ctx, "literature-pdf-download-http",
 			zap.String("pdf_url", pdfURL),
-			zap.Int("http_status", resp.StatusCode))
-		return fmt.Errorf("download http %d", resp.StatusCode)
+			zap.Int("http_status", statusCode))
 	}
-	tmp := absPath + ".part"
-	f, err := os.Create(tmp)
-	if err != nil {
-		return err
-	}
-	_, copyErr := io.Copy(f, resp.Body)
-	closeErr := f.Close()
-	if copyErr != nil {
-		_ = os.Remove(tmp)
-		return copyErr
-	}
-	if closeErr != nil {
-		_ = os.Remove(tmp)
-		return closeErr
-	}
-	return os.Rename(tmp, absPath)
+	return err
 }
 
 // LiteratureDownloadItem result.literature_downloads 单项。

@@ -33,7 +33,7 @@ func TestGetLiterature_minIntervalBetweenRequests(t *testing.T) {
 	if hits != 2 {
 		t.Fatalf("hits %d", hits)
 	}
-	if elapsed < literatureMinRequestInterval {
-		t.Fatalf("elapsed %v want >= %v", elapsed, literatureMinRequestInterval)
+	if elapsed < LiteratureOutboundMinInterval {
+		t.Fatalf("elapsed %v want >= %v", elapsed, LiteratureOutboundMinInterval)
 	}
 }

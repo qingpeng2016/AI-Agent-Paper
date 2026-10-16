@@ -21,7 +21,7 @@ const (
 	TaskTopicLiteratureDownload = "topic_literature_pdf_download"
 	scanLimit                   = 50
 	pdfDownloadMaxAttempts      = 5
-	pdfDownloadRetryDelay       = time.Second
+	pdfDownloadRetryDelay       = 2 * time.Second
 )
 
 type TopicLiteratureDownloadJob struct {
