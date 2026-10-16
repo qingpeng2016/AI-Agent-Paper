@@ -30,7 +30,7 @@ chmod +x deploy-service.sh deploy-api.sh deploy-backend.sh
 1. **git**（`GIT_REPO_URL` 为 git@ 时，服务器需能读 GitHub）
 2. **Go 1.22+**（`PAPER_GO_ROOT=/usr/local/go` 可选）
 3. `conf/local.conf.yaml` 由本机上传
-4. 原生 ARIS 需 **`libs/aris/tools`** 或环境变量 **`PAPER_ARIS_REPO`**（`libs/aris` 不在 git 里时要在服务器单独准备）
+4. 原生 ARIS 使用仓库内 **`libs/aris`**（`git pull` 即含 `tools/run_state.py` 等）；可选 **`PAPER_ARIS_REPO`** 指向其它 ARIS 根目录覆盖默认
 
 ### 底层入口
 
