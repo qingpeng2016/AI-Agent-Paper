@@ -41,6 +41,9 @@ conf/local.conf.yaml
 conf/dev.conf-test.yaml
 .idea
 
+# 第三方/ARIS 等：由 `aris` CLI 或服务器单独安装，不纳入本仓库
+/libs/
+
 # Android / large binaries
 *.zip
 front/android-app-ys/app/build/

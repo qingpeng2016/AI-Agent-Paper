@@ -41,9 +41,6 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 
 	paperRoot := ARISRunPaperRoot(uint64(userID), step.ManuscriptID, runVersion)
 	runID := resolveIdeaDiscoveryRunID(step, input)
-	if err := ensureIdeaDiscoveryRunStateStarted(paperRoot, runID); err != nil {
-		return fmt.Errorf("run_state start: %w", err)
-	}
 
 	invokeCtx := s.buildTopicStrategyInvokeContext(ctx, userID, runVersion, step, input, 1, 1, nil, nil)
 	maxChain := cfg.Platform.MaxArisPerBot
@@ -52,7 +49,7 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 	for {
 		pendingPhase, err := ideaDiscoveryResumePhase(paperRoot, runID)
 		if err != nil {
-			return fmt.Errorf("run_state resume: %w", err)
+			return fmt.Errorf("run resume: %w", err)
 		}
 		if pendingPhase == "" {
 			return s.finishIdeaDiscoveryAfterGate(ctx, step, userID, runVersion, route, paperRoot, runID, cfg)
@@ -201,7 +198,7 @@ func isNonRetriableIdeaDiscoveryInvokeError(msg string) bool {
 		"permission denied",
 		"无法解析 skill",
 		"retrieve 未完成",
-		"未找到 aris",
+		"aris failed",
 	}
 	for _, n := range needles {
 		if strings.Contains(msg, n) {

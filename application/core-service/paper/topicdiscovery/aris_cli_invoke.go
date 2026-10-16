@@ -76,10 +76,10 @@ func buildHeadlessPrompt(capability, behavior, invokeDirRel string) string {
 	if capability == "idea-discovery" || strings.Contains(behavior, "discovery.run") {
 		return fmt.Sprintf(`/idea-discovery
 
-Run the ARIS skill **exactly** as in libs/aris/skills/idea-discovery/SKILL.md.
+Run the **installed** ARIS /idea-discovery skill (use bundled skill + tools via aris only; platform does not ship libs/aris).
 $ARGUMENTS are in %s/platform_user_prompt.txt (native CLI form).
 Workspace contract: %s/idea_discovery_contract.yaml
-Do not skip run_state.py or the final idea_discovery_gate.py (platform runs gate when phases terminal).
+Manage run_state and phases inside this aris session per skill contract.
 Deliverables are Markdown only under configured artifact paths.
 behavior_key=%s
 `, invokeDirRel, invokeDirRel, behavior)
@@ -238,7 +238,7 @@ func arisInvokeTimeout() time.Duration {
 func runARISCLI(ctx context.Context, workspace, prompt string) (stdout, stderr string, err error) {
 	executor := strings.ToLower(strings.TrimSpace(os.Getenv("PAPER_ARIS_EXECUTOR")))
 	if executor == "" {
-		executor = "claude"
+		executor = "aris"
 	}
 	cli := strings.TrimSpace(os.Getenv("PAPER_ARIS_CLI"))
 	if cli == "" {
@@ -250,9 +250,6 @@ func runARISCLI(ctx context.Context, workspace, prompt string) (stdout, stderr s
 	}
 
 	env := os.Environ()
-	if root := paperARISSkillsRoot(); root != "" {
-		env = append(env, "CLAUDE_CODE_ADDITIONAL_DIRECTORIES="+root)
-	}
 
 	var args []string
 	if executor == "aris" || filepath.Base(cli) == "aris" {

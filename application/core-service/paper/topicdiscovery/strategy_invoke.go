@@ -49,7 +49,7 @@ type StrategyInvokeResponse struct {
 	ExternalTraceID string          `json:"external_trace_id,omitempty"`
 }
 
-// StrategyInvoker 由 inline 策略包实现：本地 libs/aris（子进程/CLI），不是 HTTP。
+// StrategyInvoker 由 inline 策略包实现：本地 aris CLI，不是 HTTP。
 type StrategyInvoker interface {
 	Invoke(ctx context.Context, req StrategyInvokeRequest) (*StrategyInvokeResponse, error)
 }

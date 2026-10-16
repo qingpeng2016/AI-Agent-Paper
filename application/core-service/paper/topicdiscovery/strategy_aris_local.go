@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -15,19 +13,6 @@ import (
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
 	"gorm.io/datatypes"
 )
-
-func paperARISSkillsRoot() string {
-	if p := strings.TrimSpace(os.Getenv("PAPER_ARIS_SKILLS_ROOT")); p != "" {
-		return p
-	}
-	for _, c := range []string{"libs/aris/skills", filepath.Join("AI-Agent-Paper", "libs/aris/skills")} {
-		if st, err := os.Stat(c); err == nil && st.IsDir() {
-			abs, _ := filepath.Abs(c)
-			return abs
-		}
-	}
-	return ""
-}
 
 func (s *TopicDiscoveryRunService) invokeLocalARIS(
 	ctx context.Context,

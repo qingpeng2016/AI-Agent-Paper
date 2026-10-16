@@ -1,5 +1,5 @@
 # 原生 ARIS /idea-discovery 平台配置（改后需重启 API + bot）
-# artifacts：工作区相对路径，与 libs/aris/skills/idea-discovery/SKILL.md 一致
+# artifacts：工作区相对路径，与已安装 ARIS /idea-discovery skill 产物约定一致
 # platform：文献由 /research-lit 拉取；选题 idea_discovery → confirm；bot 按 auto_proceed 暂停或连跑
 
 artifacts:
@@ -26,7 +26,7 @@ workspace:
   invoke_dir: .paper/invoke
   # Claude/ARIS CLI 流式日志、latest_aris_cli.log、invoke_errors.log
   invoke_logs_dir: .paper/invoke/logs
-  # run_state.py 状态 JSON：{run_state_dir}/{run_id}.json
+  # run 状态 JSON（由 aris /idea-discovery 写入）：{run_state_dir}/{run_id}.json
   run_state_dir: .aris/runs
 
 platform:
