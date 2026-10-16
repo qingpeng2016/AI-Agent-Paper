@@ -13,6 +13,8 @@ import (
 
 	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/llm"
 	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/storage"
+	"github.com/qingpeng2016/ai-agent-paper/common/dederi/logger"
+	"go.uber.org/zap"
 )
 
 var arisTraceSanitize = regexp.MustCompile(`[^a-zA-Z0-9_-]`)
@@ -278,20 +280,22 @@ func runARISCLI(ctx context.Context, workspace, prompt string) (stdout, stderr s
 	cmd := exec.CommandContext(ctx, cli, args...)
 	cmd.Dir = workspace
 	cmd.Env = env
-	var outBuf, errBuf strings.Builder
-	cmd.Stdout = &outBuf
-	cmd.Stderr = &errBuf
-	if err := cmd.Run(); err != nil {
-		msg := strings.TrimSpace(errBuf.String())
+	outStr, errStr, runErr := runARISCLIWithStream(ctx, cmd)
+	if runErr != nil {
+		msg := strings.TrimSpace(errStr)
 		if msg == "" {
-			msg = strings.TrimSpace(outBuf.String())
+			msg = strings.TrimSpace(outStr)
 		}
 		if msg == "" {
-			msg = err.Error()
+			msg = runErr.Error()
 		}
-		return outBuf.String(), errBuf.String(), fmt.Errorf("%s failed: %s", cli, msg)
+		logger.ErrorZ(ctx, "aris-cli-exit",
+			zap.String("cli", cli),
+			zap.String("workspace", workspace),
+			zap.Error(runErr))
+		return outStr, errStr, fmt.Errorf("%s failed: %s", cli, msg)
 	}
-	return outBuf.String(), errBuf.String(), nil
+	return outStr, errStr, nil
 }
 
 func sanitizePathSegment(s string) string {
