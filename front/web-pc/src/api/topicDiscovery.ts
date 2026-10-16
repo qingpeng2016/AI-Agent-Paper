@@ -103,7 +103,7 @@ export type TopicDiscoveryStepDTO = {
   result?: unknown
 }
 
-/** 从 retrieve 步的 input_params 回填选题表单（刷新 / 检查点继续） */
+/** 从 idea_discovery（或旧 retrieve）步 input_params 回填选题表单 */
 export function formatVenueTextFromCodes(
   codes: readonly string[],
   venues: readonly VenueOption[],
@@ -157,8 +157,10 @@ export function applyStoredTopicRunInputToForm(
 ): void {
   if (!run) return
   if (isTopicRunTerminalCompleted(run)) return
-  const retrieve = run.steps.find((s) => s.stage_code === 'retrieve')
-  const p = retrieve?.input_params
+  const inputStep =
+    run.steps.find((s) => s.stage_code === 'idea_discovery') ??
+    run.steps.find((s) => s.stage_code === 'retrieve')
+  const p = inputStep?.input_params
   if (!p || typeof p !== 'object') return
 
   let keywords = Array.isArray(p.keywords)
@@ -218,7 +220,9 @@ export function parseRetrieveLiteratureLinks(
   run?: TopicDiscoveryRunResponse | null,
 ): TopicDiscoveryLiteratureLink[] {
   if (!run) return []
-  const step = run.steps.find((s) => s.stage_code === 'retrieve')
+  const step =
+    run.steps.find((s) => s.stage_code === 'idea_discovery') ??
+    run.steps.find((s) => s.stage_code === 'retrieve')
   if (!step) return []
   const result = step.result as Record<string, unknown> | undefined
   const fromResult = result?.literature_links as TopicDiscoveryLiteratureLink[] | undefined

@@ -10,7 +10,7 @@ import (
 	"gorm.io/gorm"
 )
 
-var topicDiscoveryStageOrder = []string{"retrieve", "idea_discovery", "topic_confirm"}
+var topicDiscoveryStageOrder = []string{"idea_discovery", "topic_confirm"}
 
 type PaperOutputTopicStepImpl struct {
 	db *gorm.DB

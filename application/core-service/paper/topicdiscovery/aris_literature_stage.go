@@ -76,15 +76,15 @@ func (s *TopicDiscoveryRunService) SyncRunLiteratureToInoutWorkspace(
 	if s == nil || s.steps == nil {
 		return 0, nil
 	}
-	ret, err := s.steps.GetStep(ctx, uint64(userID), runVersion, "retrieve")
-	if err != nil || ret == nil {
+	anchor, err := s.runInputStep(ctx, userID, runVersion)
+	if err != nil || anchor == nil {
 		return 0, err
 	}
 	items, err := s.collectRunLiteratureItems(ctx, userID, runVersion, userLitRepo)
 	if err != nil {
 		return 0, err
 	}
-	paperRoot := ARISRunPaperRoot(uint64(userID), ret.ManuscriptID, runVersion)
+	paperRoot := ARISRunPaperRoot(uint64(userID), anchor.ManuscriptID, runVersion)
 	return syncLiteratureItemsToPaperRoot(paperRoot, items)
 }
 
@@ -112,11 +112,14 @@ func (s *TopicDiscoveryRunService) collectRunLiteratureItems(
 	runVersion int,
 	userLitRepo repository.PaperUserLiteratureRepo,
 ) ([]literature.LiteratureDownloadItem, error) {
-	ret, err := s.steps.GetStep(ctx, uint64(userID), runVersion, "retrieve")
-	if err != nil || ret == nil {
+	corpusStep, err := s.literatureCorpusStep(ctx, userID, runVersion)
+	if err != nil {
 		return nil, err
 	}
-	items := literature.ParseLiteratureDownloads(ret.Result)
+	var items []literature.LiteratureDownloadItem
+	if corpusStep != nil && len(corpusStep.Result) > 0 {
+		items = literature.ParseLiteratureDownloads(corpusStep.Result)
+	}
 	items = appendUserLiteratureDownloadItems(ctx, s, userLitRepo, userID, runVersion, items)
 	return dedupeLiteratureDownloadItems(items), nil
 }

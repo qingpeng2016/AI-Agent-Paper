@@ -1,8 +1,7 @@
 package topicdiscovery
 
-// topicDiscoveryStages：平台 retrieve 备语料；中间一步原生 /idea-discovery 全流程；最后 confirm 入库。
+// topicDiscoveryStages：原生 /idea-discovery（input 挂在 idea_discovery）；最后 confirm 入库。
 var topicDiscoveryStages = []string{
-	"retrieve",
 	"idea_discovery",
 	"topic_confirm",
 }

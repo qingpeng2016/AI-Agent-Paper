@@ -182,7 +182,10 @@ func (s *TopicDiscoveryRunService) mergeRetrieveStepLiteratureResult(
 	if s == nil || s.steps == nil {
 		return nil
 	}
-	step, err := s.steps.GetStep(ctx, uint64(userID), runVersion, "retrieve")
+	step, err := s.steps.GetStep(ctx, uint64(userID), runVersion, topicDiscoveryInputStageCode)
+	if err != nil || step == nil {
+		step, err = s.steps.GetStep(ctx, uint64(userID), runVersion, "retrieve")
+	}
 	if err != nil || step == nil {
 		return err
 	}
@@ -191,8 +194,6 @@ func (s *TopicDiscoveryRunService) mergeRetrieveStepLiteratureResult(
 	if prev == nil {
 		prev = map[string]any{}
 	}
-	prev["skipped"] = true
-	prev["reason"] = "native_aris_web_literature"
 	prev["literature_source"] = source
 	prev["hit_count"] = len(hits)
 	prev["verified_count"] = len(hits)
@@ -203,7 +204,7 @@ func (s *TopicDiscoveryRunService) mergeRetrieveStepLiteratureResult(
 	}
 	step.Result = jsonx.MustJSON(prev)
 	step.ExecProgressPct = 100
-	if strings.TrimSpace(step.Status) != "completed" {
+	if step.StageCode == "retrieve" && strings.TrimSpace(step.Status) != "completed" {
 		step.Status = "completed"
 	}
 	return s.steps.SaveStep(ctx, step)

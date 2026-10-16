@@ -49,8 +49,11 @@ func (s *TopicDiscoveryRunService) RunTopicDiscoveryLLM(
 	step *entity.PaperOutputTopicStep,
 	input topicRunInput,
 ) error {
-	ret, err := s.steps.GetStep(ctx, uint64(userID), runVersion, "retrieve")
-	if err != nil || ret == nil || strings.TrimSpace(ret.Status) != "completed" {
+	lit, err := s.literatureCorpusStep(ctx, userID, runVersion)
+	if err != nil || lit == nil || len(lit.Result) == 0 {
+		return fmt.Errorf("文献语料未就绪")
+	}
+	if lit.StageCode == "retrieve" && strings.TrimSpace(lit.Status) != "completed" {
 		return fmt.Errorf("retrieve 未完成")
 	}
 
@@ -68,7 +71,7 @@ func (s *TopicDiscoveryRunService) RunTopicDiscoveryLLM(
 		return err
 	}
 
-	ctxBlock, _ := s.stageContextCompact(ctx, userID, runVersion, "retrieve")
+	ctxBlock, _ := s.stageContextCompact(ctx, userID, runVersion, topicDiscoveryInputStageCode, "retrieve")
 	filesBlock := s.formatRetrieveCorpusFilesBlock(ctx, userID, runVersion)
 	locale := s.contentLocaleForStep(ctx, step)
 

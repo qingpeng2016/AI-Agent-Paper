@@ -394,13 +394,13 @@ func (s *TopicDiscoveryRunService) CommitManuscript(ctx context.Context, userID 
 	return s.buildRunView(id, runVersion, rows), nil
 }
 
-// LoadRunInputForUser 供 bot 等读取 retrieve 步表单快照。
+// LoadRunInputForUser 供 bot 等读取选题 run 表单快照（idea_discovery.input_params）。
 func (s *TopicDiscoveryRunService) LoadRunInputForUser(ctx context.Context, userID uint, runVersion int) (topicRunInput, error) {
 	return s.loadRunInput(ctx, userID, runVersion)
 }
 
 func (s *TopicDiscoveryRunService) loadRunInput(ctx context.Context, userID uint, runVersion int) (topicRunInput, error) {
-	step, err := s.steps.GetStep(ctx, uint64(userID), runVersion, "retrieve")
+	step, err := s.runInputStep(ctx, userID, runVersion)
 	if err != nil || step == nil || len(step.InputParams) == 0 {
 		return topicRunInput{}, errorx.ErrTopicRunNotFound
 	}
@@ -438,10 +438,6 @@ func (s *TopicDiscoveryRunService) nextPendingIndex(ctx context.Context, userID 
 func (s *TopicDiscoveryRunService) executeFromStage(ctx context.Context, userID uint, runVersion int, input topicRunInput, fromIndex int) error {
 	for i := fromIndex; i < len(topicDiscoveryStages); i++ {
 		stage := topicDiscoveryStages[i]
-		if stage == "retrieve" {
-			_ = s.skipRetrieveForNativeRun(ctx, userID, runVersion)
-			continue
-		}
 		if err := s.executeStage(ctx, userID, runVersion, input, stage); err != nil {
 			return err
 		}
@@ -478,19 +474,14 @@ func (s *TopicDiscoveryRunService) executeStage(ctx context.Context, userID uint
 		return nil
 	}
 	stageStarted := time.Now()
-	// retrieve：API 只排队（result 含 retrieve_search_pending）；检索+落盘由 bot 写 result 后再 running。
-	if stageCode != "retrieve" {
-		step.Status = "running"
-		step.StartedAt = &stageStarted
-		if err := s.steps.SaveStep(ctx, step); err != nil {
-			return err
-		}
+	step.Status = "running"
+	step.StartedAt = &stageStarted
+	if err := s.steps.SaveStep(ctx, step); err != nil {
+		return err
 	}
 
 	var execErr error
 	switch stageCode {
-	case "retrieve":
-		execErr = s.stageRetrieveScheduleForBot(ctx, step, input)
 	case "idea_discovery":
 		execErr = s.stageBeginTopicDiscoveryAsync(ctx, userID, runVersion, step)
 	default:
@@ -507,7 +498,7 @@ func (s *TopicDiscoveryRunService) executeStage(ctx context.Context, userID uint
 		}
 		return execErr
 	}
-	if (stageCode == "retrieve" || stageCode == "idea_discovery") && strings.TrimSpace(step.Status) == "running" {
+	if stageCode == "idea_discovery" && strings.TrimSpace(step.Status) == "running" {
 		if step.StartedAt == nil {
 			step.StartedAt = &stageStarted
 		}

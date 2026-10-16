@@ -121,9 +121,9 @@ func allowedRefIDsFromBrief(brief map[string]any) []string {
 
 // formatRetrieveCorpusFilesBlock 列出 retrieve 步已落盘 PDF，供 generate_ideas 与 ref_id 对齐。
 func (s *TopicDiscoveryRunService) formatRetrieveCorpusFilesBlock(ctx context.Context, userID uint, runVersion int) string {
-	st, err := s.steps.GetStep(ctx, uint64(userID), runVersion, "retrieve")
+	st, err := s.literatureCorpusStep(ctx, userID, runVersion)
 	if err != nil || st == nil {
-		return "(无 CorpusFiles：retrieve 未完成或未落盘 PDF)"
+		return "(无 CorpusFiles：文献语料未就绪或未落盘 PDF)"
 	}
 	seen := map[string]struct{}{}
 	var lines []string
@@ -173,7 +173,7 @@ func formatLiteratureBriefForPrompt(brief map[string]any) string {
 }
 
 func (s *TopicDiscoveryRunService) literatureBriefForRun(ctx context.Context, userID uint, runVersion int) (map[string]any, []string, error) {
-	st, err := s.steps.GetStep(ctx, uint64(userID), runVersion, "retrieve")
+	st, err := s.literatureCorpusStep(ctx, userID, runVersion)
 	if err != nil || st == nil || len(st.Result) == 0 {
 		return nil, nil, err
 	}
@@ -213,7 +213,7 @@ func (s *TopicDiscoveryRunService) stageContextCompact(ctx context.Context, user
 		if err != nil || st == nil {
 			continue
 		}
-		if stage == "retrieve" {
+		if stage == topicDiscoveryInputStageCode || stage == "retrieve" {
 			brief, _, _ := s.literatureBriefForRun(ctx, userID, runVersion)
 			if brief != nil {
 				parts = append(parts, "[literature_brief]\n"+formatLiteratureBriefForPrompt(brief))
