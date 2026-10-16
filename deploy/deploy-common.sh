@@ -26,8 +26,12 @@ deploy_common_init() {
   SSH_PORT="${SSH_PORT:-22}"
   MALL_APP_DIR="${MALL_APP_DIR:-/www/wwwroot/AI-Agent-Paper}"
   MALL_USER_RUN_CONF="${MALL_USER_RUN_CONF:-prod}"
-  MALL_BOT_RUN_CONF="${MALL_BOT_RUN_CONF:-prod}"
+  MALL_BOT_RUN_CONF="${MALL_BOT_RUN_CONF:-local}"
   MALL_USER_PORT="${MALL_USER_PORT:-8886}"
+  # 1=服务器 go run main.go；0=服务器 go build 后跑 bin（deploy-service.sh 会强制为 1）
+  PAPER_USE_GO_RUN="${PAPER_USE_GO_RUN:-1}"
+  PAPER_GO_ROOT="${PAPER_GO_ROOT:-}"
+  PAPER_GO_VERSION="${PAPER_GO_VERSION:-1.22.5}"
   MALL_WEB_ROOT="${MALL_WEB_ROOT:-front/web-pc}"
   MALL_WEB_DIST="${MALL_WEB_DIST:-front/web-pc/dist}"
   WEB_BUILD_CMD="${WEB_BUILD_CMD:-pnpm install && pnpm build}"
@@ -37,6 +41,7 @@ deploy_common_init() {
   GIT_FETCH_TIMEOUT="${GIT_FETCH_TIMEOUT:-120}"
   LOCAL_REPO_DIR="${LOCAL_REPO_DIR:-$(cd "$SCRIPT_DIR/.." && pwd)}"
   FRONTEND_DIST_COMMIT_MSG="${FRONTEND_DIST_COMMIT_MSG:-chore(deploy): web-pc dist}"
+  GIT_REPO_URL="${GIT_REPO_URL:-git@github.com:qingpeng2016/AI-Agent-Paper.git}"
 
   APP_DIR="$MALL_APP_DIR"
   SSH_TARGET="${SSH_USER}@${SSH_HOST}"
@@ -46,6 +51,13 @@ deploy_common_init() {
     -o PreferredAuthentications=password
     -o PubkeyAuthentication=no
     -p "$SSH_PORT"
+  )
+  # scp 端口是大写 -P；勿把 SSH_OPTS 直接传给 scp（-p 会被当成「保留时间」+ 本地路径 22）
+  SCP_OPTS=(
+    -o StrictHostKeyChecking=accept-new
+    -o PreferredAuthentications=password
+    -o PubkeyAuthentication=no
+    -P "$SSH_PORT"
   )
 }
 
@@ -159,6 +171,26 @@ ensure_local_node_pnpm() {
   fi
   npm install -g pnpm@9
   echo ">>> [本机] pnpm $(pnpm -v)"
+}
+
+# local.conf.yaml 不入库；run_conf=local 时从本机上传到服务器
+deploy_sync_local_conf() {
+  local run_conf="${1:-}"
+  [[ "$run_conf" == "local" ]] || return 0
+  local src="${LOCAL_REPO_DIR}/conf/local.conf.yaml"
+  [[ -f "$src" ]] || {
+    echo "ERROR: 缺少 ${src}（run_conf=local 需要本机 conf/local.conf.yaml）" >&2
+    exit 1
+  }
+  echo ">>> [本机] 上传 local.conf.yaml → ${APP_DIR}/conf/（经 SSH，与 deploy 同一套登录）"
+  run_ssh "mkdir -p '${APP_DIR}/conf'"
+  local b64
+  b64=$(base64 <"$src" | tr -d '\n')
+  if [[ ${#b64} -gt 120000 ]]; then
+    echo "ERROR: local.conf.yaml 过大，请改用 scp 手动上传" >&2
+    exit 1
+  fi
+  run_ssh "echo '${b64}' | base64 -d > '${APP_DIR}/conf/local.conf.yaml'"
 }
 
 local_git_sync() {

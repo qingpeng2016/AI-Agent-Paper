@@ -23,6 +23,8 @@ go.work.sum
 
 # env file
 .env
+deploy/.deploy.env
+deploy/.cache/
 
 # Log files
 /log/
