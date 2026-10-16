@@ -38,7 +38,7 @@ func NewTopicLiteratureDownloadJob(
 	return &TopicLiteratureDownloadJob{steps: steps, userLit: userLit, runs: runs}
 }
 
-// Run 扫描 status=running 且 stage_code=retrieve，下载 PDF；成功 completed，失败 failed。
+// Run 扫描 status=running 且 stage_code=retrieve：先第三方检索（原 API 路径已改为仅排队），再下载 PDF。
 func (j *TopicLiteratureDownloadJob) Run(ctx context.Context) {
 	rows, err := j.steps.ListByStatusAndStage(ctx, "running", "retrieve", scanLimit)
 	if err != nil {
@@ -65,6 +65,23 @@ func (j *TopicLiteratureDownloadJob) Run(ctx context.Context) {
 }
 
 func (j *TopicLiteratureDownloadJob) processOne(ctx context.Context, step *entity.PaperOutputTopicStep) string {
+	if papersvc.RetrieveSearchPending(step.Result) {
+		if j.runs == nil {
+			j.markFailed(ctx, step, nil, "TopicDiscoveryRunService 未注入，无法检索文献")
+			return "failed"
+		}
+		notification.SendNotifyLog(ctx, "topic-literature-search-start",
+			zap.Uint64("step_id", step.ID),
+			zap.Uint64("manuscript_id", step.ManuscriptID),
+			zap.Int("run_version", step.RunVersion))
+		if err := j.runs.RunRetrieveLiteratureSearch(ctx, step); err != nil {
+			notification.SendErrorLog(ctx, "topic-literature-search-failed",
+				zap.Uint64("step_id", step.ID),
+				zap.Error(err))
+			return "failed"
+		}
+	}
+
 	if len(step.Result) == 0 {
 		notification.SendErrorLog(ctx, "topic-literature-download-skip-no-result",
 			zap.Uint64("step_id", step.ID),

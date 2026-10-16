@@ -487,7 +487,7 @@ func (s *TopicDiscoveryRunService) executeStage(ctx context.Context, userID uint
 		return nil
 	}
 	stageStarted := time.Now()
-	// retrieve 须在 stageRetrieve 写入 result/extra 后再落库 running，否则 PDF bot 会扫到「running 且无 result」误杀。
+	// retrieve：API 只排队（result 含 retrieve_search_pending）；检索+落盘由 bot 写 result 后再 running。
 	if stageCode != "retrieve" {
 		step.Status = "running"
 		step.StartedAt = &stageStarted
@@ -499,7 +499,7 @@ func (s *TopicDiscoveryRunService) executeStage(ctx context.Context, userID uint
 	var execErr error
 	switch stageCode {
 	case "retrieve":
-		execErr = s.stageRetrieve(ctx, step, input)
+		execErr = s.stageRetrieveScheduleForBot(ctx, step, input)
 	case "idea_discovery":
 		execErr = s.stageBeginTopicDiscoveryAsync(ctx, userID, runVersion, step)
 	default:
@@ -566,7 +566,7 @@ func (s *TopicDiscoveryRunService) orderSourceCodesBySort(ctx context.Context, s
 	return ordered
 }
 
-func (s *TopicDiscoveryRunService) stageRetrieve(ctx context.Context, step *entity.PaperOutputTopicStep, input topicRunInput) error {
+func (s *TopicDiscoveryRunService) stageRetrieveExecuteSearch(ctx context.Context, step *entity.PaperOutputTopicStep, input topicRunInput) error {
 	query := literatureSearchQueryFromInput(input)
 	scope := literature.RetrieveLogScope(step)
 	logger.InfoZ(ctx, "topic-retrieve-start",

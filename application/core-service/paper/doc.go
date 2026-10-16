@@ -56,6 +56,7 @@ var (
 	ExecProgressPct                    = literature.ExecProgressPct
 	LiteraturePDFOnDiskForKey          = literature.LiteraturePDFOnDiskForKey
 	FormatRetrievePDFSummary           = literature.FormatRetrievePDFSummary
+	RetrieveSearchPending              = topicdiscovery.RetrieveSearchPending
 	ParseFigureListFilter              = figure.ParseFigureListFilter
 )
 
