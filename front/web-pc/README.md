@@ -18,18 +18,12 @@ pnpm install
 pnpm dev
 ```
 
-默认页面 `http://127.0.0.1:5173`，浏览器请求 `/api/...` 由 Vite **代理**到 `http://127.0.0.1:8886`（与是否写 IP 无关，走相对路径即可）。
+默认页面 `http://127.0.0.1:5173`，`/api/...` 代理到 **`http://216.195.208.199:8886`**（见 `vite.config.ts`，可用环境变量覆盖）。
 
-### 指定后端地址
-
-任选一种（不要末尾 `/`）：
+### 改回本地后端
 
 ```bash
-# 临时：连远程 API
-VITE_DEV_API_TARGET=http://216.195.208.199:8886 pnpm dev
-
-# 或写入 .env.development.local（git 可忽略）
-# VITE_DEV_API_TARGET=http://216.195.208.199:8886
+VITE_DEV_API_TARGET=http://127.0.0.1:8886 pnpm dev
 ```
 
 `pnpm dev` 后面 **`--` 之后** 的参数会传给 Vite，例如：

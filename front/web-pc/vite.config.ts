@@ -5,7 +5,7 @@ import vue from '@vitejs/plugin-vue'
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const apiTarget =
-    env.VITE_DEV_API_TARGET?.trim() || 'http://127.0.0.1:8886'
+    env.VITE_DEV_API_TARGET?.trim() || 'http://216.195.208.199:8886'
 
   return {
     plugins: [vue()],
