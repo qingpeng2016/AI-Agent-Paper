@@ -18,8 +18,8 @@ type PaperLLMCallLog struct {
 	ModelName          string         `gorm:"column:model_name;size:128;not null"`
 	RequestJSON        datatypes.JSON `gorm:"column:request_json;not null"`
 	ResponseJSON       datatypes.JSON `gorm:"column:response_json;not null"`
-	PromptTokens       *int           `gorm:"column:prompt_tokens"`
-	CompletionTokens   *int           `gorm:"column:completion_tokens"`
+	UseInTokens  *int `gorm:"column:use_in_tokens"`
+	UseOutTokens *int `gorm:"column:use_out_tokens"`
 	LatencyMs          int            `gorm:"column:latency_ms;not null;default:0"`
 	Status             int16          `gorm:"column:status;not null"`
 	CreatedAt          time.Time      `gorm:"column:created_at"`

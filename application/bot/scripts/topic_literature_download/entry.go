@@ -27,13 +27,15 @@ const (
 type TopicLiteratureDownloadJob struct {
 	steps    repository.PaperOutputTopicStepRepo
 	userLit  repository.PaperUserLiteratureRepo
+	runs     *papersvc.TopicDiscoveryRunService
 }
 
 func NewTopicLiteratureDownloadJob(
 	steps repository.PaperOutputTopicStepRepo,
 	userLit repository.PaperUserLiteratureRepo,
+	runs *papersvc.TopicDiscoveryRunService,
 ) *TopicLiteratureDownloadJob {
-	return &TopicLiteratureDownloadJob{steps: steps, userLit: userLit}
+	return &TopicLiteratureDownloadJob{steps: steps, userLit: userLit, runs: runs}
 }
 
 // Run 扫描 status=running 且 stage_code=retrieve，下载 PDF；成功 completed，失败 failed。
@@ -89,6 +91,12 @@ func (j *TopicLiteratureDownloadJob) processOne(ctx context.Context, step *entit
 		j.markFailed(ctx, step, items, reason)
 		return "failed"
 	}
+
+	notification.SendNotifyLog(ctx, "topic-literature-download-start",
+		zap.Uint64("step_id", step.ID),
+		zap.Uint64("manuscript_id", step.ManuscriptID),
+		zap.Int("run_version", step.RunVersion),
+		zap.Int("hit_count", hitCount))
 
 	planned := papersvc.CountPlannedPDFDownloads(items)
 	done := 0
@@ -233,6 +241,15 @@ func (j *TopicLiteratureDownloadJob) finishSuccess(ctx context.Context, step *en
 	if err := j.steps.SaveStep(ctx, step); err != nil {
 		notification.SendErrorLog(ctx, "topic-literature-download-save-failed", zap.Uint64("step_id", step.ID), zap.Error(err))
 		return ""
+	}
+	notification.SendNotifyLog(ctx, "topic-literature-download-completed",
+		zap.Uint64("step_id", step.ID),
+		zap.Int("pdf_on_disk", pdfN),
+		zap.Int("hit_count", hitCount))
+	if j.runs != nil {
+		if err := j.runs.OnRetrieveCompleted(ctx, uint(step.UserID), step.RunVersion); err != nil {
+			notification.SendErrorLog(ctx, "topic-retrieve-chain-idea-discovery", zap.Error(err))
+		}
 	}
 	return "completed"
 }

@@ -7,6 +7,7 @@ import {
 } from '@/composables/useTopicDiscoveryFormOptions'
 import {
   postTopicDiscoveryRun,
+  postTopicDiscoveryResumeRun,
   postTopicDiscoveryConfirmRound,
   fetchCurrentTopicDiscoveryRun,
   cancelTopicDiscoveryRun,
@@ -103,17 +104,21 @@ const CHECKPOINT_COPY: Record<TopicCheckpointKey, Omit<TopicCheckpointView, 'key
       '覆盖缺口：2025 Q1 同方向预印本偏少，可加深检索或补 Crossref',
     ],
   },
-  topic_discovery_ready: {
-    title: '选题发现产出',
+  idea_discovery_ready: {
+    title: 'Idea Discovery 原生流水线',
     lines: [
-      'idea + 新颖性 + 文献综述 + 实验计划（可无）',
-      '生成↔门禁审计迭代直至通过或达轮数上限',
-      '请在下一步选择要采用的轮次（尚未写入综述/实验表）',
+      '已完成 /idea-discovery（research-lit → idea-creator → novelty-check → research-review → research-refine-pipeline）',
+      '产物路径见 inout/aris_idea_discovery.yaml（默认 IDEA_REPORT / FINAL_PROPOSAL / EXPERIMENT_PLAN）',
+      '确认后继续写入文献综述与实验方案表',
     ],
   },
+  topic_discovery_ready: {
+    title: '选题发现产出',
+    lines: ['（旧版 run）'],
+  },
   topic_confirm_ready: {
-    title: '生成文献综述、实验方案',
-    lines: ['对比各轮审计结果、综述与实验方案后确认一轮写入产出表'],
+    title: '确认并入库',
+    lines: ['将 refine 产物写入文献综述与实验方案表'],
   },
 }
 
@@ -249,6 +254,7 @@ const topicRunToken = ref(0)
 const topicRunStartInFlight = ref(false)
 /** 检查点「确认并继续」请求进行中 */
 const topicContinueLoading = ref(false)
+const topicResumeLoading = ref(false)
 const topicConfirmRoundLoading = ref(false)
 const topicSelectedRound = ref<number | null>(null)
 /** continue 后乐观标 running 的阶段，避免 POST/轮询仍返回 checkpoint 把转圈打掉 */
@@ -864,7 +870,9 @@ function topicStepsCompletedThenPending(
 function topicPauseStageFromApi(data: TopicDiscoveryRunResponse): string {
   const fromApi = data.pause_after_stage?.trim()
   if (fromApi) return fromApi
-  const disc = data.steps.find((s) => s.stage_code === 'topic_discovery')
+  const disc = data.steps.find(
+    (s) => s.stage_code === 'idea_discovery' || s.stage_code === 'topic_discovery',
+  )
   const conf = data.steps.find((s) => s.stage_code === 'topic_confirm')
   if (disc?.status === 'completed' && conf?.status === 'pending') {
     return 'topic_confirm'
@@ -922,7 +930,9 @@ const topicShowFailedPanel = computed(
 const topicAwaitingRoundConfirm = computed(() => {
   const raw = topicDiscoveryApiRun.value
   if (!raw) return false
-  const disc = raw.steps.find((s) => s.stage_code === 'topic_discovery')
+  const disc = raw.steps.find(
+    (s) => s.stage_code === 'idea_discovery' || s.stage_code === 'topic_discovery',
+  )
   const conf = raw.steps.find((s) => s.stage_code === 'topic_confirm')
   return disc?.status === 'completed' && conf?.status === 'pending'
 })
@@ -941,7 +951,9 @@ type TopicDiscoveryIterationView = {
 
 const topicDiscoveryIterations = computed((): TopicDiscoveryIterationView[] => {
   const raw = topicDiscoveryApiRun.value
-  const disc = raw?.steps.find((s) => s.stage_code === 'topic_discovery')
+  const disc = raw?.steps.find(
+    (s) => s.stage_code === 'idea_discovery' || s.stage_code === 'topic_discovery',
+  )
   const result = disc?.result as Record<string, unknown> | undefined
   const iters = (result?.iterations as unknown[]) ?? []
   const out: TopicDiscoveryIterationView[] = []
@@ -1051,6 +1063,12 @@ const topicFailedSummary = computed((): { stageLabel: string; stageCode: string;
     error,
   }
 })
+
+const topicCanResumeIdeaDiscovery = computed(
+  () =>
+    topicFailedSummary.value?.stageCode === 'idea_discovery' ||
+    topicFailedSummary.value?.stageCode === 'topic_discovery',
+)
 
 const topicServerRunCompleted = computed(() =>
   isTopicRunTerminalCompleted(topicDiscoveryApiRun.value),
@@ -1173,15 +1191,20 @@ function stepStatusFromApi(raw: string): TopicFlowStepStatus {
 
 const TOPIC_STEP_RUNNING_HINT: Record<string, string> = {
   retrieve: '文献 PDF 下载与入库中…',
-  topic_discovery: 'AI 生成文献综述、实验方案…',
-  topic_confirm: '等待确认所选轮次…',
+  idea_discovery: 'ARIS /idea-discovery 原生全流程…',
+  topic_discovery: 'ARIS /idea-discovery 原生全流程…',
+  topic_confirm: '等待确认并入库…',
   generate_ideas: 'AI 脑暴选题与新颖性分析中…',
   audit: 'AI 审查结论与文献综述生成中…',
 }
 
 function topicStepRunningHint(stageCode: string) {
   const base = TOPIC_STEP_RUNNING_HINT[stageCode] ?? 'AI 模型运行中…'
-  const dto = topicDiscoveryApiRun.value?.steps.find((s) => s.stage_code === stageCode)
+  const dto = topicDiscoveryApiRun.value?.steps.find(
+    (s) =>
+      s.stage_code === stageCode ||
+      (stageCode === 'idea_discovery' && s.stage_code === 'topic_discovery'),
+  )
   const pct = dto?.exec_progress_pct
   if (typeof pct === 'number' && pct > 0) {
     return `${base} ${pct}%`
@@ -1305,8 +1328,12 @@ function linesFromApiStep(step?: TopicDiscoveryStepDTO): string[] {
     return lines.length ? lines : ['检索已完成']
   }
 
-  if (step.stage_code === 'topic_discovery' || step.stage_code === 'generate_ideas') {
-    if (step.stage_code === 'topic_discovery') {
+  if (
+    step.stage_code === 'idea_discovery' ||
+    step.stage_code === 'topic_discovery' ||
+    step.stage_code === 'generate_ideas'
+  ) {
+    if (step.stage_code === 'idea_discovery' || step.stage_code === 'topic_discovery') {
       const passed = result.passed
       const iters = (result.iterations as unknown[]) ?? []
       const lines: string[] = []
@@ -1477,7 +1504,7 @@ function buildTopicRunRequest(action: 'start' | 'continue') {
     source_codes: [...topicForm.sourceCodes],
     intensity: topicForm.intensity,
     audit_level: topicForm.auditLevel,
-    human_checkpoint: true,
+    human_checkpoint: false,
     random_references: topicForm.randomReferences,
     user_literature_ids:
       topicForm.userLiteratureIds.length > 0 ? [...topicForm.userLiteratureIds] : undefined,
@@ -1849,6 +1876,33 @@ async function confirmTopicSelectedRound() {
       topicConfirmRoundLoading.value = false
       syncRunningFlagFromServer(msId)
     }
+  }
+}
+
+async function resumeTopicIdeaDiscoveryFromFailure() {
+  const msId = activeManuscriptId.value
+  if (!msId || !topicCanResumeIdeaDiscovery.value || topicResumeLoading.value) return
+  const token = topicRunToken.value
+  topicResumeLoading.value = true
+  running.value = true
+  const stopPoll = startTopicRunProgressPoll(msId, token)
+  try {
+    const data = await postTopicDiscoveryResumeRun(msId)
+    if (token !== topicRunToken.value) return
+    topicLastRunByMs.value = { ...topicLastRunByMs.value, [msId]: data }
+    const run = mergeTopicRunFromApi(msId, data)
+    persistTopicRun(msId, run)
+    ElMessage.success('已排队续跑 Idea Discovery（run_state resume）')
+  } catch (e) {
+    if (token === topicRunToken.value) {
+      await hydrateTopicRunFromServer(msId)
+    }
+    const msg = e instanceof Error ? e.message : '续跑失败'
+    ElMessage.error(msg.includes('401') ? '请先登录' : msg)
+  } finally {
+    stopPoll()
+    topicResumeLoading.value = false
+    syncRunningFlagFromServer(msId)
   }
 }
 
@@ -2558,7 +2612,7 @@ watch(
           <label class="paper-field">
             <span class="paper-label">执行强度</span>
             <PaperSelect v-model="topicForm.intensity" :options="intensityOptions" />
-            <span class="paper-hint">控制检索数量、生成↔门禁审计迭代轮数（exec_rounds）与 idea 条数。</span>
+            <span class="paper-hint">控制 retrieve 文献数量与检索深度；选题发现为原生 /idea-discovery 单流水线（非 exec_rounds 双 invoke）。</span>
           </label>
 
           <label class="paper-field">
@@ -2872,9 +2926,19 @@ watch(
             {{ topicFailedSummary?.error ?? '本步执行失败，请查看日志或调整配置后重试。' }}
           </p>
           <p class="paper-checkpoint-note">
-            可驳回并返回以取消本轮进度；修正配置后请点顶栏「再次运行」重新开始。
+            Idea Discovery 可从 inout workspace 续跑（原生 <code>— resume</code>）；产物路径见
+            <code>inout/aris_idea_discovery.yaml</code>。
           </p>
           <div class="paper-checkpoint-actions">
+            <button
+              v-if="topicCanResumeIdeaDiscovery"
+              type="button"
+              class="paper-btn-primary"
+              :disabled="topicResumeLoading || topicTerminateLoading"
+              @click="resumeTopicIdeaDiscoveryFromFailure"
+            >
+              {{ topicResumeLoading ? '续跑中…' : '续跑 Idea Discovery' }}
+            </button>
             <button
               type="button"
               class="paper-btn-secondary"

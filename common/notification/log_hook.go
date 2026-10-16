@@ -35,6 +35,57 @@ func GetGlobalNotificationManager() *NotificationManager {
 	return globalNotificationManager
 }
 
+// SendNotifyLog 写 Info 日志并推送 Lark 业务通知（notify_webhook_url）。
+func SendNotifyLog(ctx context.Context, msg string, fields ...zap.Field) {
+	logger.InfoZ(ctx, msg, fields...)
+	alertFieldList := zapFieldsToFieldPairs(fields...)
+	nm := GetGlobalNotificationManager()
+	_ = nm.SendInfoAlert(ctx, msg, alertFieldList)
+}
+
+func zapFieldsToFieldPairs(fields ...zap.Field) []FieldPair {
+	var alertFieldList []FieldPair
+	for _, field := range fields {
+		switch field.Key {
+		case "error":
+			if err, ok := field.Interface.(error); ok {
+				alertFieldList = append(alertFieldList, FieldPair{"错误详情", err.Error()})
+			}
+		default:
+			value := zapFieldStringValue(field)
+			if value != "" {
+				alertFieldList = append(alertFieldList, FieldPair{field.Key, value})
+			}
+		}
+	}
+	return alertFieldList
+}
+
+func zapFieldStringValue(field zap.Field) string {
+	switch field.Type {
+	case zapcore.StringType:
+		return field.String
+	case zapcore.Int64Type, zapcore.Int32Type, zapcore.Int16Type, zapcore.Int8Type:
+		return strconv.FormatInt(field.Integer, 10)
+	case zapcore.Uint64Type, zapcore.Uint32Type, zapcore.Uint16Type, zapcore.Uint8Type:
+		return strconv.FormatUint(uint64(field.Integer), 10)
+	case zapcore.ReflectType:
+		if field.Interface != nil {
+			if jsonBytes, err := json.Marshal(field.Interface); err == nil {
+				return string(jsonBytes)
+			}
+		}
+		return field.String
+	default:
+		if field.Type == 1 && field.Interface != nil {
+			if jsonBytes, err := json.Marshal(field.Interface); err == nil {
+				return string(jsonBytes)
+			}
+		}
+		return field.String
+	}
+}
+
 // SendErrorLog 写 Error 日志并推送 Lark（error_webhook_url，未配置则用 alert_webhook_url）。
 func SendErrorLog(ctx context.Context, msg string, fields ...zap.Field) {
 	if !skipErrorAlert(ctx) {
@@ -44,70 +95,6 @@ func SendErrorLog(ctx context.Context, msg string, fields ...zap.Field) {
 }
 
 func sendErrorLogAlert(ctx context.Context, msg string, fields ...zap.Field) {
-	// 构建有序的报警字段列表
-	var alertFieldList []FieldPair
-
-	// 从 zap.Field 中提取信息，保持顺序
-	for _, field := range fields {
-		var value string
-
-		switch field.Key {
-		case "error":
-			if err, ok := field.Interface.(error); ok {
-				alertFieldList = append(alertFieldList, FieldPair{"错误详情", err.Error()})
-			}
-		default:
-			// 简单处理所有其他字段
-			switch field.Type {
-			case zapcore.StringType:
-				value = field.String
-			case zapcore.Int64Type, zapcore.Int32Type, zapcore.Int16Type, zapcore.Int8Type:
-				value = strconv.FormatInt(field.Integer, 10)
-			case zapcore.Uint64Type, zapcore.Uint32Type, zapcore.Uint16Type, zapcore.Uint8Type:
-				value = strconv.FormatUint(uint64(field.Integer), 10)
-			case zapcore.ReflectType:
-				// 处理 zap.Any 类型
-				if field.Interface != nil {
-					if jsonBytes, err := json.Marshal(field.Interface); err == nil {
-						value = string(jsonBytes)
-					} else {
-						value = field.String
-						if value == "" {
-							value = "序列化失败"
-						}
-					}
-				} else {
-					value = "null"
-				}
-			default:
-				// 特殊处理 type: 1 (可能是数组类型)
-				if field.Type == 1 {
-					// 处理数组类型
-					if field.Interface != nil {
-						if jsonBytes, err := json.Marshal(field.Interface); err == nil {
-							value = string(jsonBytes)
-						} else {
-							value = field.String
-							if value == "" {
-								value = "序列化失败"
-							}
-						}
-					} else {
-						value = "null"
-					}
-				} else {
-					// 其他类型直接用 String 方法
-					value = field.String
-				}
-			}
-
-			if value != "" {
-				alertFieldList = append(alertFieldList, FieldPair{field.Key, value})
-			}
-		}
-	}
-
-	// 发送错误报警（直接传递有序字段列表）
 	nm := GetGlobalNotificationManager()
-	nm.SendErrorAlertWithOrder(ctx, msg, alertFieldList)
+	nm.SendErrorAlertWithOrder(ctx, msg, zapFieldsToFieldPairs(fields...))
 }

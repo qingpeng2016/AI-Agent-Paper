@@ -18,8 +18,9 @@ type PaperLLMModelConfig struct {
 	MaxRetries        uint8          `gorm:"column:max_retries;not null;default:2"`
 	SupportsVision    bool           `gorm:"column:supports_vision;not null;default:0"`
 	ContextWindowHint *uint          `gorm:"column:context_window_hint"`
-	TokensUsedTotal   uint64         `gorm:"column:tokens_used_total;not null;default:0"`
-	Extra             datatypes.JSON `gorm:"column:extra"`
+	UseInTokens  uint64 `gorm:"column:use_in_tokens;not null;default:0"`
+	UseOutTokens uint64 `gorm:"column:use_out_tokens;not null;default:0"`
+	Extra                      datatypes.JSON `gorm:"column:extra"`
 	Status            string         `gorm:"column:status;size:16;not null;default:active"`
 	CreatedAt         time.Time      `gorm:"column:created_at"`
 	UpdatedAt         time.Time      `gorm:"column:updated_at"`

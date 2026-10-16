@@ -15,7 +15,7 @@ type TopicDiscoveryRunRequest struct {
 	HumanCheckpoint   bool `json:"human_checkpoint"`
 	RandomReferences   bool     `json:"random_references"`
 	UserLiteratureIDs  []string `json:"user_literature_ids"`
-	// start：新开 run 并执行第一步；continue：执行下一个 pending 步；run_all：连续执行直到完成或需人工检查点
+	// start | continue | resume | run_all — resume：原生 run_state 续跑 idea_discovery（超时/CLI 中断后）
 	Action string `json:"action"`
 }
 

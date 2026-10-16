@@ -27,14 +27,17 @@ func (s *TopicDiscoveryRunService) stageBeginTopicDiscoveryAsync(
 	runVersion int,
 	step *entity.PaperOutputTopicStep,
 ) error {
-	ret, err := s.steps.GetStep(ctx, uint64(userID), runVersion, "retrieve")
-	if err != nil || ret == nil || strings.TrimSpace(ret.Status) != "completed" {
-		return fmt.Errorf("retrieve 未完成，无法开始选题发现")
+	cfg := mustIdeaDiscoveryConfig()
+	if cfg.Platform.RequireRetrieveBeforeIdeaDiscovery {
+		ret, err := s.steps.GetStep(ctx, uint64(userID), runVersion, "retrieve")
+		if err != nil || ret == nil || strings.TrimSpace(ret.Status) != "completed" {
+			return fmt.Errorf("retrieve 未完成，无法开始选题发现")
+		}
 	}
 	if len(step.Result) > 0 && strings.TrimSpace(step.Status) == "completed" {
 		return nil
 	}
-	sum := "生成文献综述、实验方案中…"
+	sum := "ARIS /idea-discovery 运行中（本地文献 · 分段检查点）"
 	step.SummaryText = &sum
 	step.Status = "running"
 	step.CompletedAt = nil

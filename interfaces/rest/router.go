@@ -85,6 +85,7 @@ func (r *Router) setupRouters() *gin.Engine {
 	paperAuth := engine.Group("/api/v1/paper", ginMiddleware.RequireAuth)
 	{
 		paperAuth.POST("/topic-discovery/run", r.paperTopicDiscoveryHandler.PostRun)
+		paperAuth.POST("/topic-discovery/run/resume", r.paperTopicDiscoveryHandler.PostResumeRun)
 		paperAuth.GET("/topic-discovery/run/current", r.paperTopicDiscoveryHandler.GetCurrentRun)
 		paperAuth.POST("/topic-discovery/run/cancel", r.paperTopicDiscoveryHandler.PostCancelRun)
 		paperAuth.POST("/topic-discovery/confirm-round", r.paperTopicDiscoveryHandler.PostConfirmRound)

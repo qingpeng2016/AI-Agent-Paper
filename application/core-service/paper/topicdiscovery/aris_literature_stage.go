@@ -1,6 +1,7 @@
 package topicdiscovery
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -62,6 +63,30 @@ func parseLiteratureDownloadsFromCorpus(corpus json.RawMessage) []literature.Lit
 		return nil
 	}
 	return items
+}
+
+// stageRetrieveStepLiteratureToWorkspace 把 retrieve 步已落盘 PDF 同步到本 run 的 paperRoot/literature/。
+func stageRetrieveStepLiteratureToWorkspace(paperRoot string, s *TopicDiscoveryRunService, ctx context.Context, userID uint, runVersion int) error {
+	if s == nil || s.steps == nil {
+		return nil
+	}
+	ret, err := s.steps.GetStep(ctx, uint64(userID), runVersion, "retrieve")
+	if err != nil || ret == nil || len(ret.Extra) == 0 {
+		return nil
+	}
+	items := literature.ParseLiteratureDownloads(ret.Extra)
+	if len(items) == 0 {
+		return nil
+	}
+	corpus, err := json.Marshal(map[string]any{"literature_downloads": items})
+	if err != nil {
+		return err
+	}
+	staged, err := stageRetrieveLiteraturePDFs(paperRoot, json.RawMessage(corpus))
+	if err != nil {
+		return err
+	}
+	return writeLiteratureStagingManifest(paperRoot, staged)
 }
 
 // stageRetrieveLiteraturePDFs 将平台 storage 中的 PDF 放入 ARIS workspace 的 literature/（research-lit 默认识别路径）。

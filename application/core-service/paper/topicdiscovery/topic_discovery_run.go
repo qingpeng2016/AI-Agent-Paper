@@ -22,8 +22,6 @@ import (
 	"go.uber.org/zap"
 )
 
-var topicDiscoveryStages = []string{"retrieve", "topic_discovery", "topic_confirm"}
-
 type topicRunInput struct {
 	DisciplineCode  string   `json:"discipline_code"`
 	Keywords        []string `json:"keywords"`
@@ -192,6 +190,11 @@ func (s *TopicDiscoveryRunService) Run(ctx context.Context, userID uint, req req
 		if err != nil {
 			return nil, err
 		}
+		if resumed, err := s.ResumeIdeaDiscoveryFromCheckpoint(ctx, userID, runVersion); err != nil {
+			return nil, err
+		} else if resumed {
+			return s.reloadView(ctx, userID, runVersion)
+		}
 		idx := s.nextPendingIndex(ctx, userID, runVersion)
 		if idx < 0 {
 			return s.reloadView(ctx, userID, runVersion)
@@ -202,6 +205,26 @@ func (s *TopicDiscoveryRunService) Run(ctx context.Context, userID uint, req req
 		if err := s.executeFromStage(ctx, userID, runVersion, input, idx); err != nil {
 			return s.reloadViewOrErr(ctx, userID, runVersion, err)
 		}
+	case "resume":
+		if err := s.validateManuscriptForUser(ctx, userID, req.ManuscriptID); err != nil {
+			return nil, err
+		}
+		ver, rows, err := s.latestRunForManuscript(ctx, userID, req.ManuscriptID)
+		if err != nil {
+			return nil, err
+		}
+		if ver == 0 || currentRunCancelled(rows) {
+			return nil, errorx.ErrTopicRunNotFound
+		}
+		runVersion = ver
+		resumed, err := s.ResumeIdeaDiscoveryExecution(ctx, userID, runVersion)
+		if err != nil {
+			return nil, err
+		}
+		if !resumed {
+			return nil, errorx.ErrParamsError.WithDetail("当前 run 无可续跑的 idea_discovery（已完成或失败）")
+		}
+		return s.reloadView(ctx, userID, runVersion)
 	case "run_all":
 		if err := s.validateManuscriptForUser(ctx, userID, req.ManuscriptID); err != nil {
 			return nil, err
@@ -330,7 +353,7 @@ func (s *TopicDiscoveryRunService) prepareRun(ctx context.Context, userID uint, 
 		SourceCodes:       req.SourceCodes,
 		Intensity:         intensityCode,
 		AuditLevel:        auditCode,
-		HumanCheckpoint:   true,
+		HumanCheckpoint:   !mustIdeaDiscoveryConfig().Platform.InterStepHumanCheckpoint,
 		RandomReferences:  req.RandomReferences,
 		UserLiteratureIDs: userLitIDs,
 		MaxPapers:         int(intensity.MaxPapers),
@@ -407,14 +430,32 @@ func (s *TopicDiscoveryRunService) nextPendingIndex(ctx context.Context, userID 
 
 func (s *TopicDiscoveryRunService) executeFromStage(ctx context.Context, userID uint, runVersion int, input topicRunInput, fromIndex int) error {
 	for i := fromIndex; i < len(topicDiscoveryStages); i++ {
-		if err := s.executeStage(ctx, userID, runVersion, input, topicDiscoveryStages[i]); err != nil {
+		stage := topicDiscoveryStages[i]
+		if stage == "retrieve" {
+			_ = s.skipRetrieveForNativeRun(ctx, userID, runVersion)
+			if !mustIdeaDiscoveryConfig().Platform.RequireRetrieveBeforeIdeaDiscovery {
+				continue
+			}
+		}
+		if err := s.executeStage(ctx, userID, runVersion, input, stage); err != nil {
 			return err
 		}
 		if st, _ := s.runningStageCode(ctx, userID, runVersion); st != "" {
 			return nil
 		}
-		if input.HumanCheckpoint {
+		if mustIdeaDiscoveryConfig().Platform.InterStepHumanCheckpoint {
 			return nil
+		}
+		if stage == "retrieve" {
+			if ret, _ := s.steps.GetStep(ctx, uint64(userID), runVersion, "retrieve"); ret != nil && strings.TrimSpace(ret.Status) == "completed" {
+				_ = s.OnRetrieveCompleted(ctx, userID, runVersion)
+			}
+		}
+		if stage == "retrieve" && !mustIdeaDiscoveryConfig().Platform.RequireRetrieveBeforeIdeaDiscovery {
+			idea, _ := s.steps.GetStep(ctx, uint64(userID), runVersion, "idea_discovery")
+			if idea != nil && strings.TrimSpace(idea.Status) == "pending" {
+				_ = s.stageBeginTopicDiscoveryAsync(ctx, userID, runVersion, idea)
+			}
 		}
 	}
 	return nil
@@ -459,7 +500,7 @@ func (s *TopicDiscoveryRunService) executeStage(ctx context.Context, userID uint
 	switch stageCode {
 	case "retrieve":
 		execErr = s.stageRetrieve(ctx, step, input)
-	case "topic_discovery":
+	case "idea_discovery":
 		execErr = s.stageBeginTopicDiscoveryAsync(ctx, userID, runVersion, step)
 	default:
 		execErr = errorx.ErrTopicStepInvalid
@@ -480,7 +521,7 @@ func (s *TopicDiscoveryRunService) executeStage(ctx context.Context, userID uint
 		}
 		return execErr
 	}
-	if (stageCode == "retrieve" || stageCode == "topic_discovery") && strings.TrimSpace(step.Status) == "running" {
+	if (stageCode == "retrieve" || stageCode == "idea_discovery") && strings.TrimSpace(step.Status) == "running" {
 		if step.StartedAt == nil {
 			step.StartedAt = &stageStarted
 		}
@@ -683,7 +724,7 @@ func (s *TopicDiscoveryRunService) buildRunView(manuscriptID uint64, runVersion 
 		RunVersion:   runVersion,
 		Steps:        make([]response.TopicDiscoveryStepView, 0, len(rows)),
 	}
-	view.HumanCheckpoint = true
+	view.HumanCheckpoint = mustIdeaDiscoveryConfig().Platform.InterStepHumanCheckpoint
 
 	runStatus := "completed"
 	for _, r := range rows {
@@ -729,33 +770,16 @@ func (s *TopicDiscoveryRunService) buildRunView(manuscriptID uint64, runVersion 
 			}
 		}
 	}
-	if runStatus != "failed" && human {
-		for i, r := range rows {
-			cur := strings.TrimSpace(r.Status)
-			next := ""
-			if i+1 < len(rows) {
-				next = strings.TrimSpace(rows[i+1].Status)
-			}
-			if cur == "completed" && next == "pending" {
-				view.PauseAfterStage = r.StageCode
-				runStatus = "checkpoint"
-				break
-			}
-		}
-	}
 	if runStatus != "failed" {
-		discDone, confirmPending := false, false
 		for _, r := range rows {
-			switch r.StageCode {
-			case "topic_discovery":
-				discDone = strings.TrimSpace(r.Status) == "completed"
-			case "topic_confirm":
-				confirmPending = strings.TrimSpace(r.Status) == "pending"
+			if r.StageCode == "idea_discovery" && strings.TrimSpace(r.Status) == "running" {
+				meta := paperstep.LoadStepExtra(&r)
+				if v, ok := meta["aris_awaiting_checkpoint"].(bool); ok && v {
+					view.PauseAfterStage = "idea_discovery"
+					runStatus = "checkpoint"
+					break
+				}
 			}
-		}
-		if discDone && confirmPending {
-			view.PauseAfterStage = "topic_confirm"
-			runStatus = "checkpoint"
 		}
 	}
 	view.RunStatus = runStatus

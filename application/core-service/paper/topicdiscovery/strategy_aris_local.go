@@ -178,8 +178,8 @@ func (s *TopicDiscoveryRunService) persistARISInvokeLog(
 		ModelName:         modelName,
 		RequestJSON:       datatypes.JSON(requestJSON),
 		ResponseJSON:      datatypes.JSON(responseJSON),
-		PromptTokens:      promptTok,
-		CompletionTokens:  completionTok,
+		UseInTokens:  promptTok,
+		UseOutTokens: completionTok,
 		LatencyMs:         latencyMs,
 		Status:            status,
 		CreatedAt:         time.Now(),
@@ -187,7 +187,7 @@ func (s *TopicDiscoveryRunService) persistARISInvokeLog(
 	if err := s.llmRepo.InsertCallLog(ctx, row); err != nil {
 		return
 	}
-	if modelConfigID != nil && usage.TotalTokens() > 0 {
-		_ = s.llmRepo.AddTokensUsedTotal(ctx, *modelConfigID, usage.TotalTokens())
+	if modelConfigID != nil && (usage.PromptTokens > 0 || usage.CompletionTokens > 0) {
+		_ = s.llmRepo.AddTokensUsed(ctx, *modelConfigID, usage.PromptTokens, usage.CompletionTokens)
 	}
 }

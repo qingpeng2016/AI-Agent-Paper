@@ -78,7 +78,7 @@ export type TopicDiscoveryRunRequest = {
   human_checkpoint: boolean
   random_references?: boolean
   user_literature_ids?: string[]
-  /** start | continue | run_all */
+  /** start | continue | resume | run_all */
   action: string
 }
 
@@ -325,6 +325,27 @@ export async function postTopicDiscoveryRun(
   const envelope = (await res.json()) as ApiEnvelope<TopicDiscoveryRunResponse>
   if (envelope.code !== 200 || !envelope.data) {
     throw new Error(envelope.message ?? 'topic-discovery run failed')
+  }
+  return envelope.data
+}
+
+/** 原生 run_state 续跑 idea_discovery（超时/CLI 中断；等同 POST run body action=resume） */
+export async function postTopicDiscoveryResumeRun(
+  manuscriptId: string | number,
+): Promise<TopicDiscoveryRunResponse> {
+  const id = typeof manuscriptId === 'string' ? manuscriptId.trim() : String(manuscriptId)
+  const res = await fetch('/api/v1/paper/topic-discovery/run/resume', {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ manuscript_id: Number(id) }),
+  })
+  if (!res.ok) {
+    throw new Error(`topic-discovery resume http ${res.status}`)
+  }
+  const envelope = (await res.json()) as ApiEnvelope<TopicDiscoveryRunResponse>
+  if (envelope.code !== 200 || !envelope.data) {
+    throw new Error(envelope.message ?? 'topic-discovery resume failed')
   }
   return envelope.data
 }

@@ -31,6 +31,27 @@ func (h *PaperTopicDiscoveryHandler) GetFormOptions(c *gin.Context) {
 	response.ResponseSuccess(c, data)
 }
 
+// PostResumeRun POST /api/v1/paper/topic-discovery/run/resume — 等同 action=resume
+func (h *PaperTopicDiscoveryHandler) PostResumeRun(c *gin.Context) {
+	userID, ok := middleware.UserIDFromContext(c)
+	if !ok {
+		response.ResponseErr(c, errorx.ErrParamsError)
+		return
+	}
+	var req request.TopicDiscoveryRunRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.ResponseErr(c, errorx.ErrParamsError)
+		return
+	}
+	req.Action = "resume"
+	data, err := h.run.Run(c.Request.Context(), userID, req)
+	if err != nil {
+		response.ResponseErr(c, err)
+		return
+	}
+	response.ResponseSuccess(c, data)
+}
+
 // PostRun POST /api/v1/paper/topic-discovery/run
 func (h *PaperTopicDiscoveryHandler) PostRun(c *gin.Context) {
 	userID, ok := middleware.UserIDFromContext(c)

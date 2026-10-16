@@ -40,12 +40,18 @@ func (s *TopicDiscoveryRunService) ConfirmTopicRound(
 		runVersion = ver
 	}
 
-	discStep, err := s.steps.GetStep(ctx, uint64(userID), runVersion, "topic_discovery")
+	discStep, err := s.steps.GetStep(ctx, uint64(userID), runVersion, "idea_discovery")
+	if err != nil || discStep == nil {
+		discStep, err = s.steps.GetStep(ctx, uint64(userID), runVersion, "topic_discovery")
+	}
+	if err != nil || discStep == nil {
+		discStep, err = s.steps.GetStep(ctx, uint64(userID), runVersion, "research_refine")
+	}
 	if err != nil || discStep == nil {
 		return nil, errorx.ErrTopicStepInvalid
 	}
 	if strings.TrimSpace(discStep.Status) != "completed" {
-		return nil, errorx.ErrTopicStepInvalid.WithDetail("选题发现尚未完成，无法确认轮次")
+		return nil, errorx.ErrTopicStepInvalid.WithDetail("选题流水线尚未完成，无法确认")
 	}
 
 	confirmStep, err := s.steps.GetStep(ctx, uint64(userID), runVersion, "topic_confirm")
@@ -58,8 +64,13 @@ func (s *TopicDiscoveryRunService) ConfirmTopicRound(
 	}
 
 	var discResult map[string]any
-	if err := json.Unmarshal(discStep.Result, &discResult); err != nil || len(discResult) == 0 {
+	if agg, aggErr := s.BuildIdeaDiscoveryAggregateResult(ctx, userID, runVersion); aggErr == nil && len(agg) > 0 {
+		discResult = agg
+	} else if err := json.Unmarshal(discStep.Result, &discResult); err != nil || len(discResult) == 0 {
 		return nil, errorx.ErrTopicStepInvalid.WithDetail("选题发现结果为空")
+	}
+	if selectedRound < 1 {
+		selectedRound = 1
 	}
 	iter, generate, auditBlock, passed, err := topicIterationByRound(discResult, selectedRound)
 	if err != nil {

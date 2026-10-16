@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/llm"
 	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/storage"
 )
@@ -39,6 +38,21 @@ func resolveCapability(req StrategyInvokeRequest) string {
 	if strings.Contains(behavior, "topic_generate") || strings.HasSuffix(behavior, "topic_generate") {
 		return "idea-creator"
 	}
+	if strings.Contains(behavior, "research_lit") {
+		return "research-lit"
+	}
+	if strings.Contains(behavior, "idea_creator") {
+		return "idea-creator"
+	}
+	if strings.Contains(behavior, "novelty_check") {
+		return "novelty-check"
+	}
+	if strings.Contains(behavior, "research_review") || strings.Contains(behavior, "topic_audit") {
+		return "research-review"
+	}
+	if strings.Contains(behavior, "research_refine") {
+		return "research-refine-pipeline"
+	}
 	if strings.Contains(behavior, "experiment_plan") || strings.HasSuffix(behavior, "experiment_plan") {
 		return "experiment-bridge"
 	}
@@ -51,15 +65,31 @@ func resolveCapability(req StrategyInvokeRequest) string {
 	return ""
 }
 
-func buildHeadlessPrompt(capability, behavior string) string {
+func buildHeadlessPrompt(capability, behavior string, cfg ARISIdeaDiscoveryConfig) string {
+	capability = strings.TrimPrefix(strings.TrimSpace(capability), "/")
+	if capability == "idea-discovery" || strings.Contains(behavior, "discovery.run") {
+		if cfg.Invoke.NativeHeadless {
+			return fmt.Sprintf(`/idea-discovery
+
+Run the ARIS skill **exactly** as in libs/aris/skills/idea-discovery/SKILL.md.
+$ARGUMENTS are in .paper/invoke/platform_user_prompt.txt (native CLI form).
+Workspace contract: .paper/invoke/idea_discovery_contract.yaml
+Do not skip run_state.py or the final idea_discovery_gate.py (platform runs gate when phases terminal).
+Deliverables are Markdown only under configured artifact paths.
+behavior_key=%s
+`, behavior)
+		}
+		phases := strings.ReplaceAll(cfg.runStatePhasesCSV(), ",", " → ")
+		ap := boolStr(cfg.Skill.AutoProceed)
+		return fmt.Sprintf(`[headless /idea-discovery] SKILL.md · phases: %s · AUTO_PROCEED=%s · $ARGUMENTS in platform_user_prompt.txt · behavior_key=%s`,
+			phases, ap, behavior)
+	}
 	return fmt.Sprintf(`[AI-Agent-Paper headless invoke]
 Execute research skill /%s in this workspace.
 
 1. Read structured input: .paper/invoke/request.json (context, options, behavior_key).
-2. Read literature metadata: .paper/corpus.json (ref_id, title, abstract).
-3. If .paper/literature_staging.json exists: PDFs are under literature/*.pdf (platform retrieve).
-   Apply /research-lit local-PDF workflow on those files first; **platform override: read each staged PDF in full**
-   (not limited to research-lit's default 3-page skim). Ground ideas, novelty, literature_review, and citations on PDF text + corpus.
+2. Follow the skill workflow; deliverables are Markdown per SKILL.md.
+3. If .paper/corpus.json and literature/ exist, treat as optional local library per /research-lit (SKILL defaults).
 4. Follow the skill workflow where practical, but **your final assistant message must be ONLY one valid JSON object**
    matching the platform schema described in .paper/invoke/platform_schema.json.
 5. behavior_key=%s
@@ -69,7 +99,17 @@ Do not wrap JSON in markdown fences.
 
 func platformSchemaJSON(behavior string) ([]byte, error) {
 	var schema any
-	if strings.Contains(behavior, "topic_audit") {
+	if strings.Contains(behavior, "discovery.run") {
+		schema = map[string]any{
+			"checkpoint_pause": false,
+			"phase":            "",
+			"run_id":           "",
+			"summary":          "",
+			"gate_passed":      false,
+			"artifact_paths":   []string{},
+			"blocked_reasons":  []string{},
+		}
+	} else if strings.Contains(behavior, "topic_audit") {
 		schema = map[string]any{
 			"audit": map[string]any{
 				"passed": true,
@@ -185,13 +225,25 @@ func claudeResultText(payload map[string]any) string {
 	return ""
 }
 
+func boolStr(v bool) string {
+	if v {
+		return "true"
+	}
+	return "false"
+}
+
 func arisInvokeTimeout() time.Duration {
 	if v := strings.TrimSpace(os.Getenv("PAPER_ARIS_INVOKE_TIMEOUT_SEC")); v != "" {
 		if sec, err := parsePositiveInt(v); err == nil && sec > 0 {
 			return time.Duration(sec) * time.Second
 		}
 	}
-	return 3600 * time.Second
+	cfg, err := LoadARISIdeaDiscoveryConfig()
+	if err == nil && cfg.Invoke.TimeoutSec > 0 {
+		return time.Duration(cfg.Invoke.TimeoutSec) * time.Second
+	}
+	// 0 = 原生等价：不截断 CLI session（24h 兜底防泄漏）
+	return 24 * time.Hour
 }
 
 func runARISCLI(ctx context.Context, workspace, prompt string) (stdout, stderr string, err error) {
@@ -275,23 +327,31 @@ func arisInvokeSessionDir(req StrategyInvokeRequest) (sessionDir string, cleanup
 		return "", func() {}, fmt.Errorf("invoke context 缺少 user_id")
 	}
 	behavior := sanitizePathSegment(req.BehaviorKey)
-	invokeID := uuid.NewString()
+	_ = behavior
 	base := storage.ArisInvokeWorkRoot()
 	sessionDir = filepath.Join(
 		base,
 		fmt.Sprintf("user_%d", uid),
 		fmt.Sprintf("manuscript_%d", mid),
 		fmt.Sprintf("run_%d", rv),
-		fmt.Sprintf("%s_%s", behavior, invokeID),
 	)
 	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
 		return "", func() {}, err
 	}
-	keep := strings.TrimSpace(os.Getenv("PAPER_ARIS_KEEP_WORKSPACE")) == "1"
-	if keep {
-		return sessionDir, func() {}, nil
-	}
-	return sessionDir, func() { _ = os.RemoveAll(sessionDir) }, nil
+	// 同一 run 多 ARIS phase 共用 workspace（idea-stage/、refine-logs/）。
+	return sessionDir, func() {}, nil
+}
+
+// ARISRunPaperRoot 本 run 的 ARIS workspace 内 paper 根目录。
+func ARISRunPaperRoot(userID uint64, manuscriptID uint64, runVersion int) string {
+	base := storage.ArisInvokeWorkRoot()
+	sessionDir := filepath.Join(
+		base,
+		fmt.Sprintf("user_%d", userID),
+		fmt.Sprintf("manuscript_%d", manuscriptID),
+		fmt.Sprintf("run_%d", runVersion),
+	)
+	return filepath.Join(sessionDir, "paper")
 }
 
 func runLocalStrategyInvoke(ctx context.Context, req StrategyInvokeRequest, platformUser string) (*localARISInvokeResult, error) {
@@ -308,6 +368,20 @@ func runLocalStrategyInvoke(ctx context.Context, req StrategyInvokeRequest, plat
 	defer cleanup()
 
 	paperRoot := filepath.Join(sessionDir, "paper")
+	ideaCfg := mustIdeaDiscoveryConfig()
+	if strings.Contains(behavior, "discovery.run") {
+		briefInput := topicRunInput{
+			Direction: req.Context.Direction,
+			Keywords:  req.Context.Keywords,
+			Venue:     req.Context.VenueLabel,
+		}
+		if err := PrepareNativeIdeaDiscoveryWorkspace(paperRoot, briefInput, req.Context.ContentLanguage, ideaCfg); err != nil {
+			return nil, err
+		}
+		if err := writeIdeaDiscoveryContractFile(paperRoot, ideaCfg); err != nil {
+			return nil, err
+		}
+	}
 	invokeDir := filepath.Join(paperRoot, ".paper", "invoke")
 	if err := os.MkdirAll(invokeDir, 0o755); err != nil {
 		return nil, err
@@ -328,22 +402,35 @@ func runLocalStrategyInvoke(ctx context.Context, req StrategyInvokeRequest, plat
 		return nil, err
 	}
 
-	corpusDir := filepath.Join(paperRoot, ".paper")
-	if len(req.Context.Corpus) > 0 && string(req.Context.Corpus) != "null" {
-		if err := os.MkdirAll(corpusDir, 0o755); err != nil {
-			return nil, err
-		}
-		if err := os.WriteFile(filepath.Join(corpusDir, "corpus.json"), req.Context.Corpus, 0o644); err != nil {
-			return nil, err
-		}
-		if staged, err := stageRetrieveLiteraturePDFs(paperRoot, req.Context.Corpus); err != nil {
-			return nil, err
-		} else if err := writeLiteratureStagingManifest(paperRoot, staged); err != nil {
-			return nil, err
+	if ideaCfg.Platform.InjectStagedLiterature {
+		corpusDir := filepath.Join(paperRoot, ".paper")
+		if len(req.Context.Corpus) > 0 && string(req.Context.Corpus) != "null" {
+			if err := os.MkdirAll(corpusDir, 0o755); err != nil {
+				return nil, err
+			}
+			if err := os.WriteFile(filepath.Join(corpusDir, "corpus.json"), req.Context.Corpus, 0o644); err != nil {
+				return nil, err
+			}
+			if staged, err := stageRetrieveLiteraturePDFs(paperRoot, req.Context.Corpus); err != nil {
+				return nil, err
+			} else if err := writeLiteratureStagingManifest(paperRoot, staged); err != nil {
+				return nil, err
+			}
 		}
 	}
 	platformUser = strings.TrimSpace(platformUser)
-	if platformUser != "" {
+	promptPath := filepath.Join(invokeDir, "platform_user_prompt.txt")
+	if strings.Contains(behavior, "discovery.run") && ideaCfg.Invoke.NativeHeadless {
+		if b, err := os.ReadFile(promptPath); err != nil || len(strings.TrimSpace(string(b))) == 0 {
+			argsLine := ideaCfg.formatSkillArgumentsLine(paperRoot, req.Context.Direction, req.Context.VenueLabel)
+			if err := os.WriteFile(promptPath, []byte(argsLine), 0o644); err != nil {
+				return nil, err
+			}
+		}
+		if platformUser != "" {
+			_ = os.WriteFile(filepath.Join(invokeDir, "platform_session_notes.txt"), []byte(platformUser), 0o644)
+		}
+	} else if platformUser != "" {
 		if err := os.WriteFile(filepath.Join(invokeDir, "platform_user_prompt.txt"), []byte(platformUser), 0o644); err != nil {
 			return nil, err
 		}
@@ -352,7 +439,7 @@ func runLocalStrategyInvoke(ctx context.Context, req StrategyInvokeRequest, plat
 	runCtx, cancel := context.WithTimeout(ctx, arisInvokeTimeout())
 	defer cancel()
 
-	stdout, _, err := runARISCLI(runCtx, paperRoot, buildHeadlessPrompt(capability, behavior))
+	stdout, _, err := runARISCLI(runCtx, paperRoot, buildHeadlessPrompt(capability, behavior, ideaCfg))
 	if err != nil {
 		if runCtx.Err() == context.DeadlineExceeded {
 			return nil, fmt.Errorf("local ARIS/Claude invoke timeout")

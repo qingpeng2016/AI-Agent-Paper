@@ -379,7 +379,11 @@ export type TopicDiscoveryForm = {
 }
 
 /** 选题发现每步完成后的人工确认点（与 stage 一一对应） */
-export type TopicCheckpointKey = 'retrieve_ready' | 'topic_discovery_ready' | 'topic_confirm_ready'
+export type TopicCheckpointKey =
+  | 'retrieve_ready'
+  | 'idea_discovery_ready'
+  | 'topic_confirm_ready'
+  | 'topic_discovery_ready'
 
 export type TopicFlowStepDef = {
   stageCode: string
@@ -387,22 +391,15 @@ export type TopicFlowStepDef = {
   checkpointKey: TopicCheckpointKey
 }
 
+/** UI 两步：语料准备合并在 retrieve（无检查点）；主流程为原生 /idea-discovery */
 export const TOPIC_DISCOVERY_FLOW_STEPS: TopicFlowStepDef[] = [
+  { stageCode: 'retrieve', label: '语料准备（检索 + PDF）', checkpointKey: 'retrieve_ready' },
   {
-    stageCode: 'retrieve',
-    label: '文献检索',
-    checkpointKey: 'retrieve_ready',
+    stageCode: 'idea_discovery',
+    label: '/idea-discovery（原生 SKILL 全流程）',
+    checkpointKey: 'idea_discovery_ready',
   },
-  {
-    stageCode: 'topic_discovery',
-    label: '生成文献综述、实验方案',
-    checkpointKey: 'topic_discovery_ready',
-  },
-  {
-    stageCode: 'topic_confirm',
-    label: '生成文献综述、实验方案',
-    checkpointKey: 'topic_confirm_ready',
-  },
+  { stageCode: 'topic_confirm', label: '入库（gate 后自动）', checkpointKey: 'topic_confirm_ready' },
 ]
 
 export type TopicFlowStepStatus =
