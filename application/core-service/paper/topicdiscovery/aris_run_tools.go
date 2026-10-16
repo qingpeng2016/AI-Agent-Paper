@@ -52,7 +52,7 @@ func runARISTool(paperRoot, scriptRel string, args ...string) (stdout, stderr st
 }
 
 func ensureIdeaDiscoveryRunStateStarted(paperRoot, runID string) error {
-	statePath := filepath.Join(paperRoot, ".aris", "runs", runID+".json")
+	statePath := mustIdeaDiscoveryConfig().RunStateFileAbs(paperRoot, runID)
 	if st, err := os.Stat(statePath); err == nil && st.Size() > 0 {
 		return nil
 	}

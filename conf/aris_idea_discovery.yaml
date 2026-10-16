@@ -20,6 +20,15 @@ artifacts:
   # 语料索引路径（预留；当前文献主要靠 retrieve 同步到 literature/）
   corpus_json: .paper/corpus.json
 
+# 相对 inout/user_*/manuscript_*/run_*/paper/ 的平台路径（主根 = paperRoot）
+workspace:
+  # ARIS invoke 元数据：request.json、platform_user_prompt.txt、contract 等
+  invoke_dir: .paper/invoke
+  # Claude/ARIS CLI 流式日志、latest_aris_cli.log、invoke_errors.log
+  invoke_logs_dir: .paper/invoke/logs
+  # run_state.py 状态 JSON：{run_state_dir}/{run_id}.json
+  run_state_dir: .aris/runs
+
 platform:
   # true：retrieve 完成后停住，用户在页面点「确认并继续」再跑 idea_discovery
   pause_after_retrieve: true

@@ -67,30 +67,34 @@ func resolveCapability(req StrategyInvokeRequest) string {
 	return ""
 }
 
-func buildHeadlessPrompt(capability, behavior string) string {
+func buildHeadlessPrompt(capability, behavior, invokeDirRel string) string {
 	capability = strings.TrimPrefix(strings.TrimSpace(capability), "/")
+	invokeDirRel = strings.TrimSpace(filepath.ToSlash(invokeDirRel))
+	if invokeDirRel == "" {
+		invokeDirRel = ".paper/invoke"
+	}
 	if capability == "idea-discovery" || strings.Contains(behavior, "discovery.run") {
 		return fmt.Sprintf(`/idea-discovery
 
 Run the ARIS skill **exactly** as in libs/aris/skills/idea-discovery/SKILL.md.
-$ARGUMENTS are in .paper/invoke/platform_user_prompt.txt (native CLI form).
-Workspace contract: .paper/invoke/idea_discovery_contract.yaml
+$ARGUMENTS are in %s/platform_user_prompt.txt (native CLI form).
+Workspace contract: %s/idea_discovery_contract.yaml
 Do not skip run_state.py or the final idea_discovery_gate.py (platform runs gate when phases terminal).
 Deliverables are Markdown only under configured artifact paths.
 behavior_key=%s
-`, behavior)
+`, invokeDirRel, invokeDirRel, behavior)
 	}
 	return fmt.Sprintf(`[AI-Agent-Paper headless invoke]
 Execute research skill /%s in this workspace.
 
-1. Read structured input: .paper/invoke/request.json (context, options, behavior_key).
+1. Read structured input: %s/request.json (context, options, behavior_key).
 2. Follow the skill workflow; deliverables are Markdown per SKILL.md.
 3. If .paper/corpus.json and literature/ exist, treat as optional local library per /research-lit (SKILL defaults).
 4. Follow the skill workflow where practical, but **your final assistant message must be ONLY one valid JSON object**
-   matching the platform schema described in .paper/invoke/platform_schema.json.
+   matching the platform schema described in %s/platform_schema.json.
 5. behavior_key=%s
 Do not wrap JSON in markdown fences.
-`, capability, behavior)
+`, capability, invokeDirRel, invokeDirRel, behavior)
 }
 
 func platformSchemaJSON(behavior string) ([]byte, error) {
@@ -388,7 +392,7 @@ func runLocalStrategyInvoke(ctx context.Context, req StrategyInvokeRequest, plat
 			return nil, err
 		}
 	}
-	invokeDir := filepath.Join(paperRoot, ".paper", "invoke")
+	invokeDir := ideaCfg.InvokeDirAbs(paperRoot)
 	if err := os.MkdirAll(invokeDir, 0o755); err != nil {
 		return nil, err
 	}
@@ -429,7 +433,7 @@ func runLocalStrategyInvoke(ctx context.Context, req StrategyInvokeRequest, plat
 	runCtx, cancel := context.WithTimeout(ctx, arisInvokeTimeout())
 	defer cancel()
 
-	stdout, _, err := runARISCLI(runCtx, paperRoot, buildHeadlessPrompt(capability, behavior))
+	stdout, _, err := runARISCLI(runCtx, paperRoot, buildHeadlessPrompt(capability, behavior, ideaCfg.invokeDirRel()))
 	if err != nil {
 		if runCtx.Err() == context.DeadlineExceeded {
 			return nil, fmt.Errorf("local ARIS/Claude invoke timeout")

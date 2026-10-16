@@ -40,9 +40,16 @@ type ideaDiscoveryPlatform struct {
 	RequireRetrieve    bool   `yaml:"require_retrieve"`
 }
 
+type ideaDiscoveryWorkspace struct {
+	InvokeDir     string `yaml:"invoke_dir"`
+	InvokeLogsDir string `yaml:"invoke_logs_dir"`
+	RunStateDir   string `yaml:"run_state_dir"`
+}
+
 // ARISIdeaDiscoveryConfig 与 conf/aris_idea_discovery.yaml 对齐。
 type ARISIdeaDiscoveryConfig struct {
 	Artifacts ideaDiscoveryArtifacts `yaml:"artifacts"`
+	Workspace ideaDiscoveryWorkspace `yaml:"workspace"`
 	Platform  ideaDiscoveryPlatform  `yaml:"platform"`
 }
 
@@ -65,9 +72,64 @@ func defaultIdeaDiscoveryArtifacts() ideaDiscoveryArtifacts {
 	}
 }
 
+func defaultIdeaDiscoveryWorkspace() ideaDiscoveryWorkspace {
+	return ideaDiscoveryWorkspace{
+		InvokeDir:     ".paper/invoke",
+		InvokeLogsDir: ".paper/invoke/logs",
+		RunStateDir:   ".aris/runs",
+	}
+}
+
+func paperRootJoin(paperRoot, rel string) string {
+	paperRoot = filepath.Clean(paperRoot)
+	rel = strings.TrimSpace(filepath.ToSlash(rel))
+	rel = strings.TrimPrefix(rel, "/")
+	if rel == "" {
+		return paperRoot
+	}
+	return filepath.Join(paperRoot, filepath.FromSlash(rel))
+}
+
+// InvokeDirAbs paperRoot 下 invoke 目录（绝对路径）。
+func (c ARISIdeaDiscoveryConfig) InvokeDirAbs(paperRoot string) string {
+	rel := strings.TrimSpace(c.Workspace.InvokeDir)
+	if rel == "" {
+		rel = defaultIdeaDiscoveryWorkspace().InvokeDir
+	}
+	return paperRootJoin(paperRoot, rel)
+}
+
+// InvokeLogsDirAbs CLI 日志目录（绝对路径）。
+func (c ARISIdeaDiscoveryConfig) InvokeLogsDirAbs(paperRoot string) string {
+	rel := strings.TrimSpace(c.Workspace.InvokeLogsDir)
+	if rel == "" {
+		rel = defaultIdeaDiscoveryWorkspace().InvokeLogsDir
+	}
+	return paperRootJoin(paperRoot, rel)
+}
+
+// RunStateFileAbs run_state JSON 文件（绝对路径）。
+func (c ARISIdeaDiscoveryConfig) RunStateFileAbs(paperRoot, runID string) string {
+	rel := strings.TrimSpace(c.Workspace.RunStateDir)
+	if rel == "" {
+		rel = defaultIdeaDiscoveryWorkspace().RunStateDir
+	}
+	runID = strings.TrimSpace(runID)
+	return filepath.Join(paperRootJoin(paperRoot, rel), runID+".json")
+}
+
+func (c ARISIdeaDiscoveryConfig) invokeDirRel() string {
+	rel := strings.TrimSpace(c.Workspace.InvokeDir)
+	if rel == "" {
+		return defaultIdeaDiscoveryWorkspace().InvokeDir
+	}
+	return filepath.ToSlash(rel)
+}
+
 func defaultARISIdeaDiscoveryConfig() ARISIdeaDiscoveryConfig {
 	return ARISIdeaDiscoveryConfig{
 		Artifacts: defaultIdeaDiscoveryArtifacts(),
+		Workspace: defaultIdeaDiscoveryWorkspace(),
 		Platform: ideaDiscoveryPlatform{
 			PauseAfterRetrieve: true,
 			AutoProceed:        false,
@@ -134,6 +196,17 @@ func normalizeIdeaDiscoveryConfig(c *ARISIdeaDiscoveryConfig) {
 	}
 	if strings.TrimSpace(a.CorpusJSON) == "" {
 		a.CorpusJSON = def.CorpusJSON
+	}
+	wdef := defaultIdeaDiscoveryWorkspace()
+	w := &c.Workspace
+	if strings.TrimSpace(w.InvokeDir) == "" {
+		w.InvokeDir = wdef.InvokeDir
+	}
+	if strings.TrimSpace(w.InvokeLogsDir) == "" {
+		w.InvokeLogsDir = wdef.InvokeLogsDir
+	}
+	if strings.TrimSpace(w.RunStateDir) == "" {
+		w.RunStateDir = wdef.RunStateDir
 	}
 	if strings.TrimSpace(c.Platform.Sources) == "" {
 		c.Platform.Sources = "local"

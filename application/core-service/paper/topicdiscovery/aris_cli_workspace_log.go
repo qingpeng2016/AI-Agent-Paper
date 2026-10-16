@@ -17,7 +17,7 @@ func arisCLIWorkspaceLogEnabled() bool {
 }
 
 func arisInvokeLogsDir(paperRoot string) string {
-	return filepath.Join(filepath.Clean(paperRoot), ".paper", "invoke", "logs")
+	return mustIdeaDiscoveryConfig().InvokeLogsDirAbs(paperRoot)
 }
 
 func newARISCLILogFile(paperRoot, cli string) (*os.File, string, error) {
@@ -48,7 +48,8 @@ func writeARISCLILogHeader(f *os.File, paperRoot, cli string, args []string, pro
 	_, _ = fmt.Fprintf(f, "command: %s %s\n", cli, strings.Join(args, " "))
 	prompt = strings.TrimSpace(prompt)
 	if len(prompt) > 2000 {
-		prompt = prompt[:2000] + "\n…(prompt truncated; see .paper/invoke/platform_user_prompt.txt)"
+		inv := mustIdeaDiscoveryConfig().invokeDirRel()
+		prompt = prompt[:2000] + fmt.Sprintf("\n…(prompt truncated; see %s/platform_user_prompt.txt)", inv)
 	}
 	if prompt != "" {
 		_, _ = fmt.Fprintf(f, "--- prompt ---\n%s\n", prompt)

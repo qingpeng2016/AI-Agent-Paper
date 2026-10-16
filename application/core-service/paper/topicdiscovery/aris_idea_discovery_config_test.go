@@ -1,6 +1,7 @@
 package topicdiscovery
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -21,6 +22,12 @@ func TestDefaultARISIdeaDiscoveryConfig(t *testing.T) {
 	}
 	if cfg.Artifacts.IdeaReport != "idea-stage/IDEA_REPORT.md" {
 		t.Fatalf("idea_report: %s", cfg.Artifacts.IdeaReport)
+	}
+	if cfg.Workspace.InvokeLogsDir != ".paper/invoke/logs" {
+		t.Fatalf("invoke_logs_dir: %s", cfg.Workspace.InvokeLogsDir)
+	}
+	if cfg.InvokeLogsDirAbs("/tmp/paper") != filepath.Join("/tmp/paper", ".paper", "invoke", "logs") {
+		t.Fatalf("logs abs: %s", cfg.InvokeLogsDirAbs("/tmp/paper"))
 	}
 	line := cfg.formatSkillArgumentsLine("/tmp/paper", "dir", "NeurIPS")
 	if !strings.Contains(line, "AUTO_PROCEED: false") || !strings.Contains(line, "sources: local") {

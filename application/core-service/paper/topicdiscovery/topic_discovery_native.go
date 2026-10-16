@@ -284,7 +284,7 @@ func (s *TopicDiscoveryRunService) finishIdeaDiscoveryAfterGate(
 }
 
 func ideaDiscoveryProgressPct(paperRoot, runID string) uint8 {
-	statePath := filepath.Join(paperRoot, ".aris", "runs", runID+".json")
+	statePath := mustIdeaDiscoveryConfig().RunStateFileAbs(paperRoot, runID)
 	b, err := os.ReadFile(statePath)
 	if err != nil {
 		return 1
@@ -328,7 +328,8 @@ func mergeNativeIdeaDiscoveryArtifacts(result map[string]any, paperRoot string, 
 }
 
 func writeNativePlatformArguments(paperRoot, argsLine string) error {
-	invokeDir := filepath.Join(paperRoot, ".paper", "invoke")
+	cfg := mustIdeaDiscoveryConfig()
+	invokeDir := cfg.InvokeDirAbs(paperRoot)
 	if err := os.MkdirAll(invokeDir, 0o755); err != nil {
 		return err
 	}
@@ -336,7 +337,7 @@ func writeNativePlatformArguments(paperRoot, argsLine string) error {
 }
 
 func writeIdeaDiscoveryContractFile(paperRoot string, cfg ARISIdeaDiscoveryConfig) error {
-	invokeDir := filepath.Join(paperRoot, ".paper", "invoke")
+	invokeDir := cfg.InvokeDirAbs(paperRoot)
 	if err := os.MkdirAll(invokeDir, 0o755); err != nil {
 		return err
 	}
