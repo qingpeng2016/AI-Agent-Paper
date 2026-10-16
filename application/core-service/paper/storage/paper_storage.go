@@ -9,6 +9,7 @@ import (
 )
 
 const (
+	PaperConfDirName             = "conf"
 	PaperInoutDirName            = "inout"
 	PaperFilesStorageSubdir      = "paper-files"
 	paperFilesStorageSubdir      = PaperFilesStorageSubdir
@@ -16,6 +17,25 @@ const (
 	experimentDataStorageSubdir  = ExperimentDataStorageSubdir
 	submissionDataStorageSubdir  = "submission-data"
 )
+
+// PaperConfRoot 项目 conf 根目录（默认仓库下 conf/）。
+func PaperConfRoot() string {
+	if v := strings.TrimSpace(os.Getenv("PAPER_CONF_ROOT")); v != "" {
+		return v
+	}
+	candidates := []string{PaperConfDirName, filepath.Join("AI-Agent-Paper", PaperConfDirName)}
+	if wd, err := os.Getwd(); err == nil {
+		candidates = append(candidates, filepath.Join(wd, PaperConfDirName))
+	}
+	for _, c := range candidates {
+		if st, err := os.Stat(c); err == nil && st.IsDir() {
+			abs, _ := filepath.Abs(c)
+			return abs
+		}
+	}
+	abs, _ := filepath.Abs(PaperConfDirName)
+	return abs
+}
 
 // PaperInoutRoot 项目 inout 根目录（ARIS invoke 等工作区；默认仓库下 inout/）。
 func PaperInoutRoot() string {

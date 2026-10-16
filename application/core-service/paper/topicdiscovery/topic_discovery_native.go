@@ -24,7 +24,7 @@ func mustIdeaDiscoveryConfig() ARISIdeaDiscoveryConfig {
 	return cfg
 }
 
-// RunNativeIdeaDiscoveryLLM 原生 /idea-discovery（契约见 inout/aris_idea_discovery.yaml）。
+// RunNativeIdeaDiscoveryLLM 原生 /idea-discovery（契约见 conf/aris_idea_discovery.yaml）。
 func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 	ctx context.Context,
 	userID uint,

@@ -40,7 +40,7 @@ type ideaDiscoveryPlatform struct {
 	RequireRetrieve    bool   `yaml:"require_retrieve"`
 }
 
-// ARISIdeaDiscoveryConfig 与 inout/aris_idea_discovery.yaml 对齐。
+// ARISIdeaDiscoveryConfig 与 conf/aris_idea_discovery.yaml 对齐。
 type ARISIdeaDiscoveryConfig struct {
 	Artifacts ideaDiscoveryArtifacts `yaml:"artifacts"`
 	Platform  ideaDiscoveryPlatform  `yaml:"platform"`
@@ -82,7 +82,7 @@ func ideaDiscoveryConfigPath() string {
 	if p := strings.TrimSpace(os.Getenv("PAPER_ARIS_IDEA_DISCOVERY_CONFIG")); p != "" {
 		return p
 	}
-	return filepath.Join(storage.PaperInoutRoot(), "aris_idea_discovery.yaml")
+	return filepath.Join(storage.PaperConfRoot(), "aris_idea_discovery.yaml")
 }
 
 func LoadARISIdeaDiscoveryConfig() (ARISIdeaDiscoveryConfig, error) {

@@ -1,0 +1,33 @@
+# 原生 ARIS /idea-discovery 平台配置（改后需重启 API + bot）
+# artifacts：工作区相对路径，与 libs/aris/skills/idea-discovery/SKILL.md 一致
+# platform：选题三步（retrieve → idea_discovery → confirm）与 bot 行为
+
+artifacts:
+  # 主报告；gate 校验、composed 参数、结果汇总均默认指向此文件
+  idea_report: idea-stage/IDEA_REPORT.md
+  # refine 阶段最终方案（idea_discovery 完成后读入聚合结果）
+  final_proposal: refine-logs/FINAL_PROPOSAL.md
+  # 实验计划 Markdown
+  experiment_plan: refine-logs/EXPERIMENT_PLAN.md
+  # 实验跟踪表（仅检查文件是否存在，写入 artifact_paths）
+  experiment_tracker: refine-logs/EXPERIMENT_TRACKER.md
+  # 流水线摘要（同上，存在性扫描）
+  pipeline_summary: refine-logs/PIPELINE_SUMMARY.md
+  # 调 ARIS 前由平台生成的研究方向 brief
+  research_brief: RESEARCH_BRIEF.md
+  # 本地 PDF 库目录名；CLI 会拼 paper library: <paperRoot>/literature
+  literature_dir: literature
+  # 语料索引路径（预留；当前文献主要靠 retrieve 同步到 literature/）
+  corpus_json: .paper/corpus.json
+
+platform:
+  # true：retrieve 完成后停住，用户在页面点「确认并继续」再跑 idea_discovery
+  pause_after_retrieve: true
+  # false：ARIS 每个 run_state phase 结束后平台暂停，等用户继续（$ARGUMENTS AUTO_PROCEED）
+  auto_proceed: false
+  # 传给 skill 的 sources（如 local）；local 时使用上方 literature_dir
+  sources: local
+  # 单次 bot 任务内最多调用几次 aris CLI；1 表示每段 phase 通常要再点继续 + 等 bot
+  max_aris_per_bot: 1
+  # true：必须先完成 DB 步骤 retrieve；false 则平台可标记 retrieve 跳过
+  require_retrieve: true

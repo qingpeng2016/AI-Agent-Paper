@@ -108,7 +108,7 @@ const CHECKPOINT_COPY: Record<TopicCheckpointKey, Omit<TopicCheckpointView, 'key
     title: 'Idea Discovery 原生流水线',
     lines: [
       '已完成 /idea-discovery（research-lit → idea-creator → novelty-check → research-review → research-refine-pipeline）',
-      '产物路径见 inout/aris_idea_discovery.yaml（默认 IDEA_REPORT / FINAL_PROPOSAL / EXPERIMENT_PLAN）',
+      '产物路径见 conf/aris_idea_discovery.yaml（默认 IDEA_REPORT / FINAL_PROPOSAL / EXPERIMENT_PLAN）',
       '确认后继续写入文献综述与实验方案表',
     ],
   },
@@ -2927,7 +2927,7 @@ watch(
           </p>
           <p class="paper-checkpoint-note">
             Idea Discovery 可从 inout workspace 续跑（原生 <code>— resume</code>）；产物路径见
-            <code>inout/aris_idea_discovery.yaml</code>。
+            <code>conf/aris_idea_discovery.yaml</code>。
           </p>
           <div class="paper-checkpoint-actions">
             <button
