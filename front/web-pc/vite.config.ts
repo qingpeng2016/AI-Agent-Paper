@@ -4,6 +4,7 @@ import vue from '@vitejs/plugin-vue'
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
+  // 本地页面 localhost:5173；/api 由 Vite 转发到远程 Go API
   const apiTarget =
     env.VITE_DEV_API_TARGET?.trim() || 'http://216.195.208.199:8886'
 
@@ -24,6 +25,7 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: apiTarget,
           changeOrigin: true,
+          secure: false,
         },
       },
     },

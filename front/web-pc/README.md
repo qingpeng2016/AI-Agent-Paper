@@ -18,13 +18,10 @@ pnpm install
 pnpm dev
 ```
 
-默认页面 `http://127.0.0.1:5173`，`/api/...` 代理到 **`http://216.195.208.199:8886`**（见 `vite.config.ts`，可用环境变量覆盖）。
+- 页面：`http://localhost:5173/workbench`（本机 Vite）
+- 接口：浏览器仍显示 `localhost:5173/api/...`，由 Vite **转发**到 **`https://216.195.208.199/api/...`**（需宝塔 443 反代到 Go `8886`）
 
-### 改回本地后端
-
-```bash
-VITE_DEV_API_TARGET=http://127.0.0.1:8886 pnpm dev
-```
+覆盖目标：`VITE_DEV_API_TARGET=http://127.0.0.1:8886 pnpm dev`
 
 `pnpm dev` 后面 **`--` 之后** 的参数会传给 Vite，例如：
 
