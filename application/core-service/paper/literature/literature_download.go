@@ -67,7 +67,7 @@ func DownloadLiteraturePDF(ctx context.Context, pdfURL, absPath string) error {
 	return os.Rename(tmp, absPath)
 }
 
-// LiteratureDownloadItem extra.literature_downloads 单项。
+// LiteratureDownloadItem result.literature_downloads 单项。
 type LiteratureDownloadItem struct {
 	ExternalKey   string `json:"external_key"`
 	PdfURL        string `json:"pdf_url"`
@@ -75,13 +75,13 @@ type LiteratureDownloadItem struct {
 	DownloadError string `json:"download_error,omitempty"`
 }
 
-// ParseLiteratureDownloads 从 step.extra 解析 literature_downloads。
-func ParseLiteratureDownloads(extra []byte) []LiteratureDownloadItem {
-	if len(extra) == 0 {
+// ParseLiteratureDownloads 从 step.result JSON 解析 literature_downloads。
+func ParseLiteratureDownloads(resultJSON []byte) []LiteratureDownloadItem {
+	if len(resultJSON) == 0 {
 		return nil
 	}
 	var wrap map[string]any
-	if json.Unmarshal(extra, &wrap) != nil {
+	if json.Unmarshal(resultJSON, &wrap) != nil {
 		return nil
 	}
 	raw, ok := wrap["literature_downloads"]
@@ -192,7 +192,7 @@ func LiteraturePDFDownloadAllFailed(items []LiteratureDownloadItem) bool {
 	return CountLiteraturePDFsOnDisk(items) == 0
 }
 
-// FormatRetrievePDFSummary 检索步成功摘要（PDF 数量见 extra.pdf_on_disk，不写进 summary_text）。
+// FormatRetrievePDFSummary 检索步成功摘要文案（PDF 数量见 extra.pdf_on_disk）。
 func FormatRetrievePDFSummary(hitCount, pdfOnDisk int) string {
 	_ = pdfOnDisk
 	return fmt.Sprintf("检索完成，共 %d 篇文献", hitCount)

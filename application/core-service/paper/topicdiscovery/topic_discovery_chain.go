@@ -22,8 +22,6 @@ func (s *TopicDiscoveryRunService) skipRetrieveForNativeRun(ctx context.Context,
 	if st == "completed" || st == "running" {
 		return nil
 	}
-	sum := "原生 /idea-discovery：跳过平台 retrieve"
-	step.SummaryText = &sum
 	step.Status = "completed"
 	step.ExecProgressPct = 100
 	now := time.Now()

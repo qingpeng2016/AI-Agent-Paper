@@ -140,7 +140,7 @@ func (s *TopicDiscoveryRunService) formatRetrieveCorpusFilesBlock(ctx context.Co
 			strings.TrimSpace(f.ExternalKey), strings.TrimSpace(f.Path), filepath.Base(f.Path)))
 	}
 	if len(lines) == 0 {
-		items := literature.ParseLiteratureDownloads(st.Extra)
+		items := literature.ParseLiteratureDownloads(st.Result)
 		for _, it := range items {
 			rel := strings.TrimSpace(it.LocalPath)
 			if rel == "" {
@@ -223,9 +223,6 @@ func (s *TopicDiscoveryRunService) stageContextCompact(ctx context.Context, user
 		if len(st.Result) > 0 {
 			parts = append(parts, fmt.Sprintf("[%s]\n%s", stage, string(st.Result)))
 		}
-		if st.SummaryText != nil && strings.TrimSpace(*st.SummaryText) != "" {
-			parts = append(parts, *st.SummaryText)
-		}
 	}
 	return strings.Join(parts, "\n\n"), nil
 }
@@ -236,14 +233,6 @@ func (s *TopicDiscoveryRunService) stepResultText(ctx context.Context, userID ui
 		return "（本步无 result）"
 	}
 	return string(st.Result)
-}
-
-func (s *TopicDiscoveryRunService) stepSummaryText(ctx context.Context, userID uint, runVersion int, stageCode string) string {
-	st, err := s.steps.GetStep(ctx, uint64(userID), runVersion, stageCode)
-	if err != nil || st == nil || st.SummaryText == nil {
-		return ""
-	}
-	return strings.TrimSpace(*st.SummaryText)
 }
 
 // buildAuditUserExtra 审计步：显式带上关键词/描述、文献、idea、新颖性，并要求评估是否偏题。
@@ -270,9 +259,9 @@ func (s *TopicDiscoveryRunService) buildAuditUserExtra(
 			return ""
 		}
 		if locale == "en" {
-			return "\n[Novelty summary_text]\n" + noveltySummary
+			return "\n[Novelty summary]\n" + noveltySummary
 		}
-		return "\n【新颖性摘要 summary_text】\n" + noveltySummary
+		return "\n【新颖性摘要】\n" + noveltySummary
 	}()
 	if locale == "en" {
 		return fmt.Sprintf(`Audit round %d/%d

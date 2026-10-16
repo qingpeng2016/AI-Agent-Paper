@@ -87,7 +87,12 @@ func (s *TopicDiscoveryRunService) noveltyBlockForAudit(ctx context.Context, use
 	}
 	if strings.TrimSpace(noveltyJSON) == "" {
 		noveltyJSON = s.stepResultText(ctx, userID, runVersion, "novelty")
-		noveltySummary = s.stepSummaryText(ctx, userID, runVersion, "novelty")
+		if raw := strings.TrimSpace(noveltyJSON); raw != "" && raw != "（本步无 result）" {
+			var root map[string]any
+			if err := json.Unmarshal([]byte(raw), &root); err == nil {
+				noveltySummary = noveltySummaryFromResult(root)
+			}
+		}
 	}
 	return noveltyJSON, noveltySummary
 }

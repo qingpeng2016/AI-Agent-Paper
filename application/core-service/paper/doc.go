@@ -35,8 +35,11 @@ var (
 	NewPaperFigureService           = figure.NewPaperFigureService
 	NewManuscriptSubmissionService  = submission.NewManuscriptSubmissionService
 
-	LoadStepExtra    = step.LoadStepExtra
-	MergeStepExtra   = step.MergeStepExtra
+	LoadStepExtra              = step.LoadStepExtra
+	LoadStepResultMap          = step.LoadStepResultMap
+	FailTopicStep              = step.FailTopicStep
+	MergeStepExtra             = step.MergeStepExtra
+	TopicStepHasPersistedOutput = step.TopicStepHasPersistedOutput
 	SyncStepFilesAppend = step.SyncStepFilesAppend
 	MustJSONStep     = jsonx.MustJSONStep
 

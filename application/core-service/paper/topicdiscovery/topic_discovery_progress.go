@@ -29,6 +29,6 @@ func (s *TopicDiscoveryRunService) saveTopicDiscoveryExecProgress(
 	meta := paperstep.LoadStepExtra(step)
 	meta["exec_progress_planned_calls"] = plannedTotal
 	meta["exec_progress_completed_calls"] = completedCalls
-	step.Extra = jsonx.MustJSON(meta)
+	step.Result = jsonx.MustJSON(meta)
 	return s.steps.SaveStep(ctx, step)
 }

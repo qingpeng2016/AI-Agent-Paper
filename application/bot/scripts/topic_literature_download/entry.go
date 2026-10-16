@@ -72,11 +72,11 @@ func (j *TopicLiteratureDownloadJob) processOne(ctx context.Context, step *entit
 		return ""
 	}
 
-	items := papersvc.ParseLiteratureDownloads(step.Extra)
+	items := papersvc.ParseLiteratureDownloads(step.Result)
 	if items == nil {
 		items = []papersvc.LiteratureDownloadItem{}
 	}
-	hitCount := hitCountFromExtra(step.Extra)
+	hitCount := hitCountFromResult(step.Result)
 	if hitCount == 0 {
 		j.markFailed(ctx, step, items, "未检索到文献")
 		return "failed"
@@ -125,7 +125,7 @@ func (j *TopicLiteratureDownloadJob) processOne(ctx context.Context, step *entit
 		_ = j.saveRetrieveDownloadProgress(ctx, step, items, done, planned, false)
 	}
 
-	_ = j.mergeExtra(ctx, step, items, "")
+	_ = j.mergeDownloadsResult(ctx, step, items)
 	j.syncUserLiterature(ctx, step, items)
 
 	if papersvc.LiteratureRetrieveCorpusReady(items) {
@@ -168,13 +168,10 @@ func downloadPDFWithRetry(ctx context.Context, pdfURL, absPath, externalKey stri
 	return lastErr
 }
 
-func (j *TopicLiteratureDownloadJob) mergeExtra(ctx context.Context, step *entity.PaperOutputTopicStep, items []papersvc.LiteratureDownloadItem, errMsg string) error {
+func (j *TopicLiteratureDownloadJob) mergeDownloadsResult(ctx context.Context, step *entity.PaperOutputTopicStep, items []papersvc.LiteratureDownloadItem) error {
 	meta := papersvc.LoadStepExtra(step)
 	patch := map[string]any{"literature_downloads": items}
-	if strings.TrimSpace(errMsg) != "" {
-		patch["error"] = errMsg
-	}
-	step.Extra = mustJSON(papersvc.MergeStepExtra(meta, patch))
+	step.Result = mustJSON(papersvc.MergeStepExtra(meta, patch))
 	papersvc.SyncStepFilesAppend(step, items)
 	return j.steps.SaveStep(ctx, step)
 }
@@ -200,7 +197,7 @@ func (j *TopicLiteratureDownloadJob) saveRetrieveDownloadProgress(
 	meta := papersvc.LoadStepExtra(step)
 	meta["exec_progress_planned_downloads"] = planned
 	meta["exec_progress_completed_downloads"] = done
-	step.Extra = mustJSON(papersvc.MergeStepExtra(meta, map[string]any{
+	step.Result = mustJSON(papersvc.MergeStepExtra(meta, map[string]any{
 		"literature_downloads": items,
 	}))
 	papersvc.SyncStepFilesAppend(step, items)
@@ -211,8 +208,7 @@ func (j *TopicLiteratureDownloadJob) finishSuccess(ctx context.Context, step *en
 	j.syncUserLiterature(ctx, step, items)
 	meta := papersvc.LoadStepExtra(step)
 	meta = papersvc.MergeStepExtra(meta, map[string]any{"literature_downloads": items})
-	delete(meta, "error")
-	step.Extra = mustJSON(meta)
+	step.Result = mustJSON(meta)
 	papersvc.SyncStepFilesAppend(step, items)
 
 	hitCount := hitCountFromMeta(meta)
@@ -228,15 +224,13 @@ func (j *TopicLiteratureDownloadJob) finishSuccess(ctx context.Context, step *en
 		j.markFailed(ctx, step, items, "PDF 未落盘")
 		return "failed"
 	}
-	sum := papersvc.FormatRetrievePDFSummary(hitCount, pdfN)
-	step.SummaryText = &sum
 	step.ExecProgressPct = 100
 	if pdfN < hitCount {
 		meta = papersvc.MergeStepExtra(meta, map[string]any{
 			"pdf_partial": true,
 			"pdf_on_disk": pdfN,
 		})
-		step.Extra = mustJSON(meta)
+		step.Result = mustJSON(meta)
 	}
 	if err := j.steps.SaveStep(ctx, step); err != nil {
 		notification.SendErrorLog(ctx, "topic-literature-download-save-failed", zap.Uint64("step_id", step.ID), zap.Error(err))
@@ -268,29 +262,18 @@ func (j *TopicLiteratureDownloadJob) finishSuccess(ctx context.Context, step *en
 }
 
 func (j *TopicLiteratureDownloadJob) markFailed(ctx context.Context, step *entity.PaperOutputTopicStep, items []papersvc.LiteratureDownloadItem, reason string) {
-	meta := papersvc.LoadStepExtra(step)
-	patch := map[string]any{"error": strings.TrimSpace(reason)}
-	if items != nil {
-		patch["literature_downloads"] = items
-	}
-	step.Extra = mustJSON(papersvc.MergeStepExtra(meta, patch))
 	if items != nil {
 		papersvc.SyncStepFilesAppend(step, items)
 	}
-	step.Status = "failed"
-	now := time.Now()
-	step.CompletedAt = &now
-	sum := "文献 PDF 下载失败"
-	r := strings.TrimSpace(reason)
-	switch {
-	case strings.Contains(r, "未检索"):
-		sum = "检索未命中文献，未落盘 PDF"
-	case strings.Contains(r, "PDF 下载链接"), strings.Contains(r, "无可用 PDF"):
-		sum = "检索到文献，但无 PDF 未落盘"
-	case strings.Contains(r, "PDF 未落盘"):
-		sum = "检索到文献，PDF 未落盘"
+	papersvc.FailTopicStep(step, reason)
+	meta := papersvc.LoadStepExtra(step)
+	patch := map[string]any{}
+	if items != nil {
+		patch["literature_downloads"] = items
 	}
-	step.SummaryText = &sum
+	if len(patch) > 0 {
+		step.Result = mustJSON(papersvc.MergeStepExtra(meta, patch))
+	}
 	if err := j.steps.SaveStep(ctx, step); err != nil {
 		notification.SendErrorLog(ctx, "topic-literature-download-fail-save", zap.Uint64("step_id", step.ID), zap.Error(err))
 	}
@@ -303,12 +286,12 @@ func hitCountFromMeta(meta map[string]any) int {
 	return 0
 }
 
-func hitCountFromExtra(extra []byte) int {
-	if len(extra) == 0 {
+func hitCountFromResult(raw []byte) int {
+	if len(raw) == 0 {
 		return 0
 	}
 	var meta map[string]any
-	if json.Unmarshal(extra, &meta) != nil {
+	if json.Unmarshal(raw, &meta) != nil {
 		return 0
 	}
 	return hitCountFromMeta(meta)

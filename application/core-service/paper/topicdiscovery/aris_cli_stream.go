@@ -3,6 +3,7 @@ package topicdiscovery
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -19,7 +20,7 @@ func arisCLILogEnabled() bool {
 }
 
 // streamARISCLIOutput 按行写入 info.log（stdout/warn 级 stderr）或 error.log（stderr），并经由 zap 打到控制台。
-func streamARISCLIOutput(ctx context.Context, r io.Reader, stream string, acc *strings.Builder) {
+func streamARISCLIOutput(ctx context.Context, r io.Reader, stream string, acc *strings.Builder, file *os.File) {
 	if acc == nil {
 		discard := strings.Builder{}
 		acc = &discard
@@ -31,6 +32,9 @@ func streamARISCLIOutput(ctx context.Context, r io.Reader, stream string, acc *s
 		line := strings.TrimRight(sc.Text(), "\r")
 		acc.WriteString(line)
 		acc.WriteByte('\n')
+		if file != nil {
+			_, _ = fmt.Fprintf(file, "[%s] %s\n", stream, line)
+		}
 		if arisCLILogEnabled() {
 			logARISCLILine(ctx, stream, line)
 		}
@@ -53,7 +57,7 @@ func logARISCLILine(ctx context.Context, stream, line string) {
 	}
 }
 
-func runARISCLIWithStream(ctx context.Context, cmd *exec.Cmd) (stdout, stderr string, err error) {
+func runARISCLIWithStream(ctx context.Context, cmd *exec.Cmd, logFile *os.File) (stdout, stderr string, err error) {
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
 		return "", "", err
@@ -67,16 +71,21 @@ func runARISCLIWithStream(ctx context.Context, cmd *exec.Cmd) (stdout, stderr st
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		streamARISCLIOutput(ctx, stdoutPipe, "stdout", &outBuf)
+		streamARISCLIOutput(ctx, stdoutPipe, "stdout", &outBuf, logFile)
 	}()
 	go func() {
 		defer wg.Done()
-		streamARISCLIOutput(ctx, stderrPipe, "stderr", &errBuf)
+		streamARISCLIOutput(ctx, stderrPipe, "stderr", &errBuf, logFile)
 	}()
 	if err := cmd.Start(); err != nil {
 		return "", "", err
 	}
 	wg.Wait()
 	runErr := cmd.Wait()
+	if logFile != nil && runErr != nil {
+		_, _ = fmt.Fprintf(logFile, "--- exit ---\nerror: %v\n", runErr)
+	} else if logFile != nil {
+		_, _ = fmt.Fprintln(logFile, "--- exit ---\nok")
+	}
 	return outBuf.String(), errBuf.String(), runErr
 }

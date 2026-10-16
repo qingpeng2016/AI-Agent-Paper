@@ -37,8 +37,6 @@ func (s *TopicDiscoveryRunService) stageBeginTopicDiscoveryAsync(
 	if len(step.Result) > 0 && strings.TrimSpace(step.Status) == "completed" {
 		return nil
 	}
-	sum := "ARIS /idea-discovery 运行中（本地文献 · 分段检查点）"
-	step.SummaryText = &sum
 	step.Status = "running"
 	step.CompletedAt = nil
 	step.ExecProgressPct = 0
@@ -46,7 +44,7 @@ func (s *TopicDiscoveryRunService) stageBeginTopicDiscoveryAsync(
 	meta["async_llm"] = true
 	delete(meta, "exec_progress_completed_calls")
 	delete(meta, "exec_progress_planned_calls")
-	step.Extra = jsonx.MustJSON(meta)
+	step.Result = jsonx.MustJSON(meta)
 	return s.steps.SaveStep(ctx, step)
 }
 
@@ -188,8 +186,6 @@ func (s *TopicDiscoveryRunService) RunTopicDiscoveryLLM(
 	}
 
 	step.Result = jsonx.MustJSON(result)
-	summary := topicDiscoverySummaryFromResult(passed, finalAudit, litPayload, len(iterations))
-	step.SummaryText = jsonx.PtrString(summary)
 	appendUsageMeta(step, totalUsage)
 	meta := paperstep.LoadStepExtra(step)
 	meta["strategy_routes"] = map[string]any{
@@ -204,7 +200,7 @@ func (s *TopicDiscoveryRunService) RunTopicDiscoveryLLM(
 	meta["exec_progress_completed_calls"] = completedCalls
 	meta["exec_progress_planned_calls"] = plannedCalls
 	step.ExecProgressPct = 100
-	step.Extra = jsonx.MustJSON(meta)
+	step.Result = jsonx.MustJSON(meta)
 
 	done := time.Now()
 	step.Status = "completed"
@@ -280,22 +276,6 @@ func parseTopicAuditOnlyResponse(text string) map[string]any {
 		return root
 	}
 	return map[string]any{"audit": root}
-}
-
-func topicDiscoverySummaryFromResult(passed bool, audit, lit map[string]any, rounds int) string {
-	var parts []string
-	if passed {
-		parts = append(parts, fmt.Sprintf("选题发现通过（%d 轮）", rounds))
-	} else {
-		parts = append(parts, fmt.Sprintf("选题发现未完全通过门禁（%d 轮后保留最优稿）", rounds))
-	}
-	if sum := StrFromAny(audit["summary"]); sum != "" {
-		parts = append(parts, sum)
-	}
-	if t := StrFromAny(lit["title"]); t != "" {
-		parts = append(parts, "文献综述："+t)
-	}
-	return strings.Join(parts, "\n")
 }
 
 func (s *TopicDiscoveryRunService) persistTopicExperimentPlan(

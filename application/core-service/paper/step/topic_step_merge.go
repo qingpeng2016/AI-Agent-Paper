@@ -12,8 +12,26 @@ import (
 	"gorm.io/datatypes"
 )
 
-var extraAppendOnlyKeys = map[string]struct{}{
+var resultAppendOnlyKeys = map[string]struct{}{
 	literature.ExtraKeyLiteraturePlatformRequests: {},
+}
+
+var topicStepRuntimeResultKeys = map[string]struct{}{
+	"async_llm":                  {},
+	"async_llm_done":             {},
+	"aris_awaiting_checkpoint":   {},
+	"aris_pause_after_phase":     {},
+	"aris_invoke_retries":        {},
+	"aris_invoke_last_error":     {},
+	"aris_invoke_count":          {},
+	"last_invoke_result":         {},
+	"native_run_id":              {},
+	"exec_progress_planned_calls": {},
+	"exec_progress_completed_calls": {},
+	"exec_progress_planned_downloads": {},
+	"exec_progress_completed_downloads": {},
+	"awaiting_user_confirm":      {},
+	"error":                      {},
 }
 
 // StepFileEntry 步骤关联文件（PDF 等），files 列 JSON 数组，只追加。
@@ -41,23 +59,117 @@ func unmarshalJSONMap(raw datatypes.JSON) map[string]any {
 	return m
 }
 
-func LoadStepExtra(step *entity.PaperOutputTopicStep) map[string]any {
+// FailTopicStep 将步骤置为 failed 并写入 error_msg；清掉 result 内 bot 续跑标记。
+func FailTopicStep(step *entity.PaperOutputTopicStep, reason string) {
+	if step == nil {
+		return
+	}
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		reason = "unknown error"
+	}
+	step.Status = "failed"
+	step.ErrorMsg = &reason
+	step.ExecProgressPct = 0
+	meta := LoadStepResultMap(step)
+	clearTopicStepRuntimeKeys(meta)
+	step.Result = jsonx.MustJSON(meta)
+	now := time.Now()
+	if step.CompletedAt == nil {
+		step.CompletedAt = &now
+	}
+}
+
+// LoadStepResultMap 解析 step.result JSON 对象。
+func LoadStepResultMap(step *entity.PaperOutputTopicStep) map[string]any {
 	if step == nil {
 		return map[string]any{}
 	}
-	return unmarshalJSONMap(step.Extra)
+	return unmarshalJSONMap(step.Result)
 }
 
-func LoadStepFiles(step *entity.PaperOutputTopicStep) []StepFileEntry {
-	if step == nil || len(step.Files) == 0 {
-		return nil
+// LoadStepExtra 兼容旧名：数据均在 result 列。
+func LoadStepExtra(step *entity.PaperOutputTopicStep) map[string]any {
+	return LoadStepResultMap(step)
+}
+
+// MergeStepResultMap 将 patch 合入 base；平台请求日志等 append-only 键只追加。
+func MergeStepResultMap(base, patch map[string]any) map[string]any {
+	out := map[string]any{}
+	for k, v := range base {
+		out[k] = v
 	}
-	var out []StepFileEntry
-	_ = json.Unmarshal(step.Files, &out)
+	for k, v := range patch {
+		if _, appendOnly := resultAppendOnlyKeys[k]; appendOnly {
+			switch items := v.(type) {
+			case []any:
+				for _, it := range items {
+					appendResultArray(out, k, it)
+				}
+			case []literature.LiteraturePlatformRequestLog:
+				for _, it := range items {
+					appendResultArray(out, k, it)
+				}
+			default:
+				appendResultArray(out, k, v)
+			}
+			continue
+		}
+		out[k] = v
+	}
 	return out
 }
 
-func appendExtraArray(meta map[string]any, key string, item any) {
+// MergeStepExtra 兼容旧名。
+func MergeStepExtra(base, patch map[string]any) map[string]any {
+	return MergeStepResultMap(base, patch)
+}
+
+// TopicStepHasPersistedOutput 是否已有本步业务产出（区别于仅含 async_llm 等运行态 key）。
+func TopicStepHasPersistedOutput(step *entity.PaperOutputTopicStep) bool {
+	if step == nil || len(step.Result) == 0 {
+		return false
+	}
+	m := LoadStepResultMap(step)
+	switch strings.TrimSpace(step.StageCode) {
+	case "retrieve":
+		_, ok := m["literature_hits"]
+		return ok
+	case "idea_discovery", "topic_discovery":
+		if _, ok := m["pipeline"]; ok {
+			return true
+		}
+		if _, ok := m["passed"]; ok {
+			return true
+		}
+		return false
+	case "topic_confirm":
+		_, ok := m["selected_round"]
+		return ok
+	default:
+		return !isRuntimeOnlyResultMap(m)
+	}
+}
+
+func isRuntimeOnlyResultMap(m map[string]any) bool {
+	if len(m) == 0 {
+		return false
+	}
+	for k := range m {
+		if _, rt := topicStepRuntimeResultKeys[k]; !rt {
+			return false
+		}
+	}
+	return true
+}
+
+func clearTopicStepRuntimeKeys(m map[string]any) {
+	for k := range topicStepRuntimeResultKeys {
+		delete(m, k)
+	}
+}
+
+func appendResultArray(meta map[string]any, key string, item any) {
 	if meta == nil {
 		return
 	}
@@ -73,30 +185,12 @@ func appendExtraArray(meta map[string]any, key string, item any) {
 	meta[key] = append(arr, item)
 }
 
-// MergeStepExtra 将 patch 合入 base；append-only 键只追加元素，其余键覆盖。
-func MergeStepExtra(base, patch map[string]any) map[string]any {
-	out := map[string]any{}
-	for k, v := range base {
-		out[k] = v
+func LoadStepFiles(step *entity.PaperOutputTopicStep) []StepFileEntry {
+	if step == nil || len(step.Files) == 0 {
+		return nil
 	}
-	for k, v := range patch {
-		if _, appendOnly := extraAppendOnlyKeys[k]; appendOnly {
-			switch items := v.(type) {
-			case []any:
-				for _, it := range items {
-					appendExtraArray(out, k, it)
-				}
-			case []literature.LiteraturePlatformRequestLog:
-				for _, it := range items {
-					appendExtraArray(out, k, it)
-				}
-			default:
-				appendExtraArray(out, k, v)
-			}
-			continue
-		}
-		out[k] = v
-	}
+	var out []StepFileEntry
+	_ = json.Unmarshal(step.Files, &out)
 	return out
 }
 

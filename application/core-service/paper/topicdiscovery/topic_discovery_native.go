@@ -73,7 +73,7 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 		meta["async_llm"] = true
 		meta["aris_run_id"] = runID
 		meta["native_run_id"] = runID
-		step.Extra = jsonx.MustJSON(meta)
+		step.Result = jsonx.MustJSON(meta)
 		step.ExecProgressPct = ideaDiscoveryProgressPct(paperRoot, runID)
 		_ = s.steps.SaveStep(ctx, step)
 
@@ -90,7 +90,7 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 
 		raw, usage, err := s.invokeTopicDiscoveryBehavior(ctx, step, req, userExtra)
 		if err != nil {
-			return s.handleIdeaDiscoveryInvokeFailure(ctx, step, cfg, err)
+			return s.handleIdeaDiscoveryInvokeFailure(ctx, step, paperRoot, cfg, err)
 		}
 
 		meta = paperstep.LoadStepExtra(step)
@@ -101,7 +101,7 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 		meta["tokens_completion"] = usage.CompletionTokens
 		delete(meta, "aris_invoke_last_error")
 		delete(meta, "aris_invoke_retries")
-		step.Extra = jsonx.MustJSON(meta)
+		step.Result = jsonx.MustJSON(meta)
 
 		pendingPhase, err = ideaDiscoveryResumePhase(paperRoot, runID)
 		if err != nil {
@@ -117,9 +117,7 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 			meta["aris_pause_after_phase"] = pendingPhase
 			delete(meta, "async_llm")
 			meta["async_llm_done"] = false
-			step.Extra = jsonx.MustJSON(meta)
-			sum := fmt.Sprintf("Idea Discovery 暂停 · 检查点（待续 phase: %s）", pendingPhase)
-			step.SummaryText = &sum
+			step.Result = jsonx.MustJSON(meta)
 			step.Status = "running"
 			step.ExecProgressPct = ideaDiscoveryProgressPct(paperRoot, runID)
 			return s.steps.SaveStep(ctx, step)
@@ -130,9 +128,7 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 			meta = paperstep.LoadStepExtra(step)
 			meta["async_llm"] = true
 			delete(meta, "aris_awaiting_checkpoint")
-			step.Extra = jsonx.MustJSON(meta)
-			sum := fmt.Sprintf("Idea Discovery 进行中 · phase: %s（本任务已连跑 %d 次 CLI，下轮 bot 续跑）", pendingPhase, chainInTick)
-			step.SummaryText = &sum
+			step.Result = jsonx.MustJSON(meta)
 			step.Status = "running"
 			step.ExecProgressPct = ideaDiscoveryProgressPct(paperRoot, runID)
 			return s.steps.SaveStep(ctx, step)
@@ -153,6 +149,7 @@ func ideaDiscoveryInvokeCount(meta map[string]any) int {
 func (s *TopicDiscoveryRunService) handleIdeaDiscoveryInvokeFailure(
 	ctx context.Context,
 	step *entity.PaperOutputTopicStep,
+	paperRoot string,
 	cfg ARISIdeaDiscoveryConfig,
 	invokeErr error,
 ) error {
@@ -164,17 +161,25 @@ func (s *TopicDiscoveryRunService) handleIdeaDiscoveryInvokeFailure(
 	retries++
 	meta["aris_invoke_retries"] = retries
 	meta["aris_invoke_last_error"] = invokeErr.Error()
-	if retries <= ideaDiscoveryMaxInvokeRetries && isRetriableIdeaDiscoveryInvokeError(invokeErr) {
+	appendARISInvokeErrorLog(paperRoot, invokeErr, retries)
+
+	retriable := retries <= ideaDiscoveryMaxInvokeRetries && isRetriableIdeaDiscoveryInvokeError(invokeErr)
+	if retriable {
 		meta["async_llm"] = true
 		delete(meta, "aris_awaiting_checkpoint")
-		step.Extra = jsonx.MustJSON(meta)
+		step.Result = jsonx.MustJSON(meta)
 		step.Status = "running"
 		step.CompletedAt = nil
-		sum := fmt.Sprintf("Idea Discovery CLI 中断，将自动续跑（%d/%d）", retries, ideaDiscoveryMaxInvokeRetries)
-		step.SummaryText = &sum
 		_ = s.steps.SaveStep(ctx, step)
 		return nil
 	}
+	reason := strings.TrimSpace(invokeErr.Error())
+	if retries > ideaDiscoveryMaxInvokeRetries {
+		reason = fmt.Sprintf("Idea Discovery CLI 已达最大重试（%d 次）: %s", ideaDiscoveryMaxInvokeRetries, reason)
+	}
+	paperstep.FailTopicStep(step, reason)
+	step.ExecProgressPct = ideaDiscoveryProgressPct(paperRoot, strings.TrimSpace(fmt.Sprint(meta["aris_run_id"])))
+	_ = s.steps.SaveStep(ctx, step)
 	return invokeErr
 }
 
@@ -183,10 +188,34 @@ func isRetriableIdeaDiscoveryInvokeError(err error) bool {
 		return false
 	}
 	msg := strings.ToLower(err.Error())
+	if isNonRetriableIdeaDiscoveryInvokeError(msg) {
+		return false
+	}
 	return strings.Contains(msg, "timeout") ||
 		strings.Contains(msg, "deadline") ||
-		strings.Contains(msg, "failed:") ||
-		strings.Contains(msg, "killed")
+		strings.Contains(msg, "killed") ||
+		strings.Contains(msg, "context deadline exceeded")
+}
+
+func isNonRetriableIdeaDiscoveryInvokeError(msg string) bool {
+	needles := []string{
+		"apikeyhelper",
+		"api key",
+		"api_key",
+		"unauthorized",
+		"authentication",
+		"not logged in",
+		"permission denied",
+		"无法解析 skill",
+		"retrieve 未完成",
+		"未找到 aris",
+	}
+	for _, n := range needles {
+		if strings.Contains(msg, n) {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *TopicDiscoveryRunService) finishIdeaDiscoveryAfterGate(
@@ -216,12 +245,6 @@ func (s *TopicDiscoveryRunService) finishIdeaDiscoveryAfterGate(
 	}
 	step.Result = jsonx.MustJSON(result)
 
-	sum := "Idea Discovery 全流程完成（gate PASS）"
-	if !gate.Passed {
-		sum = "Idea Discovery gate 未通过"
-	}
-	step.SummaryText = &sum
-
 	meta := paperstep.LoadStepExtra(step)
 	meta["strategy_route"] = strategyRouteMeta(route)
 	meta["pipeline"] = "aris_idea_discovery_native"
@@ -232,13 +255,20 @@ func (s *TopicDiscoveryRunService) finishIdeaDiscoveryAfterGate(
 	delete(meta, "aris_invoke_retries")
 	meta["async_llm_done"] = true
 	delete(meta, "awaiting_user_confirm")
-	step.Extra = jsonx.MustJSON(meta)
+	step.Result = jsonx.MustJSON(meta)
 
 	done := time.Now()
 	if !gate.Passed {
-		step.Status = "failed"
+		reason := "idea_discovery_gate 未 PASS"
+		if gateErr != nil {
+			reason = gateErr.Error()
+		}
+		paperstep.FailTopicStep(step, reason)
 		step.ExecProgressPct = ideaDiscoveryProgressPct(paperRoot, runID)
 		step.CompletedAt = &done
+		if err := s.steps.SaveStep(ctx, step); err != nil {
+			return err
+		}
 		if gateErr != nil {
 			return gateErr
 		}
@@ -400,7 +430,7 @@ func (s *TopicDiscoveryRunService) ResumeIdeaDiscoveryFromCheckpoint(ctx context
 	}
 	delete(meta, "aris_awaiting_checkpoint")
 	meta["async_llm"] = true
-	step.Extra = jsonx.MustJSON(meta)
+	step.Result = jsonx.MustJSON(meta)
 	step.Status = "running"
 	step.CompletedAt = nil
 	if err := s.steps.SaveStep(ctx, step); err != nil {
@@ -428,7 +458,7 @@ func (s *TopicDiscoveryRunService) ResumeIdeaDiscoveryExecution(ctx context.Cont
 	meta["async_llm"] = true
 	delete(meta, "aris_invoke_last_error")
 	delete(meta, "error")
-	step.Extra = jsonx.MustJSON(meta)
+	step.Result = jsonx.MustJSON(meta)
 	step.Status = "running"
 	step.CompletedAt = nil
 	if err := s.steps.SaveStep(ctx, step); err != nil {

@@ -263,7 +263,26 @@ func runARISCLI(ctx context.Context, workspace, prompt string) (stdout, stderr s
 	cmd := exec.CommandContext(ctx, cli, args...)
 	cmd.Dir = workspace
 	cmd.Env = env
-	outStr, errStr, runErr := runARISCLIWithStream(ctx, cmd)
+
+	var logFile *os.File
+	var logPath string
+	if arisCLIWorkspaceLogEnabled() {
+		if f, p, logErr := newARISCLILogFile(workspace, cli); logErr == nil {
+			logFile = f
+			logPath = p
+			writeARISCLILogHeader(f, workspace, cli, args, prompt)
+		} else {
+			logger.WarnZ(ctx, "aris-cli-workspace-log-open", zap.Error(logErr), zap.String("workspace", workspace))
+		}
+	}
+	if logFile != nil {
+		defer func() {
+			_ = logFile.Close()
+			finalizeARISCLILog(workspace, logPath)
+		}()
+	}
+
+	outStr, errStr, runErr := runARISCLIWithStream(ctx, cmd, logFile)
 	if runErr != nil {
 		msg := strings.TrimSpace(errStr)
 		if msg == "" {

@@ -116,7 +116,7 @@ func (s *TopicDiscoveryRunService) collectRunLiteratureItems(
 	if err != nil || ret == nil {
 		return nil, err
 	}
-	items := literature.ParseLiteratureDownloads(ret.Extra)
+	items := literature.ParseLiteratureDownloads(ret.Result)
 	items = appendUserLiteratureDownloadItems(ctx, s, userLitRepo, userID, runVersion, items)
 	return dedupeLiteratureDownloadItems(items), nil
 }

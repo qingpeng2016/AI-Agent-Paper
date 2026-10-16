@@ -15,9 +15,8 @@ type PaperOutputTopicStep struct {
 	Status          string         `gorm:"column:status;size:16;not null;default:pending"`
 	ExecProgressPct uint8          `gorm:"column:exec_progress_pct;not null;default:0"`
 	Result          datatypes.JSON `gorm:"column:result"`
-	SummaryText   *string        `gorm:"column:summary_text"`
+	ErrorMsg      *string        `gorm:"column:error_msg"`
 	InputParams   datatypes.JSON `gorm:"column:input_params"`
-	Extra         datatypes.JSON `gorm:"column:extra"`
 	Files         datatypes.JSON `gorm:"column:files"`
 	StartedAt     *time.Time     `gorm:"column:started_at"`
 	CompletedAt   *time.Time     `gorm:"column:completed_at"`

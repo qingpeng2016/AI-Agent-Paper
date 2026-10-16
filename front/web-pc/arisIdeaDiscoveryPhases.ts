@@ -19,7 +19,7 @@ function ideaDiscoveryStepDto(
   )
 }
 
-/** 由 idea_discovery 步 extra（aris_pause_after_phase / aris_awaiting_checkpoint）与进度推导子 phase 状态 */
+/** 由 idea_discovery 步 result（aris_pause_after_phase / aris_awaiting_checkpoint）与进度推导子 phase 状态 */
 export function arisIdeaDiscoveryPhaseRows(
   steps: TopicDiscoveryStepDTO[] | undefined,
   runStatus?: string,
@@ -34,11 +34,11 @@ export function arisIdeaDiscoveryPhaseRows(
     return phases.map((id) => ({ id, status: 'completed' as const }))
   }
 
-  const extra = (step.extra ?? {}) as Record<string, unknown>
+  const result = (step.result ?? {}) as Record<string, unknown>
   const awaiting =
-    extra.aris_awaiting_checkpoint === true ||
-    (runStatus === 'checkpoint' && String(extra.aris_pause_after_phase ?? '').trim() !== '')
-  const nextPhase = String(extra.aris_pause_after_phase ?? '').trim()
+    result.aris_awaiting_checkpoint === true ||
+    (runStatus === 'checkpoint' && String(result.aris_pause_after_phase ?? '').trim() !== '')
+  const nextPhase = String(result.aris_pause_after_phase ?? '').trim()
   let nextIdx = nextPhase ? phases.indexOf(nextPhase as ArisIdeaDiscoveryPhaseId) : 0
   if (nextIdx < 0) nextIdx = 0
 

@@ -153,17 +153,6 @@ func (s *TopicDiscoveryRunService) ConfirmTopicRound(
 	confirmStep.CompletedAt = &now
 	confirmStep.Status = "completed"
 	confirmStep.Result = jsonx.MustJSON(confirmResult)
-	sum := topicConfirmSummary(selectedRound, passed, auditBlock, litPayload)
-	confirmStep.SummaryText = jsonx.PtrString(sum)
-	meta := paperstep.LoadStepExtra(confirmStep)
-	meta["selected_round"] = selectedRound
-	if litReviewID > 0 {
-		meta["literature_review_id"] = litReviewID
-	}
-	if planID > 0 {
-		meta["experiment_plan_id"] = planID
-	}
-	confirmStep.Extra = jsonx.MustJSON(meta)
 
 	if err := s.steps.SaveStep(ctx, confirmStep); err != nil {
 		return nil, topicConfirmWrapErr(err)
@@ -393,26 +382,6 @@ func topicIterationByRound(
 		return m, gen, aud, p, nil
 	}
 	return nil, nil, nil, false, errorx.ErrParamsError.WithDetail(fmt.Sprintf("未找到第 %d 轮结果", round))
-}
-
-func topicConfirmSummary(round int, passed bool, audit, lit map[string]any) string {
-	var parts []string
-	if passed {
-		parts = append(parts, fmt.Sprintf("已确认第 %d 轮（门禁通过）", round))
-	} else {
-		parts = append(parts, fmt.Sprintf("已确认第 %d 轮（该轮未完全通过门禁）", round))
-	}
-	if audit != nil {
-		if sum := StrFromAny(audit["summary"]); sum != "" {
-			parts = append(parts, sum)
-		}
-	}
-	if lit != nil {
-		if t := StrFromAny(lit["title"]); t != "" {
-			parts = append(parts, "文献综述："+t)
-		}
-	}
-	return strings.Join(parts, "\n")
 }
 
 func intFromAny(v any) int {

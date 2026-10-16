@@ -507,15 +507,10 @@ func (s *TopicDiscoveryRunService) executeStage(ctx context.Context, userID uint
 	}
 
 	if execErr != nil {
-		done := time.Now()
 		if step.StartedAt == nil {
 			step.StartedAt = &stageStarted
 		}
-		step.CompletedAt = &done
-		step.Status = "failed"
-		stepMeta := paperstep.LoadStepExtra(step)
-		stepMeta["error"] = execErr.Error()
-		step.Extra = jsonx.MustJSON(stepMeta)
+		paperstep.FailTopicStep(step, execErr.Error())
 		if saveErr := s.steps.SaveStep(ctx, step); saveErr != nil {
 			return saveErr
 		}
@@ -583,12 +578,12 @@ func (s *TopicDiscoveryRunService) stageRetrieve(ctx context.Context, step *enti
 		zap.Strings("source_codes", input.SourceCodes),
 		zap.Int("max_papers", input.MaxPapers))
 
-	extraMeta := paperstep.LoadStepExtra(step)
+	resultMeta := paperstep.LoadStepResultMap(step)
 	var hits []storedLiteratureHit
 	if input.RandomReferences {
-		hits, extraMeta = s.retrieveLiteratureRandom(ctx, query, input, extraMeta, scope)
+		hits, resultMeta = s.retrieveLiteratureRandom(ctx, query, input, resultMeta, scope)
 	} else {
-		hits, extraMeta = s.retrieveLiteratureSequential(ctx, query, input, extraMeta, scope)
+		hits, resultMeta = s.retrieveLiteratureSequential(ctx, query, input, resultMeta, scope)
 	}
 	logger.InfoZ(ctx, "topic-retrieve-finished",
 		zap.Uint64("step_id", scope.StepID),
@@ -616,38 +611,31 @@ func (s *TopicDiscoveryRunService) stageRetrieve(ctx context.Context, step *enti
 		})
 	}
 
-	result := map[string]any{"literature_hits": hits}
+	resultMeta["literature_hits"] = hits
 	brief := fallbackLiteratureBrief(hits)
-	mergeLiteratureBriefIntoResult(result, brief)
-	step.Result = jsonx.MustJSON(result)
-	extraPatch := map[string]any{
-		"hit_count":            len(hits),
-		"verified_count":       len(hits),
-		"search_query":         query,
-		"literature_links":     links,
-		"literature_downloads": downloads,
-	}
+	mergeLiteratureBriefIntoResult(resultMeta, brief)
+	resultMeta["hit_count"] = len(hits)
+	resultMeta["verified_count"] = len(hits)
+	resultMeta["search_query"] = query
+	resultMeta["literature_links"] = links
+	resultMeta["literature_downloads"] = downloads
 	if b, e := json.Marshal(brief); e == nil {
-		extraPatch["literature_brief"] = json.RawMessage(b)
+		resultMeta["literature_brief"] = json.RawMessage(b)
 	}
-	step.Extra = jsonx.MustJSON(paperstep.MergeStepExtra(extraMeta, extraPatch))
+	step.Result = jsonx.MustJSON(resultMeta)
 	paperstep.SyncStepFilesAppend(step, downloads)
 	if len(hits) == 0 {
-		step.SummaryText = jsonx.PtrString("检索未命中文献，未落盘 PDF")
 		return fmt.Errorf("未检索到文献")
 	}
 	if literature.LiteratureAllDownloadsLackPDFURL(downloads) {
-		step.SummaryText = jsonx.PtrString(fmt.Sprintf("检索到 %d 篇，但来源无 PDF 下载链接，未落盘", len(hits)))
 		return fmt.Errorf("无可用 PDF 下载链接")
 	}
 	plannedPDF := literature.CountPlannedPDFDownloads(downloads)
 	onDisk := literature.CountLiteraturePDFsOnDisk(downloads)
 	if literature.LiteratureRetrieveCorpusReady(downloads) {
-		step.SummaryText = jsonx.PtrString(literature.FormatRetrievePDFSummary(len(hits), onDisk))
 		step.Status = "completed"
 		step.ExecProgressPct = 100
 	} else {
-		step.SummaryText = jsonx.PtrString(fmt.Sprintf("检索完成，共 %d 篇文献，PDF 下载中…", len(hits)))
 		step.Status = "running"
 		step.ExecProgressPct = literature.ExecProgressPct(onDisk, plannedPDF, onDisk == 0 && plannedPDF > 0)
 	}
@@ -665,9 +653,6 @@ func (s *TopicDiscoveryRunService) stageContext(ctx context.Context, userID uint
 			continue
 		}
 		parts = append(parts, fmt.Sprintf("[%s]\n%s", stage, string(st.Result)))
-		if st.SummaryText != nil {
-			parts = append(parts, *st.SummaryText)
-		}
 	}
 	return strings.Join(parts, "\n\n"), nil
 }
@@ -737,14 +722,11 @@ func (s *TopicDiscoveryRunService) buildRunView(manuscriptID uint64, runVersion 
 		if len(r.InputParams) > 0 {
 			sv.InputParams = json.RawMessage(r.InputParams)
 		}
-		if r.SummaryText != nil {
-			sv.SummaryText = *r.SummaryText
+		if r.ErrorMsg != nil {
+			sv.ErrorMsg = strings.TrimSpace(*r.ErrorMsg)
 		}
 		if len(r.Result) > 0 {
 			sv.Result = json.RawMessage(r.Result)
-		}
-		if len(r.Extra) > 0 {
-			sv.Extra = json.RawMessage(r.Extra)
 		}
 		if len(r.Files) > 0 {
 			sv.Files = json.RawMessage(r.Files)
@@ -807,7 +789,7 @@ func appendUsageMeta(step *entity.PaperOutputTopicStep, usage llm.LLMUsage) {
 	meta := paperstep.LoadStepExtra(step)
 	meta["tokens_prompt"] = usage.PromptTokens
 	meta["tokens_completion"] = usage.CompletionTokens
-	step.Extra = jsonx.MustJSON(meta)
+	step.Result = jsonx.MustJSON(meta)
 }
 
 func min(a, b int) int {

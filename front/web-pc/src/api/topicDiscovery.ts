@@ -94,10 +94,9 @@ export type TopicDiscoveryStepDTO = {
   status: string
   /** 0-100，retrieve PDF 下载 / topic_discovery 多轮 LLM */
   exec_progress_pct?: number
-  summary_text?: string
+  error_msg?: string
   input_params?: Record<string, unknown>
   result?: unknown
-  extra?: unknown
 }
 
 /** 从 retrieve 步的 input_params 回填选题表单（刷新 / 检查点继续） */
@@ -217,12 +216,11 @@ export function parseRetrieveLiteratureLinks(
   if (!run) return []
   const step = run.steps.find((s) => s.stage_code === 'retrieve')
   if (!step) return []
-  const extra = (step.extra ?? {}) as Record<string, unknown>
-  const fromExtra = extra.literature_links as TopicDiscoveryLiteratureLink[] | undefined
-  if (Array.isArray(fromExtra) && fromExtra.length > 0) {
-    return fromExtra.filter((l) => l.url?.trim())
-  }
   const result = step.result as Record<string, unknown> | undefined
+  const fromResult = result?.literature_links as TopicDiscoveryLiteratureLink[] | undefined
+  if (Array.isArray(fromResult) && fromResult.length > 0) {
+    return fromResult.filter((l) => l.url?.trim())
+  }
   const hits = (result?.literature_hits as Array<Record<string, unknown>>) ?? []
   return hits
     .map((h) => {
@@ -269,7 +267,7 @@ export function experimentPlanPreviewFromPayload(
   return { title, summary, hasPlan }
 }
 
-/** 第三步 confirm-round 写入后，从 topic_confirm 步 result/extra 取 literature_review_id */
+/** 第三步 confirm-round 写入后，从 topic_confirm 步 result 取 literature_review_id */
 export function topicConfirmLiteratureReviewId(
   data: TopicDiscoveryRunResponse | null | undefined,
 ): string | null {
@@ -283,10 +281,7 @@ export function topicConfirmLiteratureReviewId(
     if (typeof raw === 'string' && /^\d+$/.test(raw.trim()) && Number(raw) > 0) return raw.trim()
     return null
   }
-  return (
-    fromObj(step.result as Record<string, unknown> | undefined) ??
-    fromObj(step.extra as Record<string, unknown> | undefined)
-  )
+  return fromObj(step.result as Record<string, unknown> | undefined)
 }
 
 export function isTopicRunTerminalCompleted(

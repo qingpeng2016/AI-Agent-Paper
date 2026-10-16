@@ -7,7 +7,6 @@ import {
 } from '@/composables/useTopicDiscoveryFormOptions'
 import {
   postTopicDiscoveryRun,
-  postTopicDiscoveryResumeRun,
   postTopicDiscoveryConfirmRound,
   fetchCurrentTopicDiscoveryRun,
   cancelTopicDiscoveryRun,
@@ -259,7 +258,6 @@ const topicRunToken = ref(0)
 const topicRunStartInFlight = ref(false)
 /** 检查点「确认并继续」请求进行中 */
 const topicContinueLoading = ref(false)
-const topicResumeLoading = ref(false)
 const topicConfirmRoundLoading = ref(false)
 const topicSelectedRound = ref<number | null>(null)
 /** continue 后乐观标 running 的阶段，避免 POST/轮询仍返回 checkpoint 把转圈打掉 */
@@ -1005,6 +1003,7 @@ watch(topicDiscoveryIterations, (rows) => {
 
 /** 非失败且在人工暂停点：「终止并返回」+「确认并继续」 */
 const topicShowCheckpointPanel = computed(() => {
+  if (topicShowFailedPanel.value) return false
   if (topicAwaitingRoundConfirm.value) return false
   if (currentTopicRun.value.steps.some((s) => s.status === 'running')) return false
   if (topicDiscoveryApiRun.value?.steps.some((s) => s.status === 'running')) return false
@@ -1080,24 +1079,15 @@ const topicFailedSummary = computed((): { stageLabel: string; stageCode: string;
   const failedDto = raw?.steps.find((s) => s.status === 'failed')
   const stageCode = failedDto?.stage_code ?? 'unknown'
   const def = TOPIC_DISCOVERY_FLOW_STEPS.find((s) => s.stageCode === stageCode)
-  const extra = (failedDto?.extra ?? {}) as Record<string, unknown>
-  const errRaw = extra.error
   const error =
-    typeof errRaw === 'string' && errRaw.trim()
-      ? errRaw.trim()
-      : '本步执行失败，请查看日志或调整配置后重试。'
+    failedDto?.error_msg?.trim() ||
+    '本步执行失败，请查看日志或调整配置后重试。'
   return {
     stageLabel: def?.label ?? stageCode,
     stageCode,
     error,
   }
 })
-
-const topicCanResumeIdeaDiscovery = computed(
-  () =>
-    topicFailedSummary.value?.stageCode === 'idea_discovery' ||
-    topicFailedSummary.value?.stageCode === 'topic_discovery',
-)
 
 const topicServerRunCompleted = computed(() =>
   isTopicRunTerminalCompleted(topicDiscoveryApiRun.value),
@@ -1320,38 +1310,20 @@ function noveltyLinesFromResultObj(r: Record<string, unknown>): string[] {
   })
 }
 
-/** 与后端 FormatRetrievePDFSummary 一致；兼容旧 summary 里的 PDF 落盘括号 */
-function normalizeTopicStepSummaryLine(line: string, stageCode?: string): string {
-  if (stageCode !== 'retrieve') return line
-  const trimmed = line.trim()
-  const m = trimmed.match(/^检索完成，共 (\d+) 篇文献/)
-  if (m) return `检索完成，共 ${m[1]} 篇文献`
-  return trimmed.replace(/（PDF 已落盘[^）]*）/g, '').trim()
-}
-
 function linesFromApiStep(step?: TopicDiscoveryStepDTO): string[] {
   if (!step) return []
-  const summary = step.summary_text?.trim()
-  if (summary) {
-    const fromSummary = summary
-      .split(/\n+/)
-      .map((l) => normalizeTopicStepSummaryLine(l.trim(), step.stage_code))
-      .filter(Boolean)
-    if (fromSummary.length) return fromSummary.slice(0, 12)
-  }
   const result = step.result as Record<string, unknown> | undefined
   if (!result) {
-    return summary
-      ? [normalizeTopicStepSummaryLine(summary, step.stage_code)]
-      : []
+    const err = step.error_msg?.trim()
+    if (err && step.status === 'failed') return [err]
+    return []
   }
 
   if (step.stage_code === 'retrieve') {
     const hits = (result.literature_hits as Array<{ title?: string; external_key?: string }>) ?? []
-    const extra = (step.extra ?? {}) as Record<string, unknown>
     const lines: string[] = []
-    if (typeof extra.hit_count === 'number') {
-      lines.push(`命中 ${extra.hit_count} 篇 · 验真 ${extra.verified_count ?? extra.hit_count} 篇`)
+    if (typeof result.hit_count === 'number') {
+      lines.push(`命中 ${result.hit_count} 篇 · 验真 ${result.verified_count ?? result.hit_count} 篇`)
     }
     for (const h of hits.slice(0, 6)) {
       const row = h as { title?: string; external_key?: string; url?: string; meta?: { url?: string } }
@@ -1913,33 +1885,6 @@ async function confirmTopicSelectedRound() {
       topicConfirmRoundLoading.value = false
       syncRunningFlagFromServer(msId)
     }
-  }
-}
-
-async function resumeTopicIdeaDiscoveryFromFailure() {
-  const msId = activeManuscriptId.value
-  if (!msId || !topicCanResumeIdeaDiscovery.value || topicResumeLoading.value) return
-  const token = topicRunToken.value
-  topicResumeLoading.value = true
-  running.value = true
-  const stopPoll = startTopicRunProgressPoll(msId, token)
-  try {
-    const data = await postTopicDiscoveryResumeRun(msId)
-    if (token !== topicRunToken.value) return
-    topicLastRunByMs.value = { ...topicLastRunByMs.value, [msId]: data }
-    const run = mergeTopicRunFromApi(msId, data)
-    persistTopicRun(msId, run)
-    ElMessage.success('已排队续跑 Idea Discovery（run_state resume）')
-  } catch (e) {
-    if (token === topicRunToken.value) {
-      await hydrateTopicRunFromServer(msId)
-    }
-    const msg = e instanceof Error ? e.message : '续跑失败'
-    ElMessage.error(msg.includes('401') ? '请先登录' : msg)
-  } finally {
-    stopPoll()
-    topicResumeLoading.value = false
-    syncRunningFlagFromServer(msId)
   }
 }
 
@@ -2987,22 +2932,12 @@ watch(
             {{ topicFailedSummary?.error ?? '本步执行失败，请查看日志或调整配置后重试。' }}
           </p>
           <p class="paper-checkpoint-note">
-            Idea Discovery 可从 inout workspace 续跑（原生 <code>— resume</code>）；产物路径见
-            <code>conf/aris_idea_discovery.yaml</code>。
+            日志路径：<code>inout/user_&lt;uid&gt;/manuscript_&lt;id&gt;/run_&lt;v&gt;/paper/.paper/invoke/logs/</code>
           </p>
           <div class="paper-checkpoint-actions">
             <button
-              v-if="topicCanResumeIdeaDiscovery"
               type="button"
               class="paper-btn-primary"
-              :disabled="topicResumeLoading || topicTerminateLoading"
-              @click="resumeTopicIdeaDiscoveryFromFailure"
-            >
-              {{ topicResumeLoading ? '续跑中…' : '续跑 Idea Discovery' }}
-            </button>
-            <button
-              type="button"
-              class="paper-btn-secondary"
               :disabled="topicTerminateLoading || running"
               @click="rejectFailedTopicRun"
             >

@@ -15,7 +15,7 @@ import (
 
 const ExtraKeyLiteraturePlatformRequests = "literature_platform_requests"
 
-// LiteraturePlatformRequestLog 文献平台一次检索的请求/响应（extra 数组，只追加）。
+// LiteraturePlatformRequestLog 文献平台一次检索的请求/响应（result 数组，只追加）。
 type LiteraturePlatformRequestLog struct {
 	At              string `json:"at"`
 	SourceCode      string `json:"source_code"`
@@ -44,7 +44,7 @@ func appendExtraArray(meta map[string]any, key string, item any) {
 	meta[key] = append(arr, item)
 }
 
-// AppendLiteraturePlatformRequest 向 step extra 追加一条平台请求日志。
+// AppendLiteraturePlatformRequest 向 step result 追加一条平台请求日志。
 func AppendLiteraturePlatformRequest(meta map[string]any, entry LiteraturePlatformRequestLog) {
 	if entry.At == "" {
 		entry.At = time.Now().UTC().Format(time.RFC3339)
@@ -119,7 +119,7 @@ func logLiteraturePlatformRequest(ctx context.Context, scope LiteratureRetrieveL
 	logger.InfoZ(ctx, "literature-platform-request", fields...)
 }
 
-// RecordLiteraturePlatformRequest 写入 extra 并打 literature-platform-request 日志（含 HTTP 摘要）。
+// RecordLiteraturePlatformRequest 写入 result 并打 literature-platform-request 日志（含 HTTP 摘要）。
 func RecordLiteraturePlatformRequest(
 	ctx context.Context,
 	meta map[string]any,
