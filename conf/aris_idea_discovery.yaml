@@ -34,10 +34,10 @@ workspace:
 # label_zh：工作台分段进度等前端展示用中文名
 checkpoint_phases:
   research-lit:
-    pause: false
+    pause: true
     label_zh: 文献调研
   idea-creator:
-    pause: false
+    pause: true
     label_zh: 选题大纲
   novelty-check:
     pause: true
