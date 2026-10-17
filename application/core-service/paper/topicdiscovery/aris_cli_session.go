@@ -52,7 +52,7 @@ func expandConfigPath(p string) string {
 }
 
 // ClearCLIWorkspaceSessions 每次 invoke 前清理该 workspace 下的 CLI 会话目录，避免同 run 多次
-// aris prompt 复用 Claude/Codex 会话导致上下文累积（与 platform.resume 无关）。
+// aris prompt 复用 Claude/Codex 会话导致上下文累积。
 func (c ARISIdeaDiscoveryConfig) ClearCLIWorkspaceSessions(paperRoot string) {
 	cleanup := c.CLISessionCleanup
 	normalizeCLISessionCleanup(&cleanup)

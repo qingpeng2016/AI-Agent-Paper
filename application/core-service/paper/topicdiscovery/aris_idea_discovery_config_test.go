@@ -23,15 +23,12 @@ func TestDefaultARISIdeaDiscoveryConfig(t *testing.T) {
 	if cfg.Platform.MaxArisPerBot != 1 {
 		t.Fatalf("max_aris_per_bot: %d", cfg.Platform.MaxArisPerBot)
 	}
-	if !cfg.Platform.Resume {
-		t.Fatal("resume should default true")
-	}
 	in := topicRunInput{
 		Direction:   "MDD rs-fMRI graph",
 		Description: "研究内容：MDD 脑网络",
 		Keywords:    []string{"major depressive disorder", "graph theory"},
 	}
-	line := cfg.FormatIdeaDiscoveryArgsLine(in, "NeurIPS", "en", "run-abc", true)
+	line := cfg.FormatIdeaDiscoveryArgsLine(in, "NeurIPS", "en")
 	if !strings.Contains(line, "AUTO_PROCEED: false") {
 		t.Fatalf("args line: %s", line)
 	}
@@ -41,8 +38,8 @@ func TestDefaultARISIdeaDiscoveryConfig(t *testing.T) {
 	if !strings.Contains(line, "ARXIV_DOWNLOAD: true") || !strings.Contains(line, "ARXIV_MAX_DOWNLOAD: 5") {
 		t.Fatalf("args line: %s", line)
 	}
-	if !strings.Contains(line, "— language: en") || !strings.Contains(line, "— resume run-abc") {
-		t.Fatalf("args line: %s", line)
+	if !strings.Contains(line, "— language: en") || strings.Contains(line, "resume") {
+		t.Fatalf("args line must not include resume: %s", line)
 	}
 	if !strings.HasPrefix(line, `"`) {
 		t.Fatalf("quoted direction: %s", line)
@@ -61,7 +58,7 @@ func TestFormatIdeaDiscoveryArgsLine_autoProceedTrue(t *testing.T) {
 	cfg := defaultARISIdeaDiscoveryConfig()
 	cfg.Platform.AutoProceed = true
 	in := topicRunInput{Direction: "dir"}
-	line := cfg.FormatIdeaDiscoveryArgsLine(in, "NeurIPS", "zh", "", false)
+	line := cfg.FormatIdeaDiscoveryArgsLine(in, "NeurIPS", "zh")
 	if !strings.Contains(line, "AUTO_PROCEED: true") {
 		t.Fatalf("args line: %s", line)
 	}

@@ -74,8 +74,6 @@ type ideaDiscoveryArtifacts struct {
 
 type ideaDiscoveryPlatform struct {
 	AutoProceed   bool   `yaml:"auto_proceed"`
-	// Resume：run_state 已存在时是否在 platform_user_prompt 追加「— resume <run_id>」（段间续跑仍靠 run_state + session notes）。
-	Resume        bool   `yaml:"resume"`
 	Sources       string `yaml:"sources"`
 	ArxivDownload bool   `yaml:"arxiv_download"`
 	ArxivMaxDownload int `yaml:"arxiv_max_download"`
@@ -165,14 +163,6 @@ func (c ARISIdeaDiscoveryConfig) RunStateFileAbs(paperRoot, runID string) string
 	return filepath.Join(paperRootJoin(paperRoot, rel), runID+".json")
 }
 
-// ShouldAppendCLIResume 是否在 $ARGUMENTS 追加「— resume <run_id>」。
-func (c ARISIdeaDiscoveryConfig) ShouldAppendCLIResume(paperRoot, runID string) bool {
-	if !c.Platform.Resume {
-		return false
-	}
-	return ideaDiscoveryShouldAppendResume(paperRoot, runID)
-}
-
 func (c ARISIdeaDiscoveryConfig) invokeDirRel() string {
 	rel := strings.TrimSpace(c.Workspace.InvokeDir)
 	if rel == "" {
@@ -189,7 +179,6 @@ func defaultARISIdeaDiscoveryConfig() ARISIdeaDiscoveryConfig {
 		CLISessionCleanup: defaultCLISessionCleanup(),
 		Platform: ideaDiscoveryPlatform{
 			AutoProceed:      false,
-			Resume:           true,
 			Sources:          "web",
 			ArxivDownload:    true,
 			ArxivMaxDownload: 5,
@@ -398,9 +387,9 @@ func ideaDiscoveryQuotedDirection(input topicRunInput) string {
 	return `"` + inner + `"`
 }
 
-// FormatIdeaDiscoveryArgsLine 只含约定开关（禁止追加 composed / paper library / render html 等）：
-// "…" — venue — AUTO_PROCEED — RESUMABLE — sources — ARXIV_DOWNLOAD [— ARXIV_MAX_DOWNLOAD 仅 download=true] — language [— resume]
-func (c ARISIdeaDiscoveryConfig) FormatIdeaDiscoveryArgsLine(input topicRunInput, venue, language, runID string, withResume bool) string {
+// FormatIdeaDiscoveryArgsLine 只含约定开关（禁止追加 composed / paper library / render html / resume 等）：
+// "…" — venue — AUTO_PROCEED — RESUMABLE — sources — ARXIV_DOWNLOAD [— ARXIV_MAX_DOWNLOAD 仅 download=true] — language
+func (c ARISIdeaDiscoveryConfig) FormatIdeaDiscoveryArgsLine(input topicRunInput, venue, language string) string {
 	ap := "false"
 	if c.Platform.AutoProceed {
 		ap = "true"
@@ -440,11 +429,5 @@ func (c ARISIdeaDiscoveryConfig) FormatIdeaDiscoveryArgsLine(input topicRunInput
 		line += fmt.Sprintf(` — ARXIV_MAX_DOWNLOAD: %d`, maxDL)
 	}
 	line += fmt.Sprintf(` — language: %s`, loc)
-	if withResume {
-		runID = strings.TrimSpace(runID)
-		if runID != "" {
-			line += fmt.Sprintf(` — resume %s`, runID)
-		}
-	}
 	return line
 }

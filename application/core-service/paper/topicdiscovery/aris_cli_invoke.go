@@ -445,12 +445,7 @@ func runLocalStrategyInvoke(ctx context.Context, req StrategyInvokeRequest, plat
 			argsLine = strings.TrimSpace(string(b))
 		}
 		if argsLine == "" {
-			runID := newestIdeaDiscoveryRunStateID(paperRoot)
-			if runID == "" {
-				runID = resolveIdeaDiscoveryRunID(paperRoot, nil, discoveryInput)
-			}
-			withResume := ideaCfg.ShouldAppendCLIResume(paperRoot, runID)
-			argsLine = ideaCfg.FormatIdeaDiscoveryArgsLine(discoveryInput, req.Context.VenueLabel, req.Context.Language, runID, withResume)
+			argsLine = ideaCfg.FormatIdeaDiscoveryArgsLine(discoveryInput, req.Context.VenueLabel, req.Context.Language)
 			if err := os.WriteFile(promptPath, []byte(argsLine), 0o644); err != nil {
 				return nil, err
 			}

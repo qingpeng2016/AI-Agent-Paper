@@ -1,12 +1,11 @@
 package topicdiscovery
 
 import (
-	"strings"
 	"testing"
 )
 
 func TestBuildIdeaDiscoveryCLIPrompt(t *testing.T) {
-	args := `"dir" — venue: NeurIPS — AUTO_PROCEED: true — RESUMABLE: true — sources: web — ARXIV_DOWNLOAD: false — language: zh — resume run-abc`
+	args := `"dir" — venue: NeurIPS — AUTO_PROCEED: true — RESUMABLE: true — sources: web — ARXIV_DOWNLOAD: false — language: zh`
 	got := buildIdeaDiscoveryCLIPrompt(args)
 	want := "/idea-discovery " + args
 	if got != want {

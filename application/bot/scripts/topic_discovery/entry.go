@@ -1,6 +1,6 @@
 // topic_discovery bot：定时扫库，对「排队中的 Idea Discovery」触发 ARIS。
 // 真正调 CLI 的逻辑在 TopicDiscoveryRunService.RunNativeIdeaDiscoveryLLM（只走 /idea-discovery）。
-// 配置见 conf/aris_idea_discovery.yaml（auto_proceed、checkpoint、每 tick 最多几次 invoke）。
+// 配置见 conf/aris_idea_discovery.yaml（checkpoint、每 tick 一条 aris，不自动连 invoke）。
 package topicdiscovery
 
 import (
@@ -103,7 +103,7 @@ func (j *TopicDiscoveryJob) processOne(ctx context.Context, step *entity.PaperOu
 
 	beforePrompt, beforeCompletion := tokenUsageFromMeta(meta)
 
-	// async_llm=true 时每次 tick 最多一条 aris；pause:false 段 invoke 后仍 true，靠 bot 间隔（如 10s）再跑下一条。
+	// async_llm=true：本 tick 只跑一条 aris；成功后清 async_llm，下一条须用户 Continue 或 API 再排队。
 	if err = j.runs.RunNativeIdeaDiscoveryLLM(ctx, uint(step.UserID), step.RunVersion, step, input); err != nil {
 		if strings.TrimSpace(step.Status) != "failed" {
 			j.markFailed(ctx, step, err.Error(), 0, 0)
@@ -141,7 +141,7 @@ func (j *TopicDiscoveryJob) processOne(ctx context.Context, step *entity.PaperOu
 		j.notifyStep(ctx, step, papersvc.TopicStepOutcomeSuccess, "Idea Discovery 全流程已完成", deltaPrompt, deltaCompletion)
 		return "completed"
 	}
-	// pause:false 且 invoke 后 async_llm 仍为 true：等 bot 间隔（如 10s）再跑下一条。
+	// invoke 后 async_llm 已清：本脚本本轮结束；下一条等 Continue 后再由 scheduler 拉起。
 	logger.InfoZ(ctx, "topic-discovery-invoke-tick-done",
 		zap.Uint64("step_id", step.ID),
 		zap.Uint64("manuscript_id", step.ManuscriptID),

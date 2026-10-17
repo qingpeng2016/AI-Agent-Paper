@@ -23,7 +23,8 @@ func mustIdeaDiscoveryConfig() ARISIdeaDiscoveryConfig {
 	return cfg
 }
 
-// RunNativeIdeaDiscoveryLLM 原生 /idea-discovery：每次 bot 进入只跑一条 aris；pause:false 阶段 invoke 后留 async_llm 等 bot 下一轮再跑；pause:true 停平台检查点等人确认。
+// RunNativeIdeaDiscoveryLLM 原生 /idea-discovery：每次 bot 进入只跑一条 aris，落库后清 async_llm（与手动一条命令一致）。
+// 下一条 aris 仅由 API 启动或用户 Continue（ResumeIdeaDiscoveryFromCheckpoint）再设 async_llm。
 func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 	ctx context.Context,
 	userID uint,
@@ -69,12 +70,11 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 	// 与手动一致：每次只打一条命令；续跑/重试也先清会话，避免 bot 连 tick 堆上下文到 200k。
 	cfg.ClearCLIWorkspaceSessions(paperRoot)
 	runID = resolveIdeaDiscoveryRunID(paperRoot, step, input)
-	resuming := cfg.ShouldAppendCLIResume(paperRoot, runID)
 	locale := invokeCtx.Language
 	if err := PrepareNativeIdeaDiscoveryWorkspace(paperRoot, input, locale, cfg); err != nil {
 		return err
 	}
-	argsLine := cfg.FormatIdeaDiscoveryArgsLine(input, strings.TrimSpace(input.Venue), locale, runID, resuming)
+	argsLine := cfg.FormatIdeaDiscoveryArgsLine(input, strings.TrimSpace(input.Venue), locale)
 	if err := writeNativePlatformArguments(paperRoot, argsLine); err != nil {
 		return err
 	}
@@ -108,20 +108,7 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 		_, _ = s.ingestARISWorkspaceLiterature(ctx, userID, runVersion, step.ManuscriptID, paperRoot, cfg)
 	}
 
-	if cfg.PhaseNeedsUserCheckpoint(pendingPhase) {
-		return s.saveIdeaDiscoveryAwaitingUserContinue(ctx, step, paperRoot, runID, pendingPhase)
-	}
-
-	meta = paperstep.LoadStepExtra(step)
-	syncIdeaDiscoveryRunProgressToMeta(meta, paperRoot, runID)
-	meta["async_llm"] = true
-	delete(meta, "aris_awaiting_checkpoint")
-	delete(meta, "aris_pause_after_phase")
-	delete(meta, "aris_checkpoint_proceed")
-	step.Result = jsonx.MustJSON(meta)
-	step.Status = "running"
-	step.ExecProgressPct = ideaDiscoveryProgressPct(paperRoot, runID)
-	return s.steps.SaveStep(ctx, step)
+	return s.saveIdeaDiscoveryAwaitingUserContinue(ctx, step, paperRoot, runID, pendingPhase)
 }
 
 func (s *TopicDiscoveryRunService) saveIdeaDiscoveryAwaitingUserContinue(

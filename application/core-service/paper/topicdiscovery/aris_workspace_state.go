@@ -139,24 +139,7 @@ func newestIdeaDiscoveryRunStateID(paperRoot string) string {
 	return cands[0].id
 }
 
-// ideaDiscoveryRunStateFileExists 是否存在 .aris/runs/{run_id}.json（如 mdd-rsfmri-graph-topology-20261015.json）。
-func ideaDiscoveryRunStateFileExists(paperRoot, runID string) bool {
-	runID = strings.TrimSpace(runID)
-	if runID == "" {
-		return false
-	}
-	path := mustIdeaDiscoveryConfig().RunStateFileAbs(paperRoot, runID)
-	st, err := os.Stat(path)
-	return err == nil && st != nil && !st.IsDir()
-}
-
-// ideaDiscoveryShouldAppendResume 是否在 $ARGUMENTS 追加「— resume <run_id>」。
-// 仅看工作区 run_state 文件是否存在；与 auto_proceed、DB step.result 无关。
-func ideaDiscoveryShouldAppendResume(paperRoot, runID string) bool {
-	return ideaDiscoveryRunStateFileExists(paperRoot, runID)
-}
-
-// syncIdeaDiscoveryRunProgressToMeta 把 run_state 进度写入 step.result（展示/排查用，不参与 resume 判定）。
+// syncIdeaDiscoveryRunProgressToMeta 把 run_state 进度写入 step.result（展示/排查用）。
 func syncIdeaDiscoveryRunProgressToMeta(meta map[string]any, paperRoot, runID string) {
 	if meta == nil {
 		return
