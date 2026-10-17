@@ -455,9 +455,6 @@ func runLocalStrategyInvoke(ctx context.Context, req StrategyInvokeRequest, plat
 				return nil, err
 			}
 		}
-		if platformUser != "" {
-			_ = os.WriteFile(filepath.Join(invokeDir, "platform_session_notes.txt"), []byte(platformUser), 0o644)
-		}
 	} else if platformUser != "" {
 		if err := os.WriteFile(filepath.Join(invokeDir, "platform_user_prompt.txt"), []byte(platformUser), 0o644); err != nil {
 			return nil, err
