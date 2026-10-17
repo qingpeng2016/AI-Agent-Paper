@@ -30,8 +30,8 @@ type IdeaDiscoveryCheckpointPhase struct {
 
 func defaultIdeaDiscoveryCheckpointPhases() map[string]IdeaDiscoveryCheckpointPhase {
 	return map[string]IdeaDiscoveryCheckpointPhase{
-		"research-lit":             {Pause: false, LabelZh: "文献调研"},
-		"idea-creator":             {Pause: false, LabelZh: "选题大纲"},
+		"research-lit":             {Pause: true, LabelZh: "文献调研"},
+		"idea-creator":             {Pause: true, LabelZh: "选题大纲"},
 		"novelty-check":            {Pause: true, LabelZh: "新颖性检验"},
 		"research-review":          {Pause: true, LabelZh: "外部审查"},
 		"research-refine-pipeline": {Pause: true, LabelZh: "文献综述与实验规划"},

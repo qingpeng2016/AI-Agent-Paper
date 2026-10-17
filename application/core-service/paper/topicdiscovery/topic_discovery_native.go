@@ -69,6 +69,7 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 		delete(meta, "aris_pause_after_phase")
 	}
 	delete(meta, "aris_awaiting_checkpoint")
+	delete(meta, "aris_between_invokes")
 	meta["aris_run_id"] = runID
 	meta["native_run_id"] = runID
 	step.Result = jsonx.MustJSON(meta)
@@ -117,7 +118,15 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 		_, _ = s.ingestARISWorkspaceLiterature(ctx, userID, runVersion, step.ManuscriptID, paperRoot, cfg)
 	}
 
+	_ = seedIdeaDiscoveryRunStateFromWorkspace(paperRoot, runID)
 	hasRunState = ideaDiscoveryRunStateFileExists(paperRoot, runID)
+	pendingPhase, err = ideaDiscoveryResumePhase(paperRoot, runID)
+	if err != nil {
+		return err
+	}
+	if pendingPhase == "" {
+		return s.finishIdeaDiscoveryAfterGate(ctx, step, userID, runVersion, route, paperRoot, runID, cfg)
+	}
 	if !hasRunState || !cfg.PhaseNeedsUserCheckpoint(pendingPhase) {
 		return s.saveIdeaDiscoveryAfterInvokeIdle(ctx, step, paperRoot, runID)
 	}
@@ -136,6 +145,12 @@ func (s *TopicDiscoveryRunService) saveIdeaDiscoveryAfterInvokeIdle(
 	delete(meta, "aris_checkpoint_proceed")
 	delete(meta, "async_llm")
 	meta["async_llm_done"] = false
+	meta["aris_between_invokes"] = true
+	if ideaDiscoveryRunStateFileExists(paperRoot, runID) {
+		meta["aris_run_state_ready"] = true
+	} else {
+		meta["aris_run_state_ready"] = false
+	}
 	step.Result = jsonx.MustJSON(meta)
 	step.Status = "running"
 	step.ExecProgressPct = ideaDiscoveryProgressPct(paperRoot, runID)
@@ -151,6 +166,7 @@ func (s *TopicDiscoveryRunService) saveIdeaDiscoveryAwaitingUserContinue(
 	syncIdeaDiscoveryRunProgressToMeta(meta, paperRoot, runID)
 	meta["aris_awaiting_checkpoint"] = true
 	meta["aris_pause_after_phase"] = strings.TrimSpace(pendingPhase)
+	delete(meta, "aris_between_invokes")
 	delete(meta, "async_llm")
 	meta["async_llm_done"] = false
 	step.Result = jsonx.MustJSON(meta)

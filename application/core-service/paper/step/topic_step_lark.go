@@ -49,39 +49,6 @@ func TopicStageLabelZh(stageCode string) string {
 	}
 }
 
-func arisPhaseLabelZh(phase string) string {
-	switch strings.TrimSpace(phase) {
-	case "research-lit":
-		return "文献调研"
-	case "idea-creator":
-		return "论文大纲"
-	case "novelty-check":
-		return "新颖性检验"
-	case "research-review":
-		return "外部审查"
-	case "research-refine-pipeline":
-		return "文献综述与实验规划"
-	default:
-		return phase
-	}
-}
-
-// arisPhaseUiLabelZh 工作台 / 检查点对外展示（Lark 等；动态分组见 topicdiscovery.IdeaDiscoveryCheckpointDetail）。
-func arisPhaseUiLabelZh(phase string) string {
-	switch strings.TrimSpace(phase) {
-	case "research-lit", "idea-creator":
-		return "文献调研与选题大纲"
-	case "novelty-check":
-		return "新颖性检验"
-	case "research-review":
-		return "外部审查"
-	case "research-refine-pipeline":
-		return "文献综述与实验规划"
-	default:
-		return arisPhaseLabelZh(phase)
-	}
-}
-
 // NotifyTopicStepExecutionResult 步骤执行结束后推送一条 Lark（成功 / 失败 / 检查点暂停）。
 func NotifyTopicStepExecutionResult(
 	ctx context.Context,
@@ -147,13 +114,4 @@ func topicStepOutcomeLabels(outcome, stageLabel string) (resultLabel, logMsg str
 	default:
 		return outcome, fmt.Sprintf("选题流程 · %s · %s", stageLabel, outcome)
 	}
-}
-
-// IdeaDiscoveryCheckpointDetail 段间检查点说明（含 ARIS 子阶段中文名）。
-func IdeaDiscoveryCheckpointDetail(pauseAfterPhase string) string {
-	p := strings.TrimSpace(pauseAfterPhase)
-	if p == "" {
-		return "Idea Discovery 本轮 ARIS 已结束，待用户在平台确认并继续（勿重复自动调 CLI）"
-	}
-	return fmt.Sprintf("Idea Discovery 本轮 ARIS 已结束（当前阶段 %s / %s），请在平台点继续后再执行下一条命令", arisPhaseUiLabelZh(p), p)
 }

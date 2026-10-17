@@ -1273,7 +1273,9 @@ function topicStepRunningHint(stageCode: string) {
   if (stageCode === 'idea_discovery' || stageCode === 'topic_discovery') {
     const running = topicArisPhaseRows.value.find((r) => r.status === 'running')
     const waiting = topicArisPhaseRows.value.find((r) => r.status === 'waiting_confirm')
+    const awaitingContinue = topicArisPhaseRows.value.find((r) => r.status === 'awaiting_continue')
     if (waiting) return `段间暂停 · 下一段「${waiting.label}」待确认并继续`
+    if (awaitingContinue) return `本轮 ARIS 已结束 · 点击「继续」启动下一段「${awaitingContinue.label}」`
     if (running) return `当前段「${running.label}」运行中…`
     const chain = topicIdeaDiscoveryUiGroupLabels.value
     if (chain) return `Idea Discovery：${chain}…`
@@ -3692,6 +3694,11 @@ watch(
 .paper-flow-subphase--waiting_confirm {
   background: rgba(245, 158, 11, 0.15);
   color: #b45309;
+}
+
+.paper-flow-subphase--awaiting_continue {
+  background: rgba(59, 130, 246, 0.12);
+  color: #1d4ed8;
 }
 
 .paper-retrieve-links {

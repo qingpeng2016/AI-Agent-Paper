@@ -24,12 +24,11 @@ func TestIdeaDiscoveryRunStateFileExists(t *testing.T) {
 	}
 }
 
-func TestPhaseNeedsUserCheckpoint_noveltyOnly(t *testing.T) {
+func TestPhaseNeedsUserCheckpoint_allPause(t *testing.T) {
 	cfg := defaultARISIdeaDiscoveryConfig()
-	if cfg.PhaseNeedsUserCheckpoint("research-lit") {
-		t.Fatal("research-lit pause:false")
-	}
-	if !cfg.PhaseNeedsUserCheckpoint("novelty-check") {
-		t.Fatal("novelty-check pause:true")
+	for _, id := range ideaDiscoveryRunStatePhases {
+		if !cfg.PhaseNeedsUserCheckpoint(id) {
+			t.Fatalf("%s pause:true expected", id)
+		}
 	}
 }

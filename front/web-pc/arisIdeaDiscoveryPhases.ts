@@ -4,7 +4,7 @@ import type {
   TopicDiscoveryStepDTO,
 } from './src/api/topicDiscovery'
 
-export type ArisPhaseUiStatus = 'pending' | 'running' | 'waiting_confirm' | 'completed'
+export type ArisPhaseUiStatus = 'pending' | 'running' | 'waiting_confirm' | 'awaiting_continue' | 'completed'
 
 export type ArisPhaseUiRow = {
   /** UI 段 index（与 idea_discovery_ui_groups[].index 一致） */
@@ -128,6 +128,7 @@ export function arisIdeaDiscoveryPhaseRows(
   const awaiting =
     result.aris_awaiting_checkpoint === true ||
     (runStatus === 'checkpoint' && String(result.aris_pause_after_phase ?? '').trim() !== '')
+  const betweenInvokes = result.aris_between_invokes === true
   const pausePhase = String(result.aris_pause_after_phase ?? '').trim()
   const pendingPhase = String(result.aris_pending_phase ?? '').trim()
   const nextPhase = awaiting ? pausePhase : pendingPhase || pausePhase
@@ -152,6 +153,9 @@ export function arisIdeaDiscoveryPhaseRows(
       if (awaiting) {
         return { id: String(i), label: g.label_zh, status: 'waiting_confirm' as const }
       }
+      if (betweenInvokes && step.status === 'running') {
+        return { id: String(i), label: g.label_zh, status: 'awaiting_continue' as const }
+      }
       if (step.status === 'running') {
         return { id: String(i), label: g.label_zh, status: 'running' as const }
       }
@@ -169,6 +173,8 @@ export function arisPhaseStatusLabel(status: ArisPhaseUiStatus): string {
       return '运行中'
     case 'waiting_confirm':
       return '待确认'
+    case 'awaiting_continue':
+      return '待继续'
     default:
       return '未开始'
   }

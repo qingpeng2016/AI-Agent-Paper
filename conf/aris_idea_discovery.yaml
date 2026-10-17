@@ -30,7 +30,7 @@ workspace:
   run_state_dir: .aris/runs
 
 # /idea-discovery run_state 各 ARIS phase（顺序与 skill 一致）
-# pause：进入该 phase 的「第一条 aris」前是否要求用户 Continue（与 invoke 后一律停平台无关；下一条 aris 始终须 Continue）
+# pause：true=该 phase 前后需平台 Continue；false=可与相邻 false 合并为一段 UI 展示
 # label_zh：工作台分段进度等前端展示用中文名
 checkpoint_phases:
   research-lit:

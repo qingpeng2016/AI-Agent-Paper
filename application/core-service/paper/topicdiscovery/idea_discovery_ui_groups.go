@@ -166,15 +166,15 @@ func syncIdeaDiscoveryUIGroupsToMeta(meta map[string]any, paperRoot, runID strin
 	}
 }
 
-// IdeaDiscoveryCheckpointDetail 段间检查点 Lark/日志文案（按 conf 合并后的 UI 段名）。
+// IdeaDiscoveryCheckpointDetail 段间检查点 Lark/日志文案（按 ARIS phase 的 label_zh，不用 UI 合并段名）。
 func IdeaDiscoveryCheckpointDetail(pauseAfterPhase string) string {
 	p := strings.TrimSpace(pauseAfterPhase)
 	if p == "" {
 		return "Idea Discovery 段间检查点，待用户在平台确认并继续"
 	}
 	cfg := mustIdeaDiscoveryConfig()
-	label := uiGroupLabelForPhase(cfg, p)
-	return fmt.Sprintf("Idea Discovery 已完成本轮 invoke，下一阶段「%s」（%s）需在平台确认后继续", label, p)
+	label := cfg.PhaseLabelZh(p)
+	return fmt.Sprintf("Idea Discovery 已完成本轮 invoke，待继续阶段「%s」（%s）", label, p)
 }
 
 func ideaDiscoveryProgressPctByUIGroups(paperRoot, runID string, cfg ARISIdeaDiscoveryConfig) uint8 {
