@@ -1174,6 +1174,7 @@ const topicPrimaryDisabled = computed(() => {
   if (isUtilityModule.value) return true
   if (isTopicDiscoveryModule.value) {
     return (
+      topicShowFailedPanel.value ||
       topicRunBusy.value ||
       currentTopicRun.value.status === 'checkpoint' ||
       (currentTopicRun.value.status === 'running' && !topicAtHumanPause.value)
@@ -1185,10 +1186,11 @@ const topicPrimaryDisabled = computed(() => {
 const primaryActionLabel = computed(() => {
   if (isTopicDiscoveryModule.value) {
     if (topicAtHumanPause.value || currentTopicRun.value.status === 'checkpoint') return '等待确认'
+    // 本步已失败：下方「驳回并返回」处理；顶栏保持与执行中一致，避免误点「再次运行」
+    if (topicShowFailedPanel.value || currentTopicRun.value.status === 'failed') return '运行中…'
     if (currentTopicRun.value.status === 'running' || running.value) return '运行中…'
     if (topicReadyForLiteratureReview.value) return '生成文献综述'
     if (topicServerRunCompleted.value) return '再次运行'
-    if (currentTopicRun.value.status === 'failed') return '再次运行'
     return '运行'
   }
   if (isLiteratureReviewModule.value) {
