@@ -724,11 +724,25 @@ func (s *TopicDiscoveryRunService) buildRunView(manuscriptID uint64, runVersion 
 				}
 			}
 		}
-		merged := paperstep.LoadStepExtra(&r)
-		if len(merged) > 0 {
-			sv.Result = json.RawMessage(jsonx.MustJSON(merged))
-		} else if len(r.Result) > 0 {
-			sv.Result = json.RawMessage(r.Result)
+		if r.StageCode == "idea_discovery" || r.StageCode == "topic_discovery" {
+			merged := paperstep.LoadStepResultMap(&r)
+			var rt map[string]any
+			if len(r.RuntimeState) > 0 {
+				_ = json.Unmarshal(r.RuntimeState, &rt)
+			}
+			for k, v := range rt {
+				merged[k] = v
+			}
+			if len(merged) > 0 {
+				sv.Result = json.RawMessage(jsonx.MustJSON(merged))
+			}
+		} else {
+			merged := paperstep.LoadStepExtra(&r)
+			if len(merged) > 0 {
+				sv.Result = json.RawMessage(jsonx.MustJSON(merged))
+			} else if len(r.Result) > 0 {
+				sv.Result = json.RawMessage(r.Result)
+			}
 		}
 		if len(r.Files) > 0 {
 			sv.Files = json.RawMessage(r.Files)
@@ -758,8 +772,7 @@ func (s *TopicDiscoveryRunService) buildRunView(manuscriptID uint64, runVersion 
 		for _, r := range rows {
 			if r.StageCode == "idea_discovery" && strings.TrimSpace(r.Status) == "running" {
 				meta := paperstep.LoadStepExtra(&r)
-				pending := pendingPhaseFromMeta(meta)
-				if IdeaDiscoveryNeedsUserConfirm(meta, pending) {
+				if IdeaDiscoveryRunAwaitingUserConfirm(meta) {
 					view.PauseAfterStage = "idea_discovery"
 					runStatus = "checkpoint"
 					break

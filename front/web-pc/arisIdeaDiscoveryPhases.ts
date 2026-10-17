@@ -151,15 +151,32 @@ function uiGroupToRowStatus(
   return 'pending'
 }
 
-/** idea_discovery 步仍为 running，但 ARIS 段间检查点等人确认 */
+/** 是否有 ARIS 段处于 executing（用户已确认、bot/CLI 仍在跑） */
+export function isAnyIdeaDiscoveryPhaseExecuting(
+  steps: TopicDiscoveryStepDTO[] | undefined,
+): boolean {
+  const step = ideaDiscoveryStepDto(steps)
+  if (!step) return false
+  const result = (step.result ?? {}) as Record<string, unknown>
+  for (const id of ARIS_IDEA_DISCOVERY_PHASES) {
+    if (parsePhaseStatus(result, id) === IDEA_DISCOVERY_PHASE_STATUS.executing) {
+      return true
+    }
+  }
+  return false
+}
+
+/** 段间人工检查点：存在 awaiting_confirm，且没有 executing / bot 仍在排队 */
 export function isIdeaDiscoveryArisCheckpoint(
   steps: TopicDiscoveryStepDTO[] | undefined,
   runStatus?: string,
 ): boolean {
-  if (runStatus === 'checkpoint') return true
+  void runStatus
   const step = ideaDiscoveryStepDto(steps)
   if (!step) return false
   const result = (step.result ?? {}) as Record<string, unknown>
+  if (result.async_llm === true) return false
+  if (isAnyIdeaDiscoveryPhaseExecuting(steps)) return false
   return firstIdeaDiscoveryPhaseAwaitingConfirm(result) != null
 }
 

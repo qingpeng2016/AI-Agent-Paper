@@ -53,6 +53,7 @@ import {
   resolveIdeaDiscoveryUIGroups,
   arisPhaseStatusLabel,
   arisPhaseAwaitingConfirmLabel,
+  isAnyIdeaDiscoveryPhaseExecuting,
   isIdeaDiscoveryArisCheckpoint,
   type ArisPhaseUiRow,
 } from './arisIdeaDiscoveryPhases'
@@ -918,8 +919,17 @@ const topicAtHumanPause = computed(() => {
   if (topicShowFailedPanel.value) return false
   if (currentTopicRun.value.status === 'completed') return false
   const raw = topicDiscoveryApiRun.value
+  const ideaDiscActive = raw?.steps.some(
+    (s) =>
+      (s.stage_code === 'idea_discovery' || s.stage_code === 'topic_discovery') &&
+      s.status === 'running',
+  )
+  if (ideaDiscActive && isAnyIdeaDiscoveryPhaseExecuting(raw?.steps)) return false
   if (isIdeaDiscoveryArisCheckpoint(raw?.steps, raw?.run_status)) return true
-  if (currentTopicRun.value.status === 'checkpoint') return true
+  if (currentTopicRun.value.status === 'checkpoint') {
+    if (ideaDiscActive && isAnyIdeaDiscoveryPhaseExecuting(raw?.steps)) return false
+    return true
+  }
   if (currentTopicRun.value.steps.some((s) => s.status === 'running')) return false
   if (raw?.steps.some((s) => s.status === 'running')) return false
   if (raw?.run_status === 'checkpoint') return true
@@ -1031,6 +1041,14 @@ const topicShowCheckpointPanel = computed(() => {
   if (topicShowFailedPanel.value) return false
   if (topicAwaitingRoundConfirm.value) return false
   const raw = topicDiscoveryApiRun.value
+  const ideaDisc = raw?.steps.some(
+    (s) => s.stage_code === 'idea_discovery' || s.stage_code === 'topic_discovery',
+  )
+  if (ideaDisc) {
+    if (!isIdeaDiscoveryArisCheckpoint(raw?.steps, raw?.run_status)) return false
+    if (!topicArisPhaseRows.value.some((r) => r.status === 'waiting_confirm')) return false
+    return topicForm.humanCheckpoint
+  }
   const arisPause = isIdeaDiscoveryArisCheckpoint(raw?.steps, raw?.run_status)
   if (!arisPause) {
     if (currentTopicRun.value.steps.some((s) => s.status === 'running')) return false
@@ -1503,15 +1521,16 @@ function topicRunFromApi(data: TopicDiscoveryRunResponse): TopicRunDemo {
   const pauseStage = topicPauseStageFromApi(data)
   const anyStepRunning = steps.some((s) => s.status === 'running')
   const arisPause = isIdeaDiscoveryArisCheckpoint(data.steps, data.run_status)
+  const ideaExecuting = isAnyIdeaDiscoveryPhaseExecuting(data.steps)
   if (
     pauseStage &&
-    (arisPause || !anyStepRunning) &&
+    (arisPause || (!anyStepRunning && !ideaExecuting)) &&
     status !== 'failed' &&
     status !== 'completed'
   ) {
     status = 'checkpoint'
   }
-  if (arisPause && status !== 'failed' && status !== 'completed') {
+  if (arisPause && !ideaExecuting && status !== 'failed' && status !== 'completed') {
     status = 'checkpoint'
   }
 

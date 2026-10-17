@@ -83,6 +83,24 @@ func normalizeIdeaDiscoveryPhaseStatus(s string) string {
 	}
 }
 
+// SeedIdeaDiscoveryRuntimePhaseStatuses 创建 run：五段 key 全写入，仅 first 为 executing，其余 not_started。
+func SeedIdeaDiscoveryRuntimePhaseStatuses(meta map[string]any, firstExecuting string) {
+	if meta == nil {
+		return
+	}
+	firstExecuting = strings.TrimSpace(firstExecuting)
+	if firstExecuting == "" {
+		firstExecuting = ideaDiscoveryRunStatePhases[0]
+	}
+	for _, id := range ideaDiscoveryRunStatePhases {
+		if id == firstExecuting {
+			setPhaseStatusInMeta(meta, id, IdeaDiscoveryPhaseExecuting)
+		} else {
+			setPhaseStatusInMeta(meta, id, IdeaDiscoveryPhaseNotStarted)
+		}
+	}
+}
+
 func setPhaseStatusInMeta(meta map[string]any, phase, status string) {
 	if meta == nil {
 		return
@@ -95,8 +113,22 @@ func setPhaseStatusInMeta(meta map[string]any, phase, status string) {
 }
 
 func phaseUserConfirmedForInvoke(meta map[string]any, phase string) bool {
-	st := phaseStatusInMeta(meta, phase)
-	return st == IdeaDiscoveryPhaseExecuting || st == IdeaDiscoveryPhaseCompleted
+	return phaseStatusInMeta(meta, phase) == IdeaDiscoveryPhaseExecuting
+}
+
+// IdeaDiscoveryBotMayInvokePending 仅 pending 段为 executing 且 run_state 该段未 done 时 bot 可打 aris。
+func IdeaDiscoveryBotMayInvokePending(meta map[string]any, pendingPhase string) bool {
+	pendingPhase = strings.TrimSpace(pendingPhase)
+	if pendingPhase == "" {
+		return false
+	}
+	if phaseStatusInMeta(meta, pendingPhase) != IdeaDiscoveryPhaseExecuting {
+		return false
+	}
+	if ideaDiscoveryNeedsUserConfirm(meta, pendingPhase, mustIdeaDiscoveryConfig()) {
+		return false
+	}
+	return true
 }
 
 func hasLegacyIdeaDiscoveryRuntimeKeys(meta map[string]any) bool {
@@ -194,7 +226,17 @@ func syncIdeaDiscoveryPhaseStatusesToMeta(meta map[string]any, paperRoot, runID 
 			if isRunStatePhaseDone(paperRoot, runID, phase) {
 				meta[phase] = IdeaDiscoveryPhaseCompleted
 			} else {
-				meta[phase] = IdeaDiscoveryPhaseExecuting
+				cur := phaseStatusInMeta(meta, phase)
+				switch cur {
+				case IdeaDiscoveryPhaseExecuting:
+					meta[phase] = IdeaDiscoveryPhaseExecuting
+				case IdeaDiscoveryPhaseCompleted:
+					meta[phase] = IdeaDiscoveryPhaseCompleted
+				case IdeaDiscoveryPhaseAwaitingConfirm:
+					meta[phase] = IdeaDiscoveryPhaseAwaitingConfirm
+				default:
+					meta[phase] = IdeaDiscoveryPhaseNotStarted
+				}
 			}
 			continue
 		}
@@ -214,11 +256,43 @@ func syncIdeaDiscoveryPhaseStatusesToMeta(meta map[string]any, paperRoot, runID 
 			meta[phase] = IdeaDiscoveryPhaseExecuting
 		}
 	}
+	// 任意时刻最多一段 executing（pending）；其余若误标 executing 则收回。
+	for _, id := range ideaDiscoveryRunStatePhases {
+		if id == pending {
+			continue
+		}
+		if phaseStatusInMeta(meta, id) != IdeaDiscoveryPhaseExecuting {
+			continue
+		}
+		if isRunStatePhaseDone(paperRoot, runID, id) {
+			meta[id] = IdeaDiscoveryPhaseCompleted
+		} else {
+			meta[id] = IdeaDiscoveryPhaseNotStarted
+		}
+	}
 }
 
 // IdeaDiscoveryNeedsUserConfirm 当前 pending 段需 pause 且状态不是 executing/completed。
 func IdeaDiscoveryNeedsUserConfirm(meta map[string]any, pendingPhase string) bool {
 	return ideaDiscoveryNeedsUserConfirm(meta, pendingPhase, mustIdeaDiscoveryConfig())
+}
+
+// IdeaDiscoveryRunAwaitingUserConfirm run 是否处于段间人工检查点（无 executing、无 async_llm 排队）。
+func IdeaDiscoveryRunAwaitingUserConfirm(meta map[string]any) bool {
+	if meta == nil {
+		return false
+	}
+	normalizeIdeaDiscoveryRuntimeMeta(meta)
+	if v, ok := meta["async_llm"].(bool); ok && v {
+		return false
+	}
+	for _, id := range ideaDiscoveryRunStatePhases {
+		if phaseStatusInMeta(meta, id) == IdeaDiscoveryPhaseExecuting {
+			return false
+		}
+	}
+	pending := pendingPhaseFromMeta(meta)
+	return IdeaDiscoveryNeedsUserConfirm(meta, pending)
 }
 
 func ideaDiscoveryNeedsUserConfirm(meta map[string]any, pendingPhase string, cfg ARISIdeaDiscoveryConfig) bool {

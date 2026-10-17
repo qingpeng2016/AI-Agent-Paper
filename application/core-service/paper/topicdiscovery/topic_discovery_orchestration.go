@@ -35,9 +35,8 @@ func (s *TopicDiscoveryRunService) stageBeginTopicDiscoveryAsync(
 	step.ExecProgressPct = 0
 	meta := paperstep.LoadStepExtra(step)
 	cfg := mustIdeaDiscoveryConfig()
-	first := cfg.FirstCheckpointPhaseID()
 	meta["async_llm"] = true
-	setPhaseStatusInMeta(meta, first, IdeaDiscoveryPhaseExecuting)
+	SeedIdeaDiscoveryRuntimePhaseStatuses(meta, cfg.FirstCheckpointPhaseID())
 	normalizeIdeaDiscoveryRuntimeMeta(meta)
 	delete(meta, "exec_progress_completed_calls")
 	delete(meta, "exec_progress_planned_calls")

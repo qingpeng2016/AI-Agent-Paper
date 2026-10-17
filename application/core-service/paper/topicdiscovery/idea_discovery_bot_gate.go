@@ -36,19 +36,24 @@ func (s *TopicDiscoveryRunService) PrepareIdeaDiscoveryBotInvoke(
 	if err != nil {
 		return false, err
 	}
-	if pending == "" {
-		return true, nil
-	}
 	syncIdeaDiscoveryRunProgressToMeta(meta, paperRoot, runID)
 
-	if !ideaDiscoveryRunStateFileExists(paperRoot, runID) {
-		return true, nil
-	}
-
-	if ideaDiscoveryNeedsUserConfirm(meta, pending, cfg) {
+	if pending == "" {
 		paperstep.PersistStepExtra(step, meta)
 		_ = s.steps.SaveStep(ctx, step)
-		return false, s.saveIdeaDiscoveryAwaitingUserContinue(ctx, step, paperRoot, runID, pending)
+		return false, nil
+	}
+
+	if !IdeaDiscoveryBotMayInvokePending(meta, pending) {
+		paperstep.PersistStepExtra(step, meta)
+		_ = s.steps.SaveStep(ctx, step)
+		if ideaDiscoveryNeedsUserConfirm(meta, pending, cfg) {
+			return false, s.saveIdeaDiscoveryAwaitingUserContinue(ctx, step, paperRoot, runID, pending)
+		}
+		delete(meta, "async_llm")
+		paperstep.PersistStepExtra(step, meta)
+		_ = s.steps.SaveStep(ctx, step)
+		return false, nil
 	}
 
 	paperstep.PersistStepExtra(step, meta)

@@ -116,7 +116,7 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 	normalizeIdeaDiscoveryRuntimeMeta(meta)
 	syncIdeaDiscoveryRunProgressToMeta(meta, paperRoot, runID)
 
-	if phaseUserConfirmedForInvoke(meta, pendingPhase) && !isRunStatePhaseDone(paperRoot, runID, pendingPhase) {
+	if IdeaDiscoveryBotMayInvokePending(meta, pendingPhase) && !isRunStatePhaseDone(paperRoot, runID, pendingPhase) {
 		meta["async_llm"] = true
 		meta["async_llm_done"] = false
 		paperstep.PersistStepExtra(step, meta)
@@ -128,6 +128,7 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 	if ideaDiscoveryNeedsUserConfirm(meta, pendingPhase, cfg) {
 		return s.saveIdeaDiscoveryAwaitingUserContinue(ctx, step, paperRoot, runID, pendingPhase)
 	}
+	delete(meta, "async_llm")
 	return s.saveIdeaDiscoveryAfterInvokeIdle(ctx, step, paperRoot, runID)
 }
 
