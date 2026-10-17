@@ -78,6 +78,7 @@ type ideaDiscoveryPlatform struct {
 	Resume        bool   `yaml:"resume"`
 	Sources       string `yaml:"sources"`
 	ArxivDownload bool   `yaml:"arxiv_download"`
+	ArxivMaxDownload int `yaml:"arxiv_max_download"`
 	MaxArisPerBot int    `yaml:"max_aris_per_bot"`
 }
 
@@ -187,11 +188,12 @@ func defaultARISIdeaDiscoveryConfig() ARISIdeaDiscoveryConfig {
 		CheckpointPhases:  defaultIdeaDiscoveryCheckpointPhases(),
 		CLISessionCleanup: defaultCLISessionCleanup(),
 		Platform: ideaDiscoveryPlatform{
-			AutoProceed:   false,
-			Resume:        false,
-			Sources:       "web",
-			ArxivDownload: true,
-			MaxArisPerBot: 1,
+			AutoProceed:      false,
+			Resume:           true,
+			Sources:          "web",
+			ArxivDownload:    true,
+			ArxivMaxDownload: 5,
+			MaxArisPerBot:    1,
 		},
 	}
 }
@@ -327,6 +329,9 @@ func normalizeIdeaDiscoveryConfig(c *ARISIdeaDiscoveryConfig) {
 	if c.Platform.MaxArisPerBot <= 0 {
 		c.Platform.MaxArisPerBot = 1
 	}
+	if c.Platform.ArxivMaxDownload <= 0 {
+		c.Platform.ArxivMaxDownload = defaultARISIdeaDiscoveryConfig().Platform.ArxivMaxDownload
+	}
 	c.CheckpointPhases = normalizeIdeaDiscoveryCheckpointPhases(c.CheckpointPhases)
 	normalizeCLISessionCleanup(&c.CLISessionCleanup)
 }
@@ -371,40 +376,75 @@ func (c ARISIdeaDiscoveryConfig) artifactConfigMap() map[string]string {
 		"corpus_json":        a.CorpusJSON,
 		"gate_report":        a.IdeaReport,
 		"composed_report":    a.IdeaReport,
-		"run_state_phases":   ideaDiscoveryRunStatePhasesCSV(),
+		"run_state_phases":     ideaDiscoveryRunStatePhasesCSV(),
+		"arxiv_download":       fmt.Sprintf("%t", c.Platform.ArxivDownload),
+		"arxiv_max_download":   fmt.Sprintf("%d", c.Platform.ArxivMaxDownload),
 	}
 }
 
-func (c ARISIdeaDiscoveryConfig) formatSkillArgumentsLine(paperRoot, dir, venue, language string) string {
+// ideaDiscoveryQuotedDirection 与手动 aris prompt 一致：引号内「研究内容 + 关键词」。
+func ideaDiscoveryQuotedDirection(input topicRunInput) string {
+	body := strings.TrimSpace(input.Description)
+	if body == "" {
+		body = strings.TrimSpace(input.Direction)
+	}
+	kw := strings.TrimSpace(keywordsLine(input))
+	inner := body
+	if kw != "" && !strings.Contains(body, "关键词：") && !strings.Contains(body, "关键词:") {
+		if !strings.Contains(body, "研究内容：") && !strings.Contains(body, "研究内容:") {
+			inner = fmt.Sprintf("研究内容：%s + 关键词：%s", body, kw)
+		} else {
+			inner = fmt.Sprintf("%s + 关键词：%s", body, kw)
+		}
+	}
+	inner = strings.ReplaceAll(inner, `"`, `\"`)
+	return `"` + inner + `"`
+}
+
+// FormatIdeaDiscoveryArgsLine 生成与 `aris prompt '/idea-discovery "…" — venue: …'` 一致的 $ARGUMENTS 行。
+func (c ARISIdeaDiscoveryConfig) FormatIdeaDiscoveryArgsLine(input topicRunInput, venue, language, runID string, withResume bool) string {
 	ap := "false"
 	if c.Platform.AutoProceed {
 		ap = "true"
 	}
-	composed := strings.TrimSpace(c.Artifacts.IdeaReport)
 	arxivDL := "false"
 	if c.Platform.ArxivDownload {
 		arxivDL = "true"
 	}
+	maxDL := c.Platform.ArxivMaxDownload
+	if maxDL <= 0 {
+		maxDL = 5
+	}
+	src := strings.TrimSpace(c.Platform.Sources)
+	if src == "" {
+		src = "web"
+	}
+	loc := lang.NormalizeContentLanguage(language)
+	if loc == "" {
+		loc = "zh"
+	}
+	venue = strings.TrimSpace(venue)
+	if venue == "" {
+		venue = strings.TrimSpace(input.Venue)
+	}
+	if venue == "" {
+		venue = "NeurIPS"
+	}
 	line := fmt.Sprintf(
-		`%s — venue: %s, AUTO_PROCEED: %s, RESUMABLE: true, ARXIV_DOWNLOAD: %s, render html: true, compact: false, composed: %s`,
-		dir, venue, ap, arxivDL, composed,
+		`%s — venue: %s — AUTO_PROCEED: %s — RESUMABLE: true — sources: %s — ARXIV_DOWNLOAD: %s — ARXIV_MAX_DOWNLOAD: %d — language: %s`,
+		ideaDiscoveryQuotedDirection(input),
+		venue,
+		ap,
+		src,
+		arxivDL,
+		maxDL,
+		loc,
 	)
-	if src := strings.TrimSpace(c.Platform.Sources); src != "" {
-		line += fmt.Sprintf(`, sources: %s`, src)
-	}
-	litDir := strings.TrimSpace(c.Artifacts.LiteratureDir)
-	if litDir == "" {
-		litDir = "literature"
-	}
-	if strings.TrimSpace(paperRoot) != "" {
-		lib := filepath.Join(filepath.Clean(paperRoot), filepath.FromSlash(litDir))
-		if abs, err := filepath.Abs(lib); err == nil {
-			lib = abs
+	if withResume {
+		runID = strings.TrimSpace(runID)
+		if runID != "" {
+			line += fmt.Sprintf(` — resume %s`, runID)
 		}
-		line += fmt.Sprintf(`, paper library: %s`, lib)
-	}
-	if loc := lang.NormalizeContentLanguage(language); loc != "" {
-		line += fmt.Sprintf(`, language: %s`, loc)
 	}
 	return line
 }

@@ -65,30 +65,20 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 		_ = s.steps.SaveStep(ctx, step)
 
 		syncIdeaDiscoveryRunProgressToMeta(meta, paperRoot, runID)
-		// 每次 invoke 前清理 workspace 下 CLI 会话，避免同 run 多次 prompt 累积 Claude 上下文。
-		cfg.ClearCLIWorkspaceSessions(paperRoot)
-		// resume 与 auto_proceed 无关；CLI「— resume」由 conf platform.resume 控制。
+		// 尚无 run_state 时清 CLI 会话；已有则保留，靠 — resume + .aris/runs 无脑续跑。
+		if !ideaDiscoveryRunStateFileExists(paperRoot, runID) {
+			cfg.ClearCLIWorkspaceSessions(paperRoot)
+		}
 		resuming := cfg.ShouldAppendCLIResume(paperRoot, runID)
 		locale := invokeCtx.Language
 		if err := PrepareNativeIdeaDiscoveryWorkspace(paperRoot, input, locale, cfg); err != nil {
 			return err
 		}
-		argsLine := cfg.formatSkillArgumentsLine(paperRoot, compactDirectionForPrompt(input), strings.TrimSpace(input.Venue), locale)
-		if resuming {
-			argsLine += fmt.Sprintf(` — resume %s`, runID)
-		}
-		proceedPhase := ""
-		if meta != nil {
-			argsLine, proceedPhase = applyCheckpointProceedToArgsLine(meta, argsLine, pendingPhase)
-			if proceedPhase != "" {
-				step.Result = jsonx.MustJSON(meta)
-				_ = s.steps.SaveStep(ctx, step)
-			}
-		}
+		argsLine := cfg.FormatIdeaDiscoveryArgsLine(input, strings.TrimSpace(input.Venue), locale, runID, resuming)
 		if err := writeNativePlatformArguments(paperRoot, argsLine); err != nil {
 			return err
 		}
-		userExtra := buildNativeIdeaDiscoverySessionNotes(cfg, runID, pendingPhase, resuming, proceedPhase)
+		userExtra := buildNativeIdeaDiscoverySessionNotes(cfg, runID, pendingPhase, resuming, "")
 		req := BuildTopicDiscoveryInvokeRequest(BehaviorIdeaDiscoveryRun, route.CapabilityID, input, invokeCtx)
 
 		raw, usage, err := s.invokeTopicDiscoveryBehavior(ctx, step, req, userExtra)
@@ -119,7 +109,7 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 			_, _ = s.ingestARISWorkspaceLiterature(ctx, userID, runVersion, step.ManuscriptID, paperRoot, cfg)
 		}
 
-		if !cfg.Platform.AutoProceed && cfg.PhaseNeedsUserCheckpoint(pendingPhase) {
+		if cfg.PhaseNeedsUserCheckpoint(pendingPhase) {
 			meta = paperstep.LoadStepExtra(step)
 			syncIdeaDiscoveryRunProgressToMeta(meta, paperRoot, runID)
 			meta["aris_awaiting_checkpoint"] = true
@@ -132,53 +122,39 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 			step.ExecProgressPct = ideaDiscoveryProgressPct(paperRoot, runID)
 			return s.steps.SaveStep(ctx, step)
 		}
-		if !cfg.Platform.AutoProceed {
-			meta = paperstep.LoadStepExtra(step)
-			syncIdeaDiscoveryRunProgressToMeta(meta, paperRoot, runID)
-			if phaseAtInvokeStart != "" && pendingPhase == phaseAtInvokeStart {
-				stallN := ideaDiscoveryStallBump(meta, pendingPhase)
-				if stallN >= ideaDiscoveryMaxStallInvokes {
-					reason := ideaDiscoveryStallExceededError(pendingPhase, runID, stallN).Error()
-					paperstep.FailTopicStep(step, reason)
-					meta["async_llm"] = false
-					delete(meta, "aris_awaiting_checkpoint")
-					step.Result = jsonx.MustJSON(meta)
-					step.ExecProgressPct = ideaDiscoveryProgressPct(paperRoot, runID)
-					_ = s.steps.SaveStep(ctx, step)
-					return fmt.Errorf("%s", reason)
-				}
-				meta["aris_checkpoint_proceed"] = true
-				meta["aris_checkpoint_proceed_phase"] = pendingPhase
-			} else if phaseAtInvokeStart != "" && pendingPhase != phaseAtInvokeStart {
-				ideaDiscoveryStallClear(meta, phaseAtInvokeStart)
-				ideaDiscoveryStallClear(meta, pendingPhase)
-			}
-			meta["async_llm"] = true
-			delete(meta, "aris_awaiting_checkpoint")
-			delete(meta, "aris_pause_after_phase")
-			step.Result = jsonx.MustJSON(meta)
-			step.Status = "running"
-			step.ExecProgressPct = ideaDiscoveryProgressPct(paperRoot, runID)
-			if err := s.steps.SaveStep(ctx, step); err != nil {
-				return err
-			}
-			chainInTick++
-			if chainInTick >= maxChain {
-				return nil
-			}
-			continue
-		}
 
+		meta = paperstep.LoadStepExtra(step)
+		syncIdeaDiscoveryRunProgressToMeta(meta, paperRoot, runID)
+		if phaseAtInvokeStart != "" && pendingPhase == phaseAtInvokeStart {
+			stallN := ideaDiscoveryStallBump(meta, pendingPhase)
+			if stallN >= ideaDiscoveryMaxStallInvokes {
+				reason := ideaDiscoveryStallExceededError(pendingPhase, runID, stallN).Error()
+				paperstep.FailTopicStep(step, reason)
+				meta["async_llm"] = false
+				delete(meta, "aris_awaiting_checkpoint")
+				step.Result = jsonx.MustJSON(meta)
+				step.ExecProgressPct = ideaDiscoveryProgressPct(paperRoot, runID)
+				_ = s.steps.SaveStep(ctx, step)
+				return fmt.Errorf("%s", reason)
+			}
+		} else if phaseAtInvokeStart != "" && pendingPhase != phaseAtInvokeStart {
+			ideaDiscoveryStallClear(meta, phaseAtInvokeStart)
+			ideaDiscoveryStallClear(meta, pendingPhase)
+		}
+		meta["async_llm"] = true
+		delete(meta, "aris_awaiting_checkpoint")
+		delete(meta, "aris_pause_after_phase")
+		step.Result = jsonx.MustJSON(meta)
+		step.Status = "running"
+		step.ExecProgressPct = ideaDiscoveryProgressPct(paperRoot, runID)
+		if err := s.steps.SaveStep(ctx, step); err != nil {
+			return err
+		}
 		chainInTick++
 		if chainInTick >= maxChain {
-			meta = paperstep.LoadStepExtra(step)
-			meta["async_llm"] = true
-			delete(meta, "aris_awaiting_checkpoint")
-			step.Result = jsonx.MustJSON(meta)
-			step.Status = "running"
-			step.ExecProgressPct = ideaDiscoveryProgressPct(paperRoot, runID)
-			return s.steps.SaveStep(ctx, step)
+			return nil
 		}
+		continue
 	}
 }
 
@@ -363,27 +339,6 @@ func checkpointProceedSessionNote(phase string) string {
 	)
 }
 
-func applyCheckpointProceedToArgsLine(meta map[string]any, argsLine, defaultPhase string) (string, string) {
-	if meta == nil {
-		return argsLine, ""
-	}
-	v, ok := meta["aris_checkpoint_proceed"].(bool)
-	if !ok || !v {
-		return argsLine, ""
-	}
-	phase := strings.TrimSpace(fmt.Sprint(meta["aris_checkpoint_proceed_phase"]))
-	if phase == "" {
-		phase = strings.TrimSpace(defaultPhase)
-	}
-	delete(meta, "aris_checkpoint_proceed")
-	delete(meta, "aris_checkpoint_proceed_phase")
-	suffix := fmt.Sprintf(
-		` — user checkpoint: PROCEED, execute phase %q now (do not re-stage; run /research-lit including search and ARXIV_DOWNLOAD per contract)`,
-		phase,
-	)
-	return argsLine + suffix, phase
-}
-
 func mergeNativeIdeaDiscoveryArtifacts(result map[string]any, paperRoot string, cfg ARISIdeaDiscoveryConfig) {
 	var found []string
 	for _, rel := range cfg.artifactPathsForResult() {
@@ -499,12 +454,7 @@ func (s *TopicDiscoveryRunService) ResumeIdeaDiscoveryFromCheckpoint(ctx context
 		return false, nil
 	}
 	delete(meta, "aris_awaiting_checkpoint")
-	phase := strings.TrimSpace(fmt.Sprint(meta["aris_pause_after_phase"]))
-	if phase == "" {
-		phase = "research-lit"
-	}
-	meta["aris_checkpoint_proceed"] = true
-	meta["aris_checkpoint_proceed_phase"] = phase
+	delete(meta, "aris_pause_after_phase")
 	meta["async_llm"] = true
 	step.Result = jsonx.MustJSON(meta)
 	step.Status = "running"

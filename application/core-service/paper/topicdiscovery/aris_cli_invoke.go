@@ -74,18 +74,9 @@ func buildHeadlessPrompt(capability, behavior, invokeDirRel string) string {
 	if invokeDirRel == "" {
 		invokeDirRel = ".paper/invoke"
 	}
+	// idea-discovery 走 buildIdeaDiscoveryCLIPrompt（与 ARIS 官方一致：/idea-discovery + $ARGUMENTS 同一 prompt）
 	if capability == "idea-discovery" || strings.Contains(behavior, "discovery.run") {
-		return fmt.Sprintf(`/idea-discovery
-
-Run the **installed** ARIS /idea-discovery skill (use bundled skill + tools via aris only; platform does not ship libs/aris).
-$ARGUMENTS are in %s/platform_user_prompt.txt (native CLI form).
-If %s/platform_session_notes.txt exists, read it for platform checkpoint PROCEED / resume hints (same as user reply in chat).
-Workspace contract: %s/idea_discovery_contract.yaml
-Manage run_state and phases inside this aris session per skill contract.
-Deliverables are Markdown only under configured artifact paths.
-Honor language in platform_user_prompt.txt (and context.language in request.json if present) for all deliverable Markdown.
-behavior_key=%s
-`, invokeDirRel, invokeDirRel, invokeDirRel, behavior)
+		return ""
 	}
 	return fmt.Sprintf(`[AI-Agent-Paper headless invoke]
 Execute research skill /%s in this workspace.
@@ -98,6 +89,24 @@ Execute research skill /%s in this workspace.
 5. behavior_key=%s
 Do not wrap JSON in markdown fences.
 `, capability, invokeDirRel, invokeDirRel, behavior)
+}
+
+// buildIdeaDiscoveryCLIPrompt 与 ARIS 文档一致：aris prompt '/idea-discovery <研究方向与开关…>'。
+// sessionNotes 为平台检查点 PROCEED / resume 提示（等同用户在 chat 里回复），非空时接在参数行后。
+func buildIdeaDiscoveryCLIPrompt(argsLine, sessionNotes string) string {
+	argsLine = strings.TrimSpace(argsLine)
+	var b strings.Builder
+	b.WriteString("/idea-discovery")
+	if argsLine != "" {
+		b.WriteByte(' ')
+		b.WriteString(argsLine)
+	}
+	sessionNotes = strings.TrimSpace(sessionNotes)
+	if sessionNotes != "" {
+		b.WriteString("\n\n")
+		b.WriteString(sessionNotes)
+	}
+	return b.String()
 }
 
 func platformSchemaJSON(behavior string) ([]byte, error) {
@@ -248,6 +257,20 @@ func buildARISNativeCLIArgs(prompt string) []string {
 	return args
 }
 
+// arisCLIExecutable 写入 exec_command 的可复制 CLI 名（与真实 invoke 一致）。
+func arisCLIExecutable() string {
+	if cli := strings.TrimSpace(os.Getenv("PAPER_ARIS_CLI")); cli != "" {
+		return cli
+	}
+	return "aris"
+}
+
+// FormatARISInvokeShellCommand 完整 shell 单行：aris --output-format json prompt '…'。
+func FormatARISInvokeShellCommand(cliPrompt string) string {
+	cli, args := resolveARISCLIInvocation(cliPrompt)
+	return formatARISCLIExecShellLine(cli, args)
+}
+
 func resolveARISCLIInvocation(prompt string) (cli string, args []string) {
 	executor := strings.ToLower(strings.TrimSpace(os.Getenv("PAPER_ARIS_EXECUTOR")))
 	if executor == "" {
@@ -388,13 +411,15 @@ func runLocalStrategyInvoke(ctx context.Context, req StrategyInvokeRequest, plat
 
 	ideaCfg := mustIdeaDiscoveryConfig()
 	paperRoot := filepath.Join(sessionDir, arisRunWorkspaceDir)
+	var discoveryInput topicRunInput
 	if strings.Contains(behavior, "discovery.run") {
-		briefInput := topicRunInput{
-			Direction: req.Context.Direction,
-			Keywords:  req.Context.Keywords,
-			Venue:     req.Context.VenueLabel,
+		discoveryInput = topicRunInput{
+			Direction:   req.Context.Direction,
+			Description: req.Context.Direction,
+			Keywords:    req.Context.Keywords,
+			Venue:       req.Context.VenueLabel,
 		}
-		if err := PrepareNativeIdeaDiscoveryWorkspace(paperRoot, briefInput, req.Context.Language, ideaCfg); err != nil {
+		if err := PrepareNativeIdeaDiscoveryWorkspace(paperRoot, discoveryInput, req.Context.Language, ideaCfg); err != nil {
 			return nil, err
 		}
 		if err := writeIdeaDiscoveryContractFile(paperRoot, ideaCfg); err != nil {
@@ -424,11 +449,14 @@ func runLocalStrategyInvoke(ctx context.Context, req StrategyInvokeRequest, plat
 	platformUser = strings.TrimSpace(platformUser)
 	promptPath := filepath.Join(invokeDir, "platform_user_prompt.txt")
 	if strings.Contains(behavior, "discovery.run") {
-		if b, err := os.ReadFile(promptPath); err != nil || len(strings.TrimSpace(string(b))) == 0 {
-			argsLine := ideaCfg.formatSkillArgumentsLine(paperRoot, req.Context.Direction, req.Context.VenueLabel, req.Context.Language)
-			if err := os.WriteFile(promptPath, []byte(argsLine), 0o644); err != nil {
-				return nil, err
-			}
+		runID := newestIdeaDiscoveryRunStateID(paperRoot)
+		if runID == "" {
+			runID = resolveIdeaDiscoveryRunID(paperRoot, nil, discoveryInput)
+		}
+		withResume := ideaCfg.ShouldAppendCLIResume(paperRoot, runID)
+		argsLine := ideaCfg.FormatIdeaDiscoveryArgsLine(discoveryInput, req.Context.VenueLabel, req.Context.Language, runID, withResume)
+		if err := os.WriteFile(promptPath, []byte(argsLine), 0o644); err != nil {
+			return nil, err
 		}
 		if platformUser != "" {
 			_ = os.WriteFile(filepath.Join(invokeDir, "platform_session_notes.txt"), []byte(platformUser), 0o644)
@@ -442,8 +470,18 @@ func runLocalStrategyInvoke(ctx context.Context, req StrategyInvokeRequest, plat
 	runCtx, cancel := context.WithTimeout(ctx, arisInvokeTimeout())
 	defer cancel()
 
-	headlessPrompt := buildHeadlessPrompt(capability, behavior, ideaCfg.invokeDirRel())
-	stdout, _, execRecord, err := runARISCLI(runCtx, paperRoot, headlessPrompt)
+	cliPrompt := buildHeadlessPrompt(capability, behavior, ideaCfg.invokeDirRel())
+	if strings.Contains(behavior, "discovery.run") {
+		argsLine := ""
+		if b, err := os.ReadFile(promptPath); err == nil {
+			argsLine = strings.TrimSpace(string(b))
+		}
+		cliPrompt = buildIdeaDiscoveryCLIPrompt(argsLine, "")
+	}
+	if strings.TrimSpace(cliPrompt) == "" {
+		return nil, fmt.Errorf("empty ARIS CLI prompt for behavior_key=%q", behavior)
+	}
+	stdout, _, execRecord, err := runARISCLI(runCtx, paperRoot, cliPrompt)
 	if err != nil {
 		if runCtx.Err() == context.DeadlineExceeded {
 			return &localARISInvokeResult{ExecRecord: execRecord}, fmt.Errorf("local ARIS/Claude invoke timeout")

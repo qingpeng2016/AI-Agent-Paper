@@ -3,7 +3,6 @@ package topicdiscovery
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 )
@@ -73,23 +72,6 @@ func TestIdeaDiscoveryPhaseNeedsUserCheckpoint(t *testing.T) {
 	}
 	if cfg.PhaseNeedsUserCheckpoint("idea-creator") {
 		t.Fatal("idea-creator default false should not pause")
-	}
-}
-
-func TestApplyCheckpointProceedToArgsLine(t *testing.T) {
-	meta := map[string]any{
-		"aris_checkpoint_proceed":       true,
-		"aris_checkpoint_proceed_phase": "research-lit",
-	}
-	line, phase := applyCheckpointProceedToArgsLine(meta, "base args", "research-lit")
-	if phase != "research-lit" {
-		t.Fatalf("phase=%q", phase)
-	}
-	if !strings.Contains(line, "PROCEED") || !strings.Contains(line, "research-lit") {
-		t.Fatalf("line=%q", line)
-	}
-	if _, ok := meta["aris_checkpoint_proceed"]; ok {
-		t.Fatal("flag should be consumed")
 	}
 }
 

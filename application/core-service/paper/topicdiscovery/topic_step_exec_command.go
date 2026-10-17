@@ -50,13 +50,18 @@ func formatARISCLIExecShellLine(cli string, args []string) string {
 }
 
 func buildARISCLIExecEntry(paperRoot, cli string, args []string, prompt string) map[string]any {
+	shellLine := formatARISCLIExecShellLine(cli, args)
 	entry := map[string]any{
-		"invoked_at": time.Now().UTC().Format(time.RFC3339),
-		"workspace":  filepath.Clean(paperRoot),
-		"command":    formatARISCLIExecShellLine(cli, args),
+		"invoked_at":    time.Now().UTC().Format(time.RFC3339),
+		"workspace":     filepath.Clean(paperRoot),
+		"command":       shellLine,
+		"exec_command":  shellLine,
 	}
 	if p := strings.TrimSpace(prompt); p != "" {
 		entry["prompt"] = p
+		if strings.HasPrefix(p, "/idea-discovery") {
+			entry["behavior"] = "idea-discovery"
+		}
 	}
 	return entry
 }
@@ -90,7 +95,9 @@ func parseARISExecRecordText(record string) map[string]any {
 			continue
 		}
 		if strings.HasPrefix(line, "command:") {
-			entry["command"] = strings.TrimSpace(strings.TrimPrefix(line, "command:"))
+			cmd := strings.TrimSpace(strings.TrimPrefix(line, "command:"))
+			entry["command"] = cmd
+			entry["exec_command"] = cmd
 			continue
 		}
 	}

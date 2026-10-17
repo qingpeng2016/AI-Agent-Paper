@@ -63,7 +63,9 @@ platform:
   resume: true
   # 传给 skill 的 sources（如 local、web）；web 时由 /research-lit 联网检索
   sources: web
-  # true：/research-lit 阶段下载相关 arXiv PDF 到 literature_dir（对应 ARXIV_DOWNLOAD: true）
-  arxiv_download: false
+  # 是否下载 arXiv PDF 到 literature_dir（CLI 参数 ARXIV_DOWNLOAD: true/false）
+  arxiv_download: true
+  # 单次文献阶段最多下载几篇 PDF（CLI 参数 ARXIV_MAX_DOWNLOAD: <N>；仅 arxiv_download: true 时生效）
+  arxiv_max_download: 5
   # 单次 bot 任务内最多调用几次 aris CLI；1 表示每段 phase 通常要再点继续 + 等 bot
   max_aris_per_bot: 1

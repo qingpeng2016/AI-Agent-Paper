@@ -15,6 +15,38 @@ func TestFormatARISCLIExecShellLine_promptQuoted(t *testing.T) {
 	}
 }
 
+func TestFormatARISInvokeShellCommand_ideaDiscovery(t *testing.T) {
+	cfg := defaultARISIdeaDiscoveryConfig()
+	in := topicRunInput{
+		Description: "研究内容：MDD 脑网络 + 关键词：graph theory",
+		Keywords:    []string{"major depressive disorder"},
+	}
+	argsLine := cfg.FormatIdeaDiscoveryArgsLine(in, "NeurIPS", "zh", "", false)
+	cliPrompt := buildIdeaDiscoveryCLIPrompt(argsLine, "")
+	line := FormatARISInvokeShellCommand(cliPrompt)
+	if !strings.HasPrefix(line, "aris --output-format json prompt '") {
+		t.Fatalf("prefix: %q", line)
+	}
+	for _, sub := range []string{
+		"/idea-discovery",
+		"— venue: NeurIPS —",
+		"AUTO_PROCEED: false",
+		"RESUMABLE: true",
+		"— sources: web —",
+		"ARXIV_DOWNLOAD: true",
+		"ARXIV_MAX_DOWNLOAD: 5",
+		"— language: zh",
+	} {
+		if !strings.Contains(line, sub) {
+			t.Fatalf("missing %q in %q", sub, line)
+		}
+	}
+	entry := buildARISCLIExecEntry("/tmp/ws", "aris", buildARISNativeCLIArgs(cliPrompt), cliPrompt)
+	if entry["exec_command"] != entry["command"] {
+		t.Fatalf("exec_command mismatch: %#v", entry)
+	}
+}
+
 func TestAppendTopicStepExecCommand_jsonNumbered(t *testing.T) {
 	step := &entity.PaperOutputTopicStep{StageCode: "idea_discovery"}
 	rec1 := formatARISCLIExecRecord("/tmp/ws", "aris", []string{"prompt", "one"}, "one")
