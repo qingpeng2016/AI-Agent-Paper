@@ -92,10 +92,11 @@ const arisRunWorkspaceDir = "paper"
 
 // ARISIdeaDiscoveryConfig 与 conf/aris_idea_discovery.yaml 对齐。
 type ARISIdeaDiscoveryConfig struct {
-	Artifacts        ideaDiscoveryArtifacts                    `yaml:"artifacts"`
-	Workspace        ideaDiscoveryWorkspace                    `yaml:"workspace"`
-	CheckpointPhases map[string]IdeaDiscoveryCheckpointPhase   `yaml:"checkpoint_phases"`
-	Platform         ideaDiscoveryPlatform                     `yaml:"platform"`
+	Artifacts          ideaDiscoveryArtifacts                  `yaml:"artifacts"`
+	Workspace          ideaDiscoveryWorkspace                  `yaml:"workspace"`
+	CheckpointPhases   map[string]IdeaDiscoveryCheckpointPhase `yaml:"checkpoint_phases"`
+	CLISessionCleanup  IdeaDiscoveryCLISessionCleanup          `yaml:"cli_session_cleanup"`
+	Platform           ideaDiscoveryPlatform                   `yaml:"platform"`
 }
 
 var (
@@ -183,7 +184,8 @@ func defaultARISIdeaDiscoveryConfig() ARISIdeaDiscoveryConfig {
 	return ARISIdeaDiscoveryConfig{
 		Artifacts: defaultIdeaDiscoveryArtifacts(),
 		Workspace: defaultIdeaDiscoveryWorkspace(),
-		CheckpointPhases: defaultIdeaDiscoveryCheckpointPhases(),
+		CheckpointPhases:  defaultIdeaDiscoveryCheckpointPhases(),
+		CLISessionCleanup: defaultCLISessionCleanup(),
 		Platform: ideaDiscoveryPlatform{
 			AutoProceed:   false,
 			Resume:        false,
@@ -326,6 +328,7 @@ func normalizeIdeaDiscoveryConfig(c *ARISIdeaDiscoveryConfig) {
 		c.Platform.MaxArisPerBot = 1
 	}
 	c.CheckpointPhases = normalizeIdeaDiscoveryCheckpointPhases(c.CheckpointPhases)
+	normalizeCLISessionCleanup(&c.CLISessionCleanup)
 }
 
 func ideaDiscoveryRunStatePhasesCSV() string {

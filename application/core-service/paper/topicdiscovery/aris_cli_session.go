@@ -1,43 +1,107 @@
 package topicdiscovery
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
-// clearARISCLIWorkspaceSession 删除 paperRoot 下 ARIS/Claude 持久化会话（与 platform.resume 无关）。
-// 另清理 bot 用户 $HOME/.claude/sessions 里仍引用该 workspace 路径的旧 session（删 inout 目录无法去掉这部分）。
-func clearARISCLIWorkspaceSession(paperRoot string) {
+// IdeaDiscoveryCLISessionCleanup 仅配置 bot 用户下全局 session 根目录（支持 ~/、$HOME/）；其余规则写死在代码中。
+type IdeaDiscoveryCLISessionCleanup struct {
+	Claude string `yaml:"claude"`
+	Codex  string `yaml:"codex"`
+}
+
+func defaultCLISessionCleanup() IdeaDiscoveryCLISessionCleanup {
+	return IdeaDiscoveryCLISessionCleanup{
+		Claude: "~/.claude/sessions",
+		Codex:  "~/.codex/sessions",
+	}
+}
+
+func normalizeCLISessionCleanup(c *IdeaDiscoveryCLISessionCleanup) {
+	if c == nil {
+		return
+	}
+	def := defaultCLISessionCleanup()
+	if strings.TrimSpace(c.Claude) == "" {
+		c.Claude = def.Claude
+	}
+	if strings.TrimSpace(c.Codex) == "" {
+		c.Codex = def.Codex
+	}
+}
+
+func expandConfigPath(p string) string {
+	p = strings.TrimSpace(p)
+	if p == "" {
+		return ""
+	}
+	if strings.HasPrefix(p, "~/") {
+		if home, err := os.UserHomeDir(); err == nil && home != "" {
+			return filepath.Join(home, p[2:])
+		}
+	}
+	if strings.HasPrefix(p, "$HOME/") || strings.HasPrefix(p, "$HOME\\") {
+		if home, err := os.UserHomeDir(); err == nil && home != "" {
+			return filepath.Join(home, p[6:])
+		}
+	}
+	return os.ExpandEnv(p)
+}
+
+// ClearCLIWorkspaceSessions 每条 run 第一次 invoke 前清理会话（与 platform.resume 无关）。
+func (c ARISIdeaDiscoveryConfig) ClearCLIWorkspaceSessions(paperRoot string) {
+	cleanup := c.CLISessionCleanup
+	normalizeCLISessionCleanup(&cleanup)
+	clearCLIWorkspaceSessions(paperRoot, cleanup)
+}
+
+func clearCLIWorkspaceSessions(paperRoot string, cleanup IdeaDiscoveryCLISessionCleanup) {
 	paperRoot = filepath.Clean(strings.TrimSpace(paperRoot))
 	if paperRoot == "" {
 		return
 	}
-	for _, rel := range []string{".claude/sessions", ".claude"} {
-		_ = os.RemoveAll(filepath.Join(paperRoot, filepath.FromSlash(rel)))
+	for _, rel := range []string{".claude", ".codex"} {
+		_ = os.RemoveAll(filepath.Join(paperRoot, rel))
 	}
-	clearGlobalClaudeSessionsReferencingWorkspace(paperRoot)
+	clearGlobalSessionsClaude(paperRoot, expandConfigPath(cleanup.Claude))
+	clearGlobalSessionsCodex(paperRoot, expandConfigPath(cleanup.Codex))
 }
 
-func clearGlobalClaudeSessionsReferencingWorkspace(paperRoot string) {
+func clearGlobalSessionsClaude(paperRoot, sessionsDir string) {
+	if sessionsDir == "" {
+		return
+	}
+	matches, err := filepath.Glob(filepath.Join(sessionsDir, "session-*.json"))
+	if err != nil {
+		return
+	}
+	removeSessionFilesReferencingWorkspace(paperRoot, matches)
+}
+
+func clearGlobalSessionsCodex(paperRoot, sessionsDir string) {
+	if sessionsDir == "" {
+		return
+	}
+	var paths []string
+	_ = filepath.WalkDir(sessionsDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		paths = append(paths, path)
+		return nil
+	})
+	removeSessionFilesReferencingWorkspace(paperRoot, paths)
+}
+
+func removeSessionFilesReferencingWorkspace(paperRoot string, paths []string) {
 	absRoot, err := filepath.Abs(paperRoot)
 	if err != nil {
 		absRoot = paperRoot
 	}
-	home, err := os.UserHomeDir()
-	if err != nil || strings.TrimSpace(home) == "" {
-		return
-	}
-	sessionsDir := filepath.Join(home, ".claude", "sessions")
-	entries, err := os.ReadDir(sessionsDir)
-	if err != nil {
-		return
-	}
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasPrefix(e.Name(), "session-") || !strings.HasSuffix(e.Name(), ".json") {
-			continue
-		}
-		path := filepath.Join(sessionsDir, e.Name())
+	for _, path := range paths {
 		b, err := os.ReadFile(path)
 		if err != nil {
 			continue

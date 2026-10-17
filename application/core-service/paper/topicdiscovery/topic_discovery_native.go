@@ -66,7 +66,7 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 		syncIdeaDiscoveryRunProgressToMeta(meta, paperRoot, runID)
 		// platform.resume 只控制 $ARGUMENTS 是否追加「— resume」；不清理 ARIS CLI 在 cwd 下的会话文件。
 		if ideaDiscoveryInvokeCount(meta) == 0 {
-			clearARISCLIWorkspaceSession(paperRoot)
+			cfg.ClearCLIWorkspaceSessions(paperRoot)
 		}
 		// resume 与 auto_proceed 无关；CLI「— resume」由 conf platform.resume 控制。
 		resuming := cfg.ShouldAppendCLIResume(paperRoot, runID)

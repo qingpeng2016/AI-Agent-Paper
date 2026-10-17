@@ -3,11 +3,10 @@ package topicdiscovery
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
-func TestClearGlobalClaudeSessionsReferencingWorkspace(t *testing.T) {
+func TestClearGlobalSessionsClaude(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 
@@ -25,7 +24,7 @@ func TestClearGlobalClaudeSessionsReferencingWorkspace(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	clearGlobalClaudeSessionsReferencingWorkspace(paperRoot)
+	clearGlobalSessionsClaude(paperRoot, sessionsDir)
 
 	if _, err := os.Stat(matchPath); !os.IsNotExist(err) {
 		t.Fatal("matching global session should be removed")
@@ -35,21 +34,55 @@ func TestClearGlobalClaudeSessionsReferencingWorkspace(t *testing.T) {
 	}
 }
 
-func TestClearARISCLIWorkspaceSession_localDir(t *testing.T) {
+func TestClearGlobalSessionsCodexRecursive(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	paperRoot := filepath.Join(home, "inout", "user_1", "manuscript_1", "run_1", "paper")
+	nested := filepath.Join(home, ".codex", "sessions", "2026", "01")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	matchPath := filepath.Join(nested, "thread-abc.json")
+	if err := os.WriteFile(matchPath, []byte(`{"workspace":"`+paperRoot+`"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	clearGlobalSessionsCodex(paperRoot, filepath.Join(home, ".codex", "sessions"))
+
+	if _, err := os.Stat(matchPath); !os.IsNotExist(err) {
+		t.Fatal("codex nested session should be removed")
+	}
+}
+
+func TestClearCLIWorkspaceSessions_localWorkspaceDirs(t *testing.T) {
 	root := t.TempDir()
 	paperRoot := filepath.Join(root, "paper")
-	sess := filepath.Join(paperRoot, ".claude", "sessions", "session-x.json")
-	if err := os.MkdirAll(filepath.Dir(sess), 0o755); err != nil {
-		t.Fatal(err)
+	for _, rel := range []string{".claude/sessions/x.json", ".codex/state.json"} {
+		p := filepath.Join(paperRoot, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("{}"), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if err := os.WriteFile(sess, []byte("{}"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	clearARISCLIWorkspaceSession(paperRoot)
+	cfg := defaultARISIdeaDiscoveryConfig()
+	cfg.ClearCLIWorkspaceSessions(paperRoot)
 	if _, err := os.Stat(filepath.Join(paperRoot, ".claude")); !os.IsNotExist(err) {
-		t.Fatal(".claude under paperRoot should be removed")
+		t.Fatal(".claude should be removed")
 	}
-	if strings.Contains(root, " ") {
-		t.Skip("unused")
+	if _, err := os.Stat(filepath.Join(paperRoot, ".codex")); !os.IsNotExist(err) {
+		t.Fatal(".codex should be removed")
+	}
+}
+
+func TestExpandConfigPath(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	got := expandConfigPath("~/foo/bar")
+	want := filepath.Join(home, "foo", "bar")
+	if got != want {
+		t.Fatalf("expand: got %q want %q", got, want)
 	}
 }

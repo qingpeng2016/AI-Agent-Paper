@@ -49,13 +49,17 @@ checkpoint_phases:
     pause: true
     label_zh: 文献综述与实验规划
 
+# 每条 run 第一次 invoke 前：清 paperRoot/.claude、.codex，并在下列目录删「内容含本 run 路径」的 session 文件
+cli_session_cleanup:
+  claude: ~/.claude/sessions
+  codex: ~/.codex/sessions
+
 platform:
   # 传给 skill 的 AUTO_PROCEED（与 checkpoint_phases.pause 独立：前者管 skill 内行为，后者管平台段间是否停）
   auto_proceed: false
   # true：platform_user_prompt 追加「— resume <run_id>」（skill 续 phase）
   # false：不追加 resume 参数（与 Anthropic 200k 无直接等价关系）
-  # ARIS 还会在「运行 bot 的系统用户」~/.claude/sessions 按 workspace 路径复用会话；删 inout 不能清那里
-  # 平台在每条 run 的第一次 invoke 前会清 paper/.claude + 匹配路径的全局 session；同 run 内后续 invoke 不清
+  # 全局会话清理由顶层 cli_session_cleanup 配置；同 run 内第 2+ 次 invoke 不会清
   resume: true
   # 传给 skill 的 sources（如 local、web）；web 时由 /research-lit 联网检索
   sources: web
