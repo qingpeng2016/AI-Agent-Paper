@@ -43,13 +43,18 @@ func (s *TopicDiscoveryRunService) invokeLocalARIS(
 	}
 
 	respJSON, _ := json.Marshal(map[string]any{
-		"result_json":         json.RawMessage(out.ResultJSON),
-		"external_trace_id":   out.ExternalTraceID,
-		"raw_text":            out.RawText,
+		"result_json":       json.RawMessage(out.ResultJSON),
+		"external_trace_id": out.ExternalTraceID,
+		"raw_text":          out.RawText,
 	})
 	stageCode := topicStageCodeFromBehaviorKey(req.BehaviorKey)
 	result := stageResultJSONFromObject(stageCode, out.ResultJSON, out.RawText)
-	s.persistARISInvokeLog(ctx, step, route, req, string(reqJSON), string(respJSON), latencyMs, out.Usage, out, nil)
+	s.persistARISInvokeLog(
+		ctx, step, route, req,
+		clipJSONForMySQL(string(reqJSON)),
+		clipJSONForMySQL(string(respJSON)),
+		latencyMs, out.Usage, out, nil,
+	)
 	return result, out.Usage, nil
 }
 

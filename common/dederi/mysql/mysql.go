@@ -14,7 +14,7 @@ import (
 // NewDB 创建到mysql的链接
 func NewDB(source *conf.Mysql, replicas ...*conf.Mysql) *gorm.DB {
 	db, err := gorm.Open(mysql.New(mysql.Config{
-		DSN: fmt.Sprintf("%s:%s@tcp(%s)/%s?charset=utf8&parseTime=True&loc=Asia%%2FShanghai",
+		DSN: fmt.Sprintf("%s:%s@tcp(%s)/%s?charset=utf8mb4&collation=utf8mb4_unicode_ci&parseTime=True&loc=Asia%%2FShanghai",
 			source.User,
 			source.Password,
 			source.Host,
@@ -28,6 +28,9 @@ func NewDB(source *conf.Mysql, replicas ...*conf.Mysql) *gorm.DB {
 	if err := db.Exec("SET time_zone = '+08:00'").Error; err != nil {
 		panic(fmt.Errorf("unable to set mysql session time_zone: %s", err))
 	}
+	if err := db.Exec("SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci").Error; err != nil {
+		panic(fmt.Errorf("unable to set mysql session charset: %s", err))
+	}
 	if source.LogMode {
 		db.Debug()
 	} else {
@@ -40,7 +43,7 @@ func NewDB(source *conf.Mysql, replicas ...*conf.Mysql) *gorm.DB {
 			if replica == nil {
 				continue
 			}
-			dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s?charset=utf8&parseTime=True&loc=Asia%%2FShanghai",
+			dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s?charset=utf8mb4&collation=utf8mb4_unicode_ci&parseTime=True&loc=Asia%%2FShanghai",
 				replica.User,
 				replica.Password,
 				replica.Host,

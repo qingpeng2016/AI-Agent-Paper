@@ -64,7 +64,9 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 		step.ExecProgressPct = ideaDiscoveryProgressPct(paperRoot, runID)
 		_ = s.steps.SaveStep(ctx, step)
 
-		resuming := ideaDiscoveryInvokeCount(meta) > 0
+		syncIdeaDiscoveryRunProgressToMeta(meta, paperRoot, runID)
+		// resume 与 auto_proceed 无关：仅当 .aris/runs/<run_id>.json 存在则追加，false/true 均相同。
+		resuming := ideaDiscoveryShouldAppendResume(paperRoot, runID)
 		argsLine := cfg.formatSkillArgumentsLine(paperRoot, compactDirectionForPrompt(input), strings.TrimSpace(input.Venue))
 		if resuming {
 			argsLine += fmt.Sprintf(` — resume %s`, runID)
@@ -83,7 +85,9 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 		meta = paperstep.LoadStepExtra(step)
 		meta["aris_invoke_count"] = ideaDiscoveryInvokeCount(meta) + 1
 		meta["aris_run_id"] = runID
-		meta["last_invoke_result"] = string(raw)
+		syncIdeaDiscoveryRunProgressToMeta(meta, paperRoot, runID)
+		// 完整 CLI 输出见 paper_llm_call_logs；step.result 只保留摘要，避免 JSON 过大 + 字符集问题
+		meta["last_invoke_preview"] = truncateUTF8(string(raw), 4096)
 		meta["tokens_prompt"] = usage.PromptTokens
 		meta["tokens_completion"] = usage.CompletionTokens
 		delete(meta, "aris_invoke_last_error")
@@ -103,6 +107,7 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 
 		if !cfg.Platform.AutoProceed {
 			meta = paperstep.LoadStepExtra(step)
+			syncIdeaDiscoveryRunProgressToMeta(meta, paperRoot, runID)
 			meta["aris_awaiting_checkpoint"] = true
 			meta["aris_pause_after_phase"] = pendingPhase
 			delete(meta, "async_llm")

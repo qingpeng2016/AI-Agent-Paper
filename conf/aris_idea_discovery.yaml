@@ -30,8 +30,9 @@ workspace:
   run_state_dir: .aris/runs
 
 platform:
-  # false：每个 ARIS phase 结束后等平台/用户点「继续」（AUTO_PROCEED: false）；true：传 AUTO_PROCEED: true，由 ARIS 连续跑各 phase
+  # 只影响 skill 参数 AUTO_PROCEED 与 phase 间是否 checkpoint（与 resume 无关）
   auto_proceed: false
+  # resume：若 paper/.aris/runs/<run_id>.json 已存在则 platform_user_prompt 追加「— resume <run_id>」；auto_proceed false/true 该加都加
   # 传给 skill 的 sources（如 local、web）；web 时由 /research-lit 联网检索
   sources: web
   # true：/research-lit 阶段下载相关 arXiv PDF 到 literature_dir（对应 ARXIV_DOWNLOAD: true）

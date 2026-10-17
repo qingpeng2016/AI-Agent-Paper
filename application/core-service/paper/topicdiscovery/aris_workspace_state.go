@@ -71,3 +71,65 @@ func runStatePhaseNeedsWork(status string) bool {
 		return true
 	}
 }
+
+func runStatePhaseCompleted(status string) bool {
+	switch strings.TrimSpace(strings.ToLower(status)) {
+	case "done", "accepted", "provisional", "skipped":
+		return true
+	default:
+		return false
+	}
+}
+
+// ideaDiscoveryCompletedPhaseCount 读工作区 run_state，已完成 phase 数量（DB 未同步时的依据）。
+func ideaDiscoveryCompletedPhaseCount(paperRoot, runID string) int {
+	path := mustIdeaDiscoveryConfig().RunStateFileAbs(paperRoot, runID)
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return 0
+	}
+	var st struct {
+		Phases []struct {
+			Status string `json:"status"`
+		} `json:"phases"`
+	}
+	if json.Unmarshal(b, &st) != nil {
+		return 0
+	}
+	n := 0
+	for _, ph := range st.Phases {
+		if runStatePhaseCompleted(ph.Status) {
+			n++
+		}
+	}
+	return n
+}
+
+// ideaDiscoveryRunStateFileExists 是否存在 .aris/runs/{run_id}.json（如 mdd-rsfmri-graph-topology-20261015.json）。
+func ideaDiscoveryRunStateFileExists(paperRoot, runID string) bool {
+	runID = strings.TrimSpace(runID)
+	if runID == "" {
+		return false
+	}
+	path := mustIdeaDiscoveryConfig().RunStateFileAbs(paperRoot, runID)
+	st, err := os.Stat(path)
+	return err == nil && st != nil && !st.IsDir()
+}
+
+// ideaDiscoveryShouldAppendResume 是否在 $ARGUMENTS 追加「— resume <run_id>」。
+// 仅看工作区 run_state 文件是否存在；与 auto_proceed、DB step.result 无关。
+func ideaDiscoveryShouldAppendResume(paperRoot, runID string) bool {
+	return ideaDiscoveryRunStateFileExists(paperRoot, runID)
+}
+
+// syncIdeaDiscoveryRunProgressToMeta 把 run_state 进度写入 step.result（展示/排查用，不参与 resume 判定）。
+func syncIdeaDiscoveryRunProgressToMeta(meta map[string]any, paperRoot, runID string) {
+	if meta == nil {
+		return
+	}
+	completed := ideaDiscoveryCompletedPhaseCount(paperRoot, runID)
+	meta["aris_phases_completed"] = completed
+	if pending, err := ideaDiscoveryResumePhase(paperRoot, runID); err == nil && strings.TrimSpace(pending) != "" {
+		meta["aris_pending_phase"] = pending
+	}
+}
