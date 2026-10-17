@@ -11,6 +11,23 @@ export type ArisPhaseUiRow = {
   status: ArisPhaseUiStatus
 }
 
+/** 子阶段展示名（内部 id 仍为英文，与 run_state / 后端一致） */
+export const ARIS_PHASE_LABEL_ZH: Record<ArisIdeaDiscoveryPhaseId, string> = {
+  'research-lit': '文献调研',
+  'idea-creator': '想法生成',
+  'novelty-check': '新颖性检验',
+  'research-review': '外部评审',
+  'research-refine-pipeline': '方法精化与实验规划',
+}
+
+export function arisPhaseIdLabel(id: ArisIdeaDiscoveryPhaseId): string {
+  return ARIS_PHASE_LABEL_ZH[id] ?? id
+}
+
+export const ARIS_IDEA_DISCOVERY_PHASES_LABEL_ZH = ARIS_IDEA_DISCOVERY_PHASES.map(
+  (id) => ARIS_PHASE_LABEL_ZH[id],
+).join(' → ')
+
 function ideaDiscoveryStepDto(
   steps: TopicDiscoveryStepDTO[] | undefined,
 ): TopicDiscoveryStepDTO | undefined {
