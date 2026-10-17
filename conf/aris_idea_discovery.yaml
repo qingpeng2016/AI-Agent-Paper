@@ -56,7 +56,7 @@ platform:
   # false：不追加 resume 参数（与 Anthropic 200k 无直接等价关系）
   # ARIS 还会在「运行 bot 的系统用户」~/.claude/sessions 按 workspace 路径复用会话；删 inout 不能清那里
   # 平台在每条 run 的第一次 invoke 前会清 paper/.claude + 匹配路径的全局 session；同 run 内后续 invoke 不清
-  resume: false
+  resume: true
   # 传给 skill 的 sources（如 local、web）；web 时由 /research-lit 联网检索
   sources: web
   # true：/research-lit 阶段下载相关 arXiv PDF 到 literature_dir（对应 ARXIV_DOWNLOAD: true）
