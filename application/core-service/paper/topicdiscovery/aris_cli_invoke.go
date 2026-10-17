@@ -91,22 +91,13 @@ Do not wrap JSON in markdown fences.
 `, capability, invokeDirRel, invokeDirRel, behavior)
 }
 
-// buildIdeaDiscoveryCLIPrompt 与 ARIS 文档一致：aris prompt '/idea-discovery <研究方向与开关…>'。
-// sessionNotes 为平台检查点 PROCEED / resume 提示（等同用户在 chat 里回复），非空时接在参数行后。
-func buildIdeaDiscoveryCLIPrompt(argsLine, sessionNotes string) string {
+// buildIdeaDiscoveryCLIPrompt 仅 `/idea-discovery` + FormatIdeaDiscoveryArgsLine 产物，不追加任何其它参数或说明。
+func buildIdeaDiscoveryCLIPrompt(argsLine string) string {
 	argsLine = strings.TrimSpace(argsLine)
-	var b strings.Builder
-	b.WriteString("/idea-discovery")
-	if argsLine != "" {
-		b.WriteByte(' ')
-		b.WriteString(argsLine)
+	if argsLine == "" {
+		return "/idea-discovery"
 	}
-	sessionNotes = strings.TrimSpace(sessionNotes)
-	if sessionNotes != "" {
-		b.WriteString("\n\n")
-		b.WriteString(sessionNotes)
-	}
-	return b.String()
+	return "/idea-discovery " + argsLine
 }
 
 func platformSchemaJSON(behavior string) ([]byte, error) {
@@ -449,14 +440,20 @@ func runLocalStrategyInvoke(ctx context.Context, req StrategyInvokeRequest, plat
 	platformUser = strings.TrimSpace(platformUser)
 	promptPath := filepath.Join(invokeDir, "platform_user_prompt.txt")
 	if strings.Contains(behavior, "discovery.run") {
-		runID := newestIdeaDiscoveryRunStateID(paperRoot)
-		if runID == "" {
-			runID = resolveIdeaDiscoveryRunID(paperRoot, nil, discoveryInput)
+		argsLine := ""
+		if b, err := os.ReadFile(promptPath); err == nil {
+			argsLine = strings.TrimSpace(string(b))
 		}
-		withResume := ideaCfg.ShouldAppendCLIResume(paperRoot, runID)
-		argsLine := ideaCfg.FormatIdeaDiscoveryArgsLine(discoveryInput, req.Context.VenueLabel, req.Context.Language, runID, withResume)
-		if err := os.WriteFile(promptPath, []byte(argsLine), 0o644); err != nil {
-			return nil, err
+		if argsLine == "" {
+			runID := newestIdeaDiscoveryRunStateID(paperRoot)
+			if runID == "" {
+				runID = resolveIdeaDiscoveryRunID(paperRoot, nil, discoveryInput)
+			}
+			withResume := ideaCfg.ShouldAppendCLIResume(paperRoot, runID)
+			argsLine = ideaCfg.FormatIdeaDiscoveryArgsLine(discoveryInput, req.Context.VenueLabel, req.Context.Language, runID, withResume)
+			if err := os.WriteFile(promptPath, []byte(argsLine), 0o644); err != nil {
+				return nil, err
+			}
 		}
 		if platformUser != "" {
 			_ = os.WriteFile(filepath.Join(invokeDir, "platform_session_notes.txt"), []byte(platformUser), 0o644)
@@ -476,7 +473,7 @@ func runLocalStrategyInvoke(ctx context.Context, req StrategyInvokeRequest, plat
 		if b, err := os.ReadFile(promptPath); err == nil {
 			argsLine = strings.TrimSpace(string(b))
 		}
-		cliPrompt = buildIdeaDiscoveryCLIPrompt(argsLine, "")
+		cliPrompt = buildIdeaDiscoveryCLIPrompt(argsLine)
 	}
 	if strings.TrimSpace(cliPrompt) == "" {
 		return nil, fmt.Errorf("empty ARIS CLI prompt for behavior_key=%q", behavior)

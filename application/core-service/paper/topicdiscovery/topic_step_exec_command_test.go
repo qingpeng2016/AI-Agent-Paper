@@ -22,7 +22,7 @@ func TestFormatARISInvokeShellCommand_ideaDiscovery(t *testing.T) {
 		Keywords:    []string{"major depressive disorder"},
 	}
 	argsLine := cfg.FormatIdeaDiscoveryArgsLine(in, "NeurIPS", "zh", "", false)
-	cliPrompt := buildIdeaDiscoveryCLIPrompt(argsLine, "")
+	cliPrompt := buildIdeaDiscoveryCLIPrompt(argsLine)
 	line := FormatARISInvokeShellCommand(cliPrompt)
 	if !strings.HasPrefix(line, "aris --output-format json prompt '") {
 		t.Fatalf("prefix: %q", line)

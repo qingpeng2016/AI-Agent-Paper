@@ -47,6 +47,11 @@ func TestDefaultARISIdeaDiscoveryConfig(t *testing.T) {
 	if !strings.HasPrefix(line, `"`) {
 		t.Fatalf("quoted direction: %s", line)
 	}
+	for _, forbidden := range []string{"composed:", "paper library:", "render html:", "compact:"} {
+		if strings.Contains(line, forbidden) {
+			t.Fatalf("extra param %q in args line: %s", forbidden, line)
+		}
+	}
 	if cfg.InvokeLogsDirAbs("/tmp/paper") != filepath.Join("/tmp/paper", ".paper", "invoke", "logs") {
 		t.Fatalf("logs abs: %s", cfg.InvokeLogsDirAbs("/tmp/paper"))
 	}

@@ -39,13 +39,14 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 	}
 
 	paperRoot := ARISRunPaperRoot(uint64(userID), step.ManuscriptID, runVersion)
-	runID := resolveIdeaDiscoveryRunID(paperRoot, step, input)
 
 	invokeCtx := s.buildTopicStrategyInvokeContext(ctx, userID, runVersion, step, input, 1, 1, nil, nil)
 	maxChain := cfg.Platform.MaxArisPerBot
 	chainInTick := 0
 
 	for {
+		// 每轮刷新：ARIS 首次落盘 .aris/runs/<id>.json 后 run_id 可能与首 invoke 预测 slug 不同
+		runID := resolveIdeaDiscoveryRunID(paperRoot, step, input)
 		pendingPhase, err := ideaDiscoveryResumePhase(paperRoot, runID)
 		if err != nil {
 			return fmt.Errorf("run resume: %w", err)

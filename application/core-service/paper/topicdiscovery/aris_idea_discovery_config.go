@@ -382,26 +382,24 @@ func (c ARISIdeaDiscoveryConfig) artifactConfigMap() map[string]string {
 	}
 }
 
-// ideaDiscoveryQuotedDirection 与手动 aris prompt 一致：引号内「研究内容 + 关键词」。
+// ideaDiscoveryQuotedDirection 引号内研究方向：优先 Description（原样），否则 Direction + 关键词。
 func ideaDiscoveryQuotedDirection(input topicRunInput) string {
-	body := strings.TrimSpace(input.Description)
-	if body == "" {
-		body = strings.TrimSpace(input.Direction)
-	}
-	kw := strings.TrimSpace(keywordsLine(input))
-	inner := body
-	if kw != "" && !strings.Contains(body, "关键词：") && !strings.Contains(body, "关键词:") {
-		if !strings.Contains(body, "研究内容：") && !strings.Contains(body, "研究内容:") {
+	inner := strings.TrimSpace(input.Description)
+	if inner == "" {
+		body := strings.TrimSpace(input.Direction)
+		kw := strings.TrimSpace(keywordsLine(input))
+		if kw != "" {
 			inner = fmt.Sprintf("研究内容：%s + 关键词：%s", body, kw)
 		} else {
-			inner = fmt.Sprintf("%s + 关键词：%s", body, kw)
+			inner = body
 		}
 	}
 	inner = strings.ReplaceAll(inner, `"`, `\"`)
 	return `"` + inner + `"`
 }
 
-// FormatIdeaDiscoveryArgsLine 生成与 `aris prompt '/idea-discovery "…" — venue: …'` 一致的 $ARGUMENTS 行。
+// FormatIdeaDiscoveryArgsLine 只含约定开关（禁止追加 composed / paper library / render html 等）：
+// "…" — venue — AUTO_PROCEED — RESUMABLE — sources — ARXIV_DOWNLOAD [— ARXIV_MAX_DOWNLOAD 仅 download=true] — language [— resume]
 func (c ARISIdeaDiscoveryConfig) FormatIdeaDiscoveryArgsLine(input topicRunInput, venue, language, runID string, withResume bool) string {
 	ap := "false"
 	if c.Platform.AutoProceed {
@@ -410,10 +408,6 @@ func (c ARISIdeaDiscoveryConfig) FormatIdeaDiscoveryArgsLine(input topicRunInput
 	arxivDL := "false"
 	if c.Platform.ArxivDownload {
 		arxivDL = "true"
-	}
-	maxDL := c.Platform.ArxivMaxDownload
-	if maxDL <= 0 {
-		maxDL = 5
 	}
 	src := strings.TrimSpace(c.Platform.Sources)
 	if src == "" {
@@ -431,15 +425,21 @@ func (c ARISIdeaDiscoveryConfig) FormatIdeaDiscoveryArgsLine(input topicRunInput
 		venue = "NeurIPS"
 	}
 	line := fmt.Sprintf(
-		`%s — venue: %s — AUTO_PROCEED: %s — RESUMABLE: true — sources: %s — ARXIV_DOWNLOAD: %s — ARXIV_MAX_DOWNLOAD: %d — language: %s`,
+		`%s — venue: %s — AUTO_PROCEED: %s — RESUMABLE: true — sources: %s — ARXIV_DOWNLOAD: %s`,
 		ideaDiscoveryQuotedDirection(input),
 		venue,
 		ap,
 		src,
 		arxivDL,
-		maxDL,
-		loc,
 	)
+	if c.Platform.ArxivDownload {
+		maxDL := c.Platform.ArxivMaxDownload
+		if maxDL <= 0 {
+			maxDL = 5
+		}
+		line += fmt.Sprintf(` — ARXIV_MAX_DOWNLOAD: %d`, maxDL)
+	}
+	line += fmt.Sprintf(` — language: %s`, loc)
 	if withResume {
 		runID = strings.TrimSpace(runID)
 		if runID != "" {
