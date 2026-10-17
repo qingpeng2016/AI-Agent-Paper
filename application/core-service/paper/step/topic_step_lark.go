@@ -58,11 +58,27 @@ func arisPhaseLabelZh(phase string) string {
 	case "novelty-check":
 		return "新颖性检验"
 	case "research-review":
-		return "门禁检测"
+		return "外部审查"
 	case "research-refine-pipeline":
-		return "文献综述和实验规划"
+		return "文献综述与实验规划"
 	default:
 		return phase
+	}
+}
+
+// arisPhaseUiLabelZh 工作台 / 检查点对外展示（文献调研 + 论文大纲 合并为一步）。
+func arisPhaseUiLabelZh(phase string) string {
+	switch strings.TrimSpace(phase) {
+	case "research-lit", "idea-creator":
+		return "文献调研与选题大纲"
+	case "novelty-check":
+		return "新颖性检验"
+	case "research-review":
+		return "外部审查"
+	case "research-refine-pipeline":
+		return "文献综述与实验规划"
+	default:
+		return arisPhaseLabelZh(phase)
 	}
 }
 
@@ -139,5 +155,5 @@ func IdeaDiscoveryCheckpointDetail(pauseAfterPhase string) string {
 	if p == "" {
 		return "Idea Discovery 段间检查点，待用户在平台确认并继续"
 	}
-	return fmt.Sprintf("Idea Discovery 已完成本轮 invoke，下一阶段「%s」（%s）需在平台确认后继续", arisPhaseLabelZh(p), p)
+	return fmt.Sprintf("Idea Discovery 已完成本轮 invoke，下一阶段「%s」（%s）需在平台确认后继续", arisPhaseUiLabelZh(p), p)
 }

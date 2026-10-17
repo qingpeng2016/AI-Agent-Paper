@@ -1,32 +1,58 @@
 import {
   ARIS_IDEA_DISCOVERY_PHASES,
+  ARIS_IDEA_DISCOVERY_UI_PHASES,
   type ArisIdeaDiscoveryPhaseId,
+  type ArisIdeaDiscoveryUiPhaseId,
 } from './types'
 import type { TopicDiscoveryStepDTO } from './src/api/topicDiscovery'
 
 export type ArisPhaseUiStatus = 'pending' | 'running' | 'waiting_confirm' | 'completed'
 
 export type ArisPhaseUiRow = {
-  id: ArisIdeaDiscoveryPhaseId
+  id: ArisIdeaDiscoveryUiPhaseId
   status: ArisPhaseUiStatus
 }
 
-/** 子阶段展示名（内部 id 仍为英文，与 run_state / 后端一致） */
+/** run_state 子阶段中文名（与后端 / Lark 内部 id 一致） */
 export const ARIS_PHASE_LABEL_ZH: Record<ArisIdeaDiscoveryPhaseId, string> = {
   'research-lit': '文献调研',
   'idea-creator': '论文大纲',
   'novelty-check': '新颖性检验',
-  'research-review': '门禁检测',
-  'research-refine-pipeline': '文献综述和实验规划',
+  'research-review': '外部审查',
+  'research-refine-pipeline': '文献综述与实验规划',
 }
 
-export function arisPhaseIdLabel(id: ArisIdeaDiscoveryPhaseId): string {
-  return ARIS_PHASE_LABEL_ZH[id] ?? id
+/** 工作台子步骤展示名（4 步） */
+export const ARIS_UI_PHASE_LABEL_ZH: Record<ArisIdeaDiscoveryUiPhaseId, string> = {
+  'lit-idea-creator': '文献调研与选题大纲',
+  'novelty-check': '新颖性检验',
+  'research-review': '外部审查',
+  'research-refine-pipeline': '文献综述与实验规划',
 }
 
-export const ARIS_IDEA_DISCOVERY_PHASES_LABEL_ZH = ARIS_IDEA_DISCOVERY_PHASES.map(
-  (id) => ARIS_PHASE_LABEL_ZH[id],
+export function arisPhaseIdLabel(id: ArisIdeaDiscoveryUiPhaseId): string {
+  return ARIS_UI_PHASE_LABEL_ZH[id] ?? id
+}
+
+export const ARIS_IDEA_DISCOVERY_PHASES_LABEL_ZH = ARIS_IDEA_DISCOVERY_UI_PHASES.map(
+  (id) => ARIS_UI_PHASE_LABEL_ZH[id],
 ).join(' → ')
+
+const RUN_PHASE_COUNT = ARIS_IDEA_DISCOVERY_PHASES.length
+
+function internalRunPhaseIndex(phase: string): number {
+  const p = phase.trim()
+  if (!p) return 0
+  const idx = ARIS_IDEA_DISCOVERY_PHASES.indexOf(p as ArisIdeaDiscoveryPhaseId)
+  return idx < 0 ? 0 : idx
+}
+
+/** 将 run_state 的 pending phase 映射到 UI 四步中的下标 */
+export function arisRunPhaseToUiNextIndex(runPhase: string): number {
+  const idx = internalRunPhaseIndex(runPhase)
+  if (idx <= 1) return 0
+  return idx - 1
+}
 
 function ideaDiscoveryStepDto(
   steps: TopicDiscoveryStepDTO[] | undefined,
@@ -66,13 +92,13 @@ export function arisIdeaDiscoveryPhaseRows(
   runStatus?: string,
 ): ArisPhaseUiRow[] {
   const step = ideaDiscoveryStepDto(steps)
-  const phases = ARIS_IDEA_DISCOVERY_PHASES
+  const uiPhases = ARIS_IDEA_DISCOVERY_UI_PHASES
 
   if (!step || step.status === 'pending') {
-    return phases.map((id) => ({ id, status: 'pending' as const }))
+    return uiPhases.map((id) => ({ id, status: 'pending' as const }))
   }
   if (step.status === 'completed') {
-    return phases.map((id) => ({ id, status: 'completed' as const }))
+    return uiPhases.map((id) => ({ id, status: 'completed' as const }))
   }
 
   const result = (step.result ?? {}) as Record<string, unknown>
@@ -80,22 +106,22 @@ export function arisIdeaDiscoveryPhaseRows(
     result.aris_awaiting_checkpoint === true ||
     (runStatus === 'checkpoint' && String(result.aris_pause_after_phase ?? '').trim() !== '')
   const nextPhase = String(result.aris_pause_after_phase ?? '').trim()
-  let nextIdx = nextPhase ? phases.indexOf(nextPhase as ArisIdeaDiscoveryPhaseId) : 0
-  if (nextIdx < 0) nextIdx = 0
+  let uiNextIdx = arisRunPhaseToUiNextIndex(nextPhase)
 
   if (!nextPhase && step.status === 'running') {
     const pct = typeof step.exec_progress_pct === 'number' ? step.exec_progress_pct : 0
     if (pct > 0) {
-      nextIdx = Math.min(
-        phases.length - 1,
-        Math.max(0, Math.floor((pct / 100) * phases.length)),
+      const internalIdx = Math.min(
+        RUN_PHASE_COUNT - 1,
+        Math.max(0, Math.floor((pct / 100) * RUN_PHASE_COUNT)),
       )
+      uiNextIdx = internalIdx <= 1 ? 0 : Math.min(uiPhases.length - 1, internalIdx - 1)
     }
   }
 
-  return phases.map((id, i) => {
-    if (i < nextIdx) return { id, status: 'completed' as const }
-    if (i === nextIdx) {
+  return uiPhases.map((id, i) => {
+    if (i < uiNextIdx) return { id, status: 'completed' as const }
+    if (i === uiNextIdx) {
       if (awaiting) return { id, status: 'waiting_confirm' as const }
       if (step.status === 'running') return { id, status: 'running' as const }
       return { id, status: 'pending' as const }

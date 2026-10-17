@@ -402,6 +402,17 @@ export const ARIS_IDEA_DISCOVERY_PHASES = [
 
 export type ArisIdeaDiscoveryPhaseId = (typeof ARIS_IDEA_DISCOVERY_PHASES)[number]
 
+/** 工作台展示的 4 步（前两段 ARIS phase 合并为一行） */
+export const ARIS_IDEA_DISCOVERY_UI_PHASES = [
+  'lit-idea-creator',
+  'novelty-check',
+  'research-review',
+  'research-refine-pipeline',
+] as const
+
+export type ArisIdeaDiscoveryUiPhaseId =
+  (typeof ARIS_IDEA_DISCOVERY_UI_PHASES)[number]
+
 export const ARIS_IDEA_DISCOVERY_PHASES_LABEL = ARIS_IDEA_DISCOVERY_PHASES.join(' → ')
 
 /** UI：平台 retrieve 关闭时，文献由 ARIS /research-lit 拉取；前端只展示核心阶段 + 确认 */
