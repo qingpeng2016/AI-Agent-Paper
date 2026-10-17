@@ -1,3 +1,6 @@
+// topic_discovery bot：定时扫库，对「排队中的 Idea Discovery」触发 ARIS。
+// 真正调 CLI 的逻辑在 TopicDiscoveryRunService.RunNativeIdeaDiscoveryLLM（只走 /idea-discovery）。
+// 配置见 conf/aris_idea_discovery.yaml（auto_proceed、checkpoint、每 tick 最多几次 invoke）。
 package topicdiscovery
 
 import (
@@ -34,7 +37,7 @@ func NewTopicDiscoveryJob(
 	return &TopicDiscoveryJob{steps: steps, runs: runs, manuscripts: manuscripts}
 }
 
-// Run 扫描 idea_discovery（status=running 且 async_llm），每轮至多一次 ARIS invoke（auto_proceed=false + 检查点）。
+// Run 每轮 bot 任务：最多处理 scanLimit 条 running 的 idea_discovery step。
 func (j *TopicDiscoveryJob) Run(ctx context.Context) {
 	rows, err := j.steps.ListByStatusAndStage(ctx, "running", "idea_discovery", scanLimit)
 	if err != nil {
@@ -63,6 +66,7 @@ func (j *TopicDiscoveryJob) Run(ctx context.Context) {
 		zap.Int("skipped", skipped))
 }
 
+// processOne 单条 step：满足条件则 invoke 一次 ARIS，并写回 step.result / 通知。
 func (j *TopicDiscoveryJob) processOne(ctx context.Context, step *entity.PaperOutputTopicStep) string {
 	if strings.TrimSpace(step.Status) == "failed" {
 		return "skipped"
@@ -82,9 +86,11 @@ func (j *TopicDiscoveryJob) processOne(ctx context.Context, step *entity.PaperOu
 		return j.finishAlreadyDone(ctx, step)
 	}
 	meta := papersvc.LoadStepExtra(step)
+	// 仅 API 启动 LLM 后设的 async_llm=true 会进 bot；其余 running 步忽略。
 	if async, ok := meta["async_llm"].(bool); !ok || !async {
 		return "skipped"
 	}
+	// 平台检查点：等用户在前端 Continue/PROCEED，bot 不再自动调 CLI。
 	if v, ok := meta["aris_awaiting_checkpoint"].(bool); ok && v {
 		return "skipped"
 	}
@@ -97,7 +103,8 @@ func (j *TopicDiscoveryJob) processOne(ctx context.Context, step *entity.PaperOu
 
 	beforePrompt, beforeCompletion := tokenUsageFromMeta(meta)
 
-	if err := j.runs.RunNativeIdeaDiscoveryLLM(ctx, uint(step.UserID), step.RunVersion, step, input); err != nil {
+	// 一次 tick 内可能连跑多段（受 max_aris_per_bot 限制）；段间 checkpoint 会提前 return。
+	if err = j.runs.RunNativeIdeaDiscoveryLLM(ctx, uint(step.UserID), step.RunVersion, step, input); err != nil {
 		if strings.TrimSpace(step.Status) != "failed" {
 			j.markFailed(ctx, step, err.Error(), 0, 0)
 		} else {
@@ -124,6 +131,7 @@ func (j *TopicDiscoveryJob) processOne(ctx context.Context, step *entity.PaperOu
 	deltaPrompt := intMeta(meta["tokens_prompt"]) - beforePrompt
 	deltaCompletion := intMeta(meta["tokens_completion"]) - beforeCompletion
 
+	// invoke 后进入人工检查点（conf checkpoint_phases.pause + auto_proceed=false）。
 	if v, ok := meta["aris_awaiting_checkpoint"].(bool); ok && v {
 		phase := strings.TrimSpace(fmt.Sprint(meta["aris_pause_after_phase"]))
 		j.notifyStep(ctx, step, papersvc.TopicStepOutcomeCheckpoint, papersvc.IdeaDiscoveryCheckpointDetail(phase), deltaPrompt, deltaCompletion)
@@ -133,7 +141,7 @@ func (j *TopicDiscoveryJob) processOne(ctx context.Context, step *entity.PaperOu
 		j.notifyStep(ctx, step, papersvc.TopicStepOutcomeSuccess, "Idea Discovery 全流程已完成", deltaPrompt, deltaCompletion)
 		return "completed"
 	}
-	// 本 tick 已跑完一次 invoke，仍排队后续段：只打日志，不推 Lark（避免逐步刷屏）
+	// async_llm 仍为 true、run 未结束：下轮 bot 再 invoke（stall 自动 PROCEED 也在 RunNative 里）。
 	logger.InfoZ(ctx, "topic-discovery-invoke-tick-done",
 		zap.Uint64("step_id", step.ID),
 		zap.Uint64("manuscript_id", step.ManuscriptID),
