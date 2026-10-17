@@ -32,6 +32,14 @@ workspace:
 platform:
   # 只影响 skill 参数 AUTO_PROCEED 与 phase 间是否 checkpoint
   auto_proceed: false
+  # auto_proceed=false 时：/idea-discovery 各 ARIS phase 在「开始执行该 phase 前」是否平台人工暂停
+  # true=暂停等人点「继续」；false=不暂停，bot 立刻再次 invoke（相邻多个 false 会连续跑完）
+  checkpoint_phases:
+    research-lit: false
+    idea-creator: false
+    novelty-check: true
+    research-review: true
+    research-refine-pipeline: true
   # true：.aris/runs/<run_id>.json 已存在时在 platform_user_prompt 追加「— resume <run_id>」；false 仅依赖 run_state/session notes 续 phase（可减轻会话历史过长）
   resume: false
   # 传给 skill 的 sources（如 local、web）；web 时由 /research-lit 联网检索

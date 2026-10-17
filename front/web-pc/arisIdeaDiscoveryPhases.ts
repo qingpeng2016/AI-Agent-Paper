@@ -105,7 +105,10 @@ export function arisIdeaDiscoveryPhaseRows(
   const awaiting =
     result.aris_awaiting_checkpoint === true ||
     (runStatus === 'checkpoint' && String(result.aris_pause_after_phase ?? '').trim() !== '')
-  const nextPhase = String(result.aris_pause_after_phase ?? '').trim()
+  const pausePhase = String(result.aris_pause_after_phase ?? '').trim()
+  const pendingPhase = String(result.aris_pending_phase ?? '').trim()
+  const nextPhase =
+    awaiting ? pausePhase : pendingPhase || pausePhase
   let uiNextIdx = arisRunPhaseToUiNextIndex(nextPhase)
 
   if (!nextPhase && step.status === 'running') {

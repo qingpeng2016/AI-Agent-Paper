@@ -117,7 +117,7 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 			_, _ = s.ingestARISWorkspaceLiterature(ctx, userID, runVersion, step.ManuscriptID, paperRoot, cfg)
 		}
 
-		if !cfg.Platform.AutoProceed {
+		if !cfg.Platform.AutoProceed && cfg.PhaseNeedsUserCheckpoint(pendingPhase) {
 			meta = paperstep.LoadStepExtra(step)
 			syncIdeaDiscoveryRunProgressToMeta(meta, paperRoot, runID)
 			meta["aris_awaiting_checkpoint"] = true
@@ -128,6 +128,24 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 			step.Status = "running"
 			step.ExecProgressPct = ideaDiscoveryProgressPct(paperRoot, runID)
 			return s.steps.SaveStep(ctx, step)
+		}
+		if !cfg.Platform.AutoProceed {
+			meta = paperstep.LoadStepExtra(step)
+			syncIdeaDiscoveryRunProgressToMeta(meta, paperRoot, runID)
+			meta["async_llm"] = true
+			delete(meta, "aris_awaiting_checkpoint")
+			delete(meta, "aris_pause_after_phase")
+			step.Result = jsonx.MustJSON(meta)
+			step.Status = "running"
+			step.ExecProgressPct = ideaDiscoveryProgressPct(paperRoot, runID)
+			if err := s.steps.SaveStep(ctx, step); err != nil {
+				return err
+			}
+			chainInTick++
+			if chainInTick >= maxChain {
+				return nil
+			}
+			continue
 		}
 
 		chainInTick++

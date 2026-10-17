@@ -45,6 +45,34 @@ func TestNewestIdeaDiscoveryRunStateID(t *testing.T) {
 	}
 }
 
+func TestIdeaDiscoveryPhaseNeedsUserCheckpoint(t *testing.T) {
+	cfg := defaultARISIdeaDiscoveryConfig()
+	for _, tc := range []struct {
+		phase string
+		want  bool
+	}{
+		{"research-lit", false},
+		{"idea-creator", false},
+		{"novelty-check", true},
+		{"research-review", true},
+		{"research-refine-pipeline", true},
+		{"", false},
+	} {
+		if got := cfg.PhaseNeedsUserCheckpoint(tc.phase); got != tc.want {
+			t.Fatalf("phase %q: got %v want %v", tc.phase, got, tc.want)
+		}
+	}
+	cfg.Platform.CheckpointPhases = normalizeIdeaDiscoveryCheckpointPhases(map[string]bool{
+		"research-lit": true,
+	})
+	if !cfg.PhaseNeedsUserCheckpoint("research-lit") {
+		t.Fatal("checkpoint_phases research-lit:true should pause")
+	}
+	if cfg.PhaseNeedsUserCheckpoint("idea-creator") {
+		t.Fatal("idea-creator default false should not pause")
+	}
+}
+
 func TestApplyCheckpointProceedToArgsLine(t *testing.T) {
 	meta := map[string]any{
 		"aris_checkpoint_proceed":       true,

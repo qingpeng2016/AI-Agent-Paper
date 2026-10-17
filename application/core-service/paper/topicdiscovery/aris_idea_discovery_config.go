@@ -22,6 +22,31 @@ var ideaDiscoveryRunStatePhases = []string{
 	"research-refine-pipeline",
 }
 
+func defaultIdeaDiscoveryCheckpointPhases() map[string]bool {
+	return map[string]bool{
+		"research-lit":             false,
+		"idea-creator":             false,
+		"novelty-check":            true,
+		"research-review":          true,
+		"research-refine-pipeline": true,
+	}
+}
+
+func normalizeIdeaDiscoveryCheckpointPhases(m map[string]bool) map[string]bool {
+	def := defaultIdeaDiscoveryCheckpointPhases()
+	out := make(map[string]bool, len(ideaDiscoveryRunStatePhases))
+	for _, phase := range ideaDiscoveryRunStatePhases {
+		if m != nil {
+			if v, ok := m[phase]; ok {
+				out[phase] = v
+				continue
+			}
+		}
+		out[phase] = def[phase]
+	}
+	return out
+}
+
 type ideaDiscoveryArtifacts struct {
 	IdeaReport        string `yaml:"idea_report"`
 	FinalProposal     string `yaml:"final_proposal"`
@@ -37,6 +62,8 @@ type ideaDiscoveryPlatform struct {
 	AutoProceed   bool   `yaml:"auto_proceed"`
 	// Resume：run_state 已存在时是否在 platform_user_prompt 追加「— resume <run_id>」（段间续跑仍靠 run_state + session notes）。
 	Resume        bool   `yaml:"resume"`
+	// CheckpointPhases：auto_proceed=false 时，各 phase 执行前是否平台人工暂停（true=暂停，false=连跑并再次 invoke）。
+	CheckpointPhases map[string]bool `yaml:"checkpoint_phases"`
 	Sources       string `yaml:"sources"`
 	ArxivDownload bool   `yaml:"arxiv_download"`
 	MaxArisPerBot int    `yaml:"max_aris_per_bot"`
@@ -144,13 +171,31 @@ func defaultARISIdeaDiscoveryConfig() ARISIdeaDiscoveryConfig {
 		Artifacts: defaultIdeaDiscoveryArtifacts(),
 		Workspace: defaultIdeaDiscoveryWorkspace(),
 		Platform: ideaDiscoveryPlatform{
-			AutoProceed:   false,
-			Resume:        false,
-			Sources:       "web",
-			ArxivDownload: true,
-			MaxArisPerBot: 1,
+			AutoProceed:      false,
+			Resume:           false,
+			CheckpointPhases: defaultIdeaDiscoveryCheckpointPhases(),
+			Sources:          "web",
+			ArxivDownload:    true,
+			MaxArisPerBot:    1,
 		},
 	}
+}
+
+// PhaseNeedsUserCheckpoint 下一待执行 phase 是否触发平台人工检查点（platform.checkpoint_phases[phase]==true）。
+func (c ARISIdeaDiscoveryConfig) PhaseNeedsUserCheckpoint(pendingPhase string) bool {
+	pendingPhase = strings.TrimSpace(pendingPhase)
+	if pendingPhase == "" {
+		return false
+	}
+	m := c.Platform.CheckpointPhases
+	if len(m) == 0 {
+		m = defaultIdeaDiscoveryCheckpointPhases()
+	}
+	if pause, ok := m[pendingPhase]; ok {
+		return pause
+	}
+	// 未知 phase：保守起见暂停
+	return true
 }
 
 func ideaDiscoveryConfigPath() string {
@@ -227,6 +272,7 @@ func normalizeIdeaDiscoveryConfig(c *ARISIdeaDiscoveryConfig) {
 	if c.Platform.MaxArisPerBot <= 0 {
 		c.Platform.MaxArisPerBot = 1
 	}
+	c.Platform.CheckpointPhases = normalizeIdeaDiscoveryCheckpointPhases(c.Platform.CheckpointPhases)
 }
 
 func ideaDiscoveryRunStatePhasesCSV() string {
