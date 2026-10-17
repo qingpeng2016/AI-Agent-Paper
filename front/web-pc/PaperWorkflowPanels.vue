@@ -1421,12 +1421,9 @@ defineExpose({
                       type="checkbox"
                       :disabled="litReviewGenerateSubmitting"
                     />
-                    <span>人工检查点</span>
+                    <span>人工确认关键步骤</span>
                   </label>
                 </div>
-                <span class="paper-hint wf-lit-run-hint">
-                  开启后三步各暂停一次：检索入库 → 脑暴（含新颖性） → 审计，每步需确认并继续
-                </span>
               </div>
             </div>
           </div>

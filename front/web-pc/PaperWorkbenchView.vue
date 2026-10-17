@@ -52,6 +52,8 @@ import {
   ARIS_IDEA_DISCOVERY_PHASES_LABEL_ZH,
   arisPhaseIdLabel,
   arisPhaseStatusLabel,
+  arisPhaseAwaitingConfirmLabel,
+  isIdeaDiscoveryArisCheckpoint,
   type ArisPhaseUiRow,
 } from './arisIdeaDiscoveryPhases'
 import { DEMO_MODULE_TOKEN_ESTIMATES } from './demoOperationLogs'
@@ -112,10 +114,7 @@ const CHECKPOINT_COPY: Record<TopicCheckpointKey, Omit<TopicCheckpointView, 'key
   },
   idea_discovery_ready: {
     title: 'Idea Discovery 段间检查点',
-    lines: [
-      'ARIS 共 5 段（见下方子进度）；conf 中 auto_proceed: false 时，每段结束需点「确认并继续」',
-      '产物路径见 conf/aris_idea_discovery.yaml',
-    ],
+    lines: [],
   },
   topic_discovery_ready: {
     title: '选题发现产出',
@@ -895,13 +894,15 @@ function topicPauseStageFromApi(data: TopicDiscoveryRunResponse): string {
   return ''
 }
 
-/** 人工检查点暂停（无步骤在 running） */
+/** 人工检查点暂停（含 idea_discovery 仍为 running 的 ARIS 段间检查点） */
 const topicAtHumanPause = computed(() => {
   if (!topicForm.humanCheckpoint) return false
   if (topicShowFailedPanel.value) return false
   if (currentTopicRun.value.status === 'completed') return false
-  if (currentTopicRun.value.steps.some((s) => s.status === 'running')) return false
   const raw = topicDiscoveryApiRun.value
+  if (isIdeaDiscoveryArisCheckpoint(raw?.steps, raw?.run_status)) return true
+  if (currentTopicRun.value.status === 'checkpoint') return true
+  if (currentTopicRun.value.steps.some((s) => s.status === 'running')) return false
   if (raw?.steps.some((s) => s.status === 'running')) return false
   if (raw?.run_status === 'checkpoint') return true
   if (raw?.pause_after_stage?.trim()) return true
@@ -909,13 +910,17 @@ const topicAtHumanPause = computed(() => {
   return false
 })
 
-const topicRunBusy = computed(
-  () =>
+const topicRunBusy = computed(() => {
+  if (topicAtHumanPause.value) {
+    return topicContinueLoading.value
+  }
+  return (
     topicContinueLoading.value ||
     currentTopicRun.value.steps.some((s) => s.status === 'running') ||
-    (running.value && !topicAtHumanPause.value) ||
-    (currentTopicRun.value.status === 'running' && !topicAtHumanPause.value),
-)
+    running.value ||
+    currentTopicRun.value.status === 'running'
+  )
+})
 
 const topicDiscoveryApiRun = computed(
   () => topicLastRunByMs.value[activeManuscriptId.value] ?? null,
@@ -1007,8 +1012,12 @@ watch(topicDiscoveryIterations, (rows) => {
 const topicShowCheckpointPanel = computed(() => {
   if (topicShowFailedPanel.value) return false
   if (topicAwaitingRoundConfirm.value) return false
-  if (currentTopicRun.value.steps.some((s) => s.status === 'running')) return false
-  if (topicDiscoveryApiRun.value?.steps.some((s) => s.status === 'running')) return false
+  const raw = topicDiscoveryApiRun.value
+  const arisPause = isIdeaDiscoveryArisCheckpoint(raw?.steps, raw?.run_status)
+  if (!arisPause) {
+    if (currentTopicRun.value.steps.some((s) => s.status === 'running')) return false
+    if (raw?.steps.some((s) => s.status === 'running')) return false
+  }
   return topicAtHumanPause.value
 })
 
@@ -1054,10 +1063,6 @@ const topicArisPhaseRows = computed((): ArisPhaseUiRow[] =>
   ),
 )
 
-const topicArisPhaseAwaitingConfirm = computed(() =>
-  topicArisPhaseRows.value.some((r) => r.status === 'waiting_confirm'),
-)
-
 const topicCheckpointPanel = computed((): TopicCheckpointView | null => {
   if (!topicShowCheckpointPanel.value) return null
   if (currentTopicRun.value.checkpoint) return currentTopicRun.value.checkpoint
@@ -1073,6 +1078,21 @@ const topicCheckpointPanel = computed((): TopicCheckpointView | null => {
     }
   }
   return null
+})
+
+/** 检查点标题后缀：待确认的子阶段中文名（如文献调研），或主流程步骤 label */
+const topicCheckpointHeadingSuffix = computed((): string => {
+  const raw = topicDiscoveryApiRun.value
+  const phaseLabel = arisPhaseAwaitingConfirmLabel(raw?.steps, raw?.run_status)
+  if (phaseLabel) return phaseLabel
+  const pause = raw?.pause_after_stage?.trim()
+  if (pause) {
+    const def = TOPIC_DISCOVERY_FLOW_STEPS.find((s) => s.stageCode === pause)
+    if (def?.label) return def.label
+  }
+  const title = topicCheckpointPanel.value?.title?.trim()
+  if (title && !title.includes('段间检查点')) return title
+  return title || '选题发现-全流程'
 })
 
 const topicFailedSummary = computed((): { stageLabel: string; stageCode: string; error: string } | null => {
@@ -1128,7 +1148,7 @@ const topicPrimaryDisabled = computed(() => {
     return (
       topicRunBusy.value ||
       currentTopicRun.value.status === 'checkpoint' ||
-      currentTopicRun.value.status === 'running'
+      (currentTopicRun.value.status === 'running' && !topicAtHumanPause.value)
     )
   }
   return running.value
@@ -1136,7 +1156,7 @@ const topicPrimaryDisabled = computed(() => {
 
 const primaryActionLabel = computed(() => {
   if (isTopicDiscoveryModule.value) {
-    if (currentTopicRun.value.status === 'checkpoint') return '等待确认'
+    if (topicAtHumanPause.value || currentTopicRun.value.status === 'checkpoint') return '等待确认'
     if (currentTopicRun.value.status === 'running' || running.value) return '运行中…'
     if (topicReadyForLiteratureReview.value) return '生成文献综述'
     if (topicServerRunCompleted.value) return '再次运行'
@@ -1247,6 +1267,7 @@ const TOPIC_RUN_POLL_MS = 1500
 function topicRunHasAsyncWorkOnServer(msId: string): boolean {
   const apiRun = topicLastRunByMs.value[msId]
   if (!apiRun) return false
+  if (isIdeaDiscoveryArisCheckpoint(apiRun.steps, apiRun.run_status)) return false
   return apiRun.steps.some((s) => s.status === 'running')
 }
 
@@ -1257,6 +1278,7 @@ const topicRunNeedsPoll = computed(() => {
   if (msId && topicRunHasAsyncWorkOnServer(msId)) return true
   if (running.value) return true
   if (!isTopicDiscoveryModule.value || !topicRunVisible.value) return false
+  if (topicAtHumanPause.value) return false
   if (currentTopicRun.value.status === 'running') return true
   return currentTopicRun.value.steps.some((s) => s.status === 'running')
 })
@@ -1445,12 +1467,16 @@ function topicRunFromApi(data: TopicDiscoveryRunResponse): TopicRunDemo {
 
   const pauseStage = topicPauseStageFromApi(data)
   const anyStepRunning = steps.some((s) => s.status === 'running')
+  const arisPause = isIdeaDiscoveryArisCheckpoint(data.steps, data.run_status)
   if (
     pauseStage &&
-    !anyStepRunning &&
+    (arisPause || !anyStepRunning) &&
     status !== 'failed' &&
     status !== 'completed'
   ) {
+    status = 'checkpoint'
+  }
+  if (arisPause && status !== 'failed' && status !== 'completed') {
     status = 'checkpoint'
   }
 
@@ -1659,16 +1685,16 @@ function optimisticMarkNextStepRunning(msId: string) {
 }
 
 function syncRunningFlagFromServer(msId: string) {
+  if (topicAtHumanPause.value) {
+    running.value = false
+    return
+  }
   if (topicRunHasAsyncWorkOnServer(msId)) {
     running.value = true
     return
   }
   if (currentTopicRun.value.steps.some((s) => s.status === 'running')) {
     running.value = true
-    return
-  }
-  if (topicAtHumanPause.value) {
-    running.value = false
     return
   }
   running.value = false
@@ -2704,12 +2730,9 @@ watch(
                 disabled
                 aria-checked="true"
               />
-              <span>人工检查点</span>
+              <span>人工确认关键步骤</span>
             </label>
           </div>
-          <span class="paper-hint">
-            开启后三步各暂停一次：检索入库 → 脑暴（含新颖性）→ 审计，每步需确认并继续
-          </span>
         </div>
       </section>
 
@@ -2747,9 +2770,10 @@ watch(
             }}
           </span>
           <button
-            v-if="topicRunBusy || currentTopicRun.status === 'checkpoint'"
+            v-if="topicAtHumanPause || topicRunBusy || currentTopicRun.status === 'checkpoint'"
             type="button"
             class="paper-flow-cancel"
+            :disabled="topicTerminateLoading || topicContinueLoading"
             @click="cancelTopicRun"
           >
             取消
@@ -2763,15 +2787,19 @@ watch(
             :class="`paper-flow-step--${step.status}`"
           >
             <span class="paper-flow-step-icon" aria-hidden="true">
-              <span v-if="step.status === 'running'" class="paper-flow-step-spinner" />
+              <span
+                v-if="step.status === 'running' && !(step.stageCode === 'idea_discovery' && topicAtHumanPause)"
+                class="paper-flow-step-spinner"
+              />
               <template v-else>{{ topicStepIcon(step.status) }}</template>
             </span>
             <div class="paper-flow-step-body">
               <span class="paper-flow-step-label">{{ step.label }}</span>
-              <span v-if="step.checkpointKey && topicForm.humanCheckpoint" class="paper-flow-step-tag">
-                检查点 · {{ step.checkpointKey }}
-              </span>
-              <span v-if="step.status === 'running'" class="paper-flow-step-running" role="status">
+              <span
+                v-if="step.status === 'running' && !(step.stageCode === 'idea_discovery' && topicAtHumanPause)"
+                class="paper-flow-step-running"
+                role="status"
+              >
                 {{ topicStepRunningHint(step.stageCode) }}
               </span>
               <ul
@@ -2785,19 +2813,17 @@ watch(
                   class="paper-flow-subphase"
                   :class="`paper-flow-subphase--${row.status}`"
                 >
-                  <span class="paper-flow-subphase-name">{{ arisPhaseIdLabel(row.id) }}</span>
+                  <span class="paper-flow-subphase-main">
+                    <span
+                      v-if="row.status === 'waiting_confirm' || row.status === 'running'"
+                      class="paper-flow-subphase-spinner"
+                      aria-hidden="true"
+                    />
+                    <span class="paper-flow-subphase-name">{{ arisPhaseIdLabel(row.id) }}</span>
+                  </span>
                   <span class="paper-flow-subphase-status">{{ arisPhaseStatusLabel(row.status) }}</span>
                 </li>
               </ul>
-              <p
-                v-if="
-                  (step.stageCode === 'idea_discovery' || step.stageCode === 'topic_discovery') &&
-                  topicArisPhaseAwaitingConfirm
-                "
-                class="paper-flow-subphases-note"
-              >
-                本段已结束，请点击下方「确认并继续」进入下一段（auto_proceed: false 时重复 5 段）。
-              </p>
             </div>
           </li>
         </ol>
@@ -2904,8 +2930,16 @@ watch(
           <div v-if="topicCheckpointPanel" class="paper-checkpoint-head">
             <span class="paper-checkpoint-pause" aria-hidden="true">⏸</span>
             <div>
-              <h3 class="paper-checkpoint-title">人工检查点 · {{ topicCheckpointPanel.key }}</h3>
-              <p class="paper-checkpoint-sub">{{ topicCheckpointPanel.title }}</p>
+              <h3 class="paper-checkpoint-title">人工检查点 · {{ topicCheckpointHeadingSuffix }}</h3>
+              <p
+                v-if="
+                  topicCheckpointPanel.title &&
+                  !topicCheckpointPanel.title.includes('段间检查点')
+                "
+                class="paper-checkpoint-sub"
+              >
+                {{ topicCheckpointPanel.title }}
+              </p>
             </div>
           </div>
           <div v-else class="paper-checkpoint-head">
@@ -2919,7 +2953,7 @@ watch(
             <button
               type="button"
               class="paper-btn-secondary"
-              :disabled="topicTerminateLoading || running"
+              :disabled="topicTerminateLoading || topicContinueLoading"
               @click="rejectTopicCheckpoint"
             >
               {{ topicTerminateLoading ? '终止中…' : '终止并返回' }}
@@ -2930,12 +2964,7 @@ watch(
               :disabled="topicTerminateLoading || topicContinueLoading"
               @click="continueTopicAfterCheckpoint"
             >
-              {{
-                topicContinueLoading ||
-                currentTopicRun.steps.some((s) => s.status === 'running')
-                  ? '执行中…'
-                  : '确认并继续'
-              }}
+              {{ topicContinueLoading ? '执行中…' : '确认并继续' }}
             </button>
           </div>
         </div>
@@ -2959,7 +2988,7 @@ watch(
             <button
               type="button"
               class="paper-btn-primary"
-              :disabled="topicTerminateLoading || running"
+              :disabled="topicTerminateLoading"
               @click="rejectFailedTopicRun"
             >
               {{ topicTerminateLoading ? '处理中…' : '驳回并返回' }}
@@ -3460,9 +3489,14 @@ watch(
   cursor: pointer;
 }
 
-.paper-flow-cancel:hover {
+.paper-flow-cancel:hover:not(:disabled) {
   border-color: #cbd5e1;
   color: var(--atm-text, #1e1b4b);
+}
+
+.paper-flow-cancel:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .paper-flow-steps {
@@ -3558,7 +3592,7 @@ watch(
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: 0.45rem;
   width: 100%;
 }
 
@@ -3567,22 +3601,40 @@ watch(
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  font-size: 0.75rem;
-  line-height: 1.35;
-  padding: 0.2rem 0.45rem;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  padding: 0.36rem 0.55rem;
   border-radius: 4px;
   background: var(--paper-surface-muted, rgba(0, 0, 0, 0.04));
   color: var(--paper-text-secondary, #666);
 }
 
+.paper-flow-subphase-main {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.paper-flow-subphase-spinner {
+  flex-shrink: 0;
+  display: block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #e9d5ff;
+  border-top-color: #7c3aed;
+  border-radius: 50%;
+  animation: paper-flow-spin 0.75s linear infinite;
+}
+
 .paper-flow-subphase-name {
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   word-break: break-all;
 }
 
 .paper-flow-subphase-status {
   flex-shrink: 0;
-  font-size: 0.7rem;
+  font-size: 0.8125rem;
 }
 
 .paper-flow-subphase--completed {
@@ -3597,22 +3649,6 @@ watch(
 .paper-flow-subphase--waiting_confirm {
   background: rgba(245, 158, 11, 0.15);
   color: #b45309;
-}
-
-.paper-flow-subphases-note {
-  margin: 0.35rem 0 0;
-  font-size: 0.72rem;
-  line-height: 1.4;
-  color: #b45309;
-}
-
-.paper-flow-step-tag {
-  font-size: 11px;
-  font-weight: 600;
-  color: #b45309;
-  background: #fffbeb;
-  padding: 2px 8px;
-  border-radius: 6px;
 }
 
 .paper-retrieve-links {

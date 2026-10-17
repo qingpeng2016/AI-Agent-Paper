@@ -14,10 +14,10 @@ export type ArisPhaseUiRow = {
 /** 子阶段展示名（内部 id 仍为英文，与 run_state / 后端一致） */
 export const ARIS_PHASE_LABEL_ZH: Record<ArisIdeaDiscoveryPhaseId, string> = {
   'research-lit': '文献调研',
-  'idea-creator': '想法生成',
+  'idea-creator': '论文大纲',
   'novelty-check': '新颖性检验',
-  'research-review': '外部评审',
-  'research-refine-pipeline': '方法精化与实验规划',
+  'research-review': '门禁检测',
+  'research-refine-pipeline': '文献综述和实验规划',
 }
 
 export function arisPhaseIdLabel(id: ArisIdeaDiscoveryPhaseId): string {
@@ -34,6 +34,30 @@ function ideaDiscoveryStepDto(
   return steps?.find(
     (s) => s.stage_code === 'idea_discovery' || s.stage_code === 'topic_discovery',
   )
+}
+
+/** idea_discovery 步仍为 running，但 ARIS 段间检查点等人确认（与 bot 是否在跑无关） */
+export function isIdeaDiscoveryArisCheckpoint(
+  steps: TopicDiscoveryStepDTO[] | undefined,
+  runStatus?: string,
+): boolean {
+  if (runStatus === 'checkpoint') return true
+  const step = ideaDiscoveryStepDto(steps)
+  if (!step) return false
+  const result = (step.result ?? {}) as Record<string, unknown>
+  return result.aris_awaiting_checkpoint === true
+}
+
+/** 当前待用户确认的 ARIS 子阶段中文名（无则 null） */
+export function arisPhaseAwaitingConfirmLabel(
+  steps: TopicDiscoveryStepDTO[] | undefined,
+  runStatus?: string,
+): string | null {
+  const waiting = arisIdeaDiscoveryPhaseRows(steps, runStatus).find(
+    (r) => r.status === 'waiting_confirm',
+  )
+  if (!waiting) return null
+  return arisPhaseIdLabel(waiting.id)
 }
 
 /** 由 idea_discovery 步 result（aris_pause_after_phase / aris_awaiting_checkpoint）与进度推导子 phase 状态 */
