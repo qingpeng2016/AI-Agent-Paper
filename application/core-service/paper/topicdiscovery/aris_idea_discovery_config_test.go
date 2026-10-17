@@ -20,6 +20,9 @@ func TestDefaultARISIdeaDiscoveryConfig(t *testing.T) {
 	if cfg.Platform.MaxArisPerBot != 1 {
 		t.Fatalf("max_aris_per_bot: %d", cfg.Platform.MaxArisPerBot)
 	}
+	if cfg.Platform.Resume {
+		t.Fatal("resume should default false")
+	}
 	line := cfg.formatSkillArgumentsLine("/tmp/paper", "dir", "NeurIPS", "en")
 	if !strings.Contains(line, "AUTO_PROCEED: false") {
 		t.Fatalf("args line: %s", line)

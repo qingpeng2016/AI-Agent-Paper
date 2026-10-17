@@ -35,6 +35,8 @@ type ideaDiscoveryArtifacts struct {
 
 type ideaDiscoveryPlatform struct {
 	AutoProceed   bool   `yaml:"auto_proceed"`
+	// Resume：run_state 已存在时是否在 platform_user_prompt 追加「— resume <run_id>」（段间续跑仍靠 run_state + session notes）。
+	Resume        bool   `yaml:"resume"`
 	Sources       string `yaml:"sources"`
 	ArxivDownload bool   `yaml:"arxiv_download"`
 	MaxArisPerBot int    `yaml:"max_aris_per_bot"`
@@ -121,6 +123,14 @@ func (c ARISIdeaDiscoveryConfig) RunStateFileAbs(paperRoot, runID string) string
 	return filepath.Join(paperRootJoin(paperRoot, rel), runID+".json")
 }
 
+// ShouldAppendCLIResume 是否在 $ARGUMENTS 追加「— resume <run_id>」。
+func (c ARISIdeaDiscoveryConfig) ShouldAppendCLIResume(paperRoot, runID string) bool {
+	if !c.Platform.Resume {
+		return false
+	}
+	return ideaDiscoveryShouldAppendResume(paperRoot, runID)
+}
+
 func (c ARISIdeaDiscoveryConfig) invokeDirRel() string {
 	rel := strings.TrimSpace(c.Workspace.InvokeDir)
 	if rel == "" {
@@ -135,6 +145,7 @@ func defaultARISIdeaDiscoveryConfig() ARISIdeaDiscoveryConfig {
 		Workspace: defaultIdeaDiscoveryWorkspace(),
 		Platform: ideaDiscoveryPlatform{
 			AutoProceed:   false,
+			Resume:        false,
 			Sources:       "web",
 			ArxivDownload: true,
 			MaxArisPerBot: 1,

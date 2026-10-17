@@ -65,8 +65,8 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 		_ = s.steps.SaveStep(ctx, step)
 
 		syncIdeaDiscoveryRunProgressToMeta(meta, paperRoot, runID)
-		// resume 与 auto_proceed 无关：仅当 .aris/runs/<run_id>.json 存在则追加，false/true 均相同。
-		resuming := ideaDiscoveryShouldAppendResume(paperRoot, runID)
+		// resume 与 auto_proceed 无关；CLI「— resume」由 conf platform.resume 控制。
+		resuming := cfg.ShouldAppendCLIResume(paperRoot, runID)
 		locale := invokeCtx.Language
 		if err := PrepareNativeIdeaDiscoveryWorkspace(paperRoot, input, locale, cfg); err != nil {
 			return err
