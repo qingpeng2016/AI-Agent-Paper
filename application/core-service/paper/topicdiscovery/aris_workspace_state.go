@@ -139,6 +139,17 @@ func newestIdeaDiscoveryRunStateID(paperRoot string) string {
 	return cands[0].id
 }
 
+// ideaDiscoveryRunStateFileExists 工作区是否已有 .aris/runs/{run_id}.json（ARIS 首次 invoke 前通常不存在）。
+func ideaDiscoveryRunStateFileExists(paperRoot, runID string) bool {
+	runID = strings.TrimSpace(runID)
+	if runID == "" {
+		return false
+	}
+	path := mustIdeaDiscoveryConfig().RunStateFileAbs(paperRoot, runID)
+	st, err := os.Stat(path)
+	return err == nil && st != nil && !st.IsDir()
+}
+
 // syncIdeaDiscoveryRunProgressToMeta 把 run_state 进度写入 step.result（展示/排查用）。
 func syncIdeaDiscoveryRunProgressToMeta(meta map[string]any, paperRoot, runID string) {
 	if meta == nil {

@@ -90,15 +90,16 @@ func (j *TopicDiscoveryJob) processOne(ctx context.Context, step *entity.PaperOu
 	if async, ok := meta["async_llm"].(bool); !ok || !async {
 		return "skipped"
 	}
-	// 平台检查点：等用户在前端 Continue/PROCEED，bot 不再自动调 CLI。
-	if v, ok := meta["aris_awaiting_checkpoint"].(bool); ok && v {
-		return "skipped"
-	}
-
 	input, err := j.runs.LoadRunInputForUser(ctx, uint(step.UserID), step.RunVersion)
 	if err != nil {
 		j.markFailed(ctx, step, "无法加载 run 入参: "+err.Error(), 0, 0)
 		return "failed"
+	}
+	_ = j.runs.ReconcileIdeaDiscoveryBotAwaiting(ctx, uint(step.UserID), step.RunVersion, step, input)
+	meta = papersvc.LoadStepExtra(step)
+	// 仅 pause:true 且已有 run_state 时挡 bot；无 JSON 时不应等前端确认。
+	if v, ok := meta["aris_awaiting_checkpoint"].(bool); ok && v {
+		return "skipped"
 	}
 
 	beforePrompt, beforeCompletion := tokenUsageFromMeta(meta)

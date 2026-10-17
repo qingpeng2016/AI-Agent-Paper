@@ -23,8 +23,8 @@ func mustIdeaDiscoveryConfig() ARISIdeaDiscoveryConfig {
 	return cfg
 }
 
-// RunNativeIdeaDiscoveryLLM 原生 /idea-discovery：每次 bot 进入只跑一条 aris，落库后清 async_llm（与手动一条命令一致）。
-// 下一条 aris 仅由 API 启动或用户 Continue（ResumeIdeaDiscoveryFromCheckpoint）再设 async_llm。
+// RunNativeIdeaDiscoveryLLM 原生 /idea-discovery：每次 bot 进入只跑一条 aris，落库后清 async_llm。
+// 无 .aris/runs/{run_id}.json 时不挂前端确认；有 JSON 后仅 pause:true 段才 aris_awaiting_checkpoint。
 func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 	ctx context.Context,
 	userID uint,
@@ -51,13 +51,22 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 		return s.finishIdeaDiscoveryAfterGate(ctx, step, userID, runVersion, route, paperRoot, runID, cfg)
 	}
 	meta := paperstep.LoadStepExtra(step)
-	// checkpoint_phases.pause:true：未点 Continue 前 bot 扫到也不调 CLI（只挂检查点）。
-	if cfg.PhaseNeedsUserCheckpoint(pendingPhase) {
+	hasRunState := ideaDiscoveryRunStateFileExists(paperRoot, runID)
+	// 无 run_state JSON：与手动首次 aris 一致，不挂平台确认，直接 invoke。
+	if !hasRunState {
+		delete(meta, "aris_awaiting_checkpoint")
+		delete(meta, "aris_pause_after_phase")
+		delete(meta, "aris_checkpoint_proceed")
+	} else if cfg.PhaseNeedsUserCheckpoint(pendingPhase) {
+		// 已有 run_state 且下一段 pause:true：未 Continue 前不调 CLI。
 		proceed := strings.TrimSpace(fmt.Sprint(meta["aris_checkpoint_proceed"])) == strings.TrimSpace(pendingPhase)
 		if !proceed {
 			return s.saveIdeaDiscoveryAwaitingUserContinue(ctx, step, paperRoot, runID, pendingPhase)
 		}
 		delete(meta, "aris_checkpoint_proceed")
+	} else {
+		delete(meta, "aris_awaiting_checkpoint")
+		delete(meta, "aris_pause_after_phase")
 	}
 	delete(meta, "aris_awaiting_checkpoint")
 	meta["aris_run_id"] = runID
@@ -108,7 +117,29 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 		_, _ = s.ingestARISWorkspaceLiterature(ctx, userID, runVersion, step.ManuscriptID, paperRoot, cfg)
 	}
 
+	hasRunState = ideaDiscoveryRunStateFileExists(paperRoot, runID)
+	if !hasRunState || !cfg.PhaseNeedsUserCheckpoint(pendingPhase) {
+		return s.saveIdeaDiscoveryAfterInvokeIdle(ctx, step, paperRoot, runID)
+	}
 	return s.saveIdeaDiscoveryAwaitingUserContinue(ctx, step, paperRoot, runID, pendingPhase)
+}
+
+func (s *TopicDiscoveryRunService) saveIdeaDiscoveryAfterInvokeIdle(
+	ctx context.Context,
+	step *entity.PaperOutputTopicStep,
+	paperRoot, runID string,
+) error {
+	meta := paperstep.LoadStepExtra(step)
+	syncIdeaDiscoveryRunProgressToMeta(meta, paperRoot, runID)
+	delete(meta, "aris_awaiting_checkpoint")
+	delete(meta, "aris_pause_after_phase")
+	delete(meta, "aris_checkpoint_proceed")
+	delete(meta, "async_llm")
+	meta["async_llm_done"] = false
+	step.Result = jsonx.MustJSON(meta)
+	step.Status = "running"
+	step.ExecProgressPct = ideaDiscoveryProgressPct(paperRoot, runID)
+	return s.steps.SaveStep(ctx, step)
 }
 
 func (s *TopicDiscoveryRunService) saveIdeaDiscoveryAwaitingUserContinue(
@@ -388,25 +419,89 @@ func readFileMax(abs string, max int) string {
 	return string(b)
 }
 
-// ResumeIdeaDiscoveryFromCheckpoint 用户 continue：Phase 内 AUTO_PROCEED=false 检查点。
+// ReconcileIdeaDiscoveryBotAwaiting 修正 DB 里误挂的检查点（无 run_state 或 pause:false 段不应挡 bot）。
+func (s *TopicDiscoveryRunService) ReconcileIdeaDiscoveryBotAwaiting(
+	ctx context.Context,
+	userID uint,
+	runVersion int,
+	step *entity.PaperOutputTopicStep,
+	input topicRunInput,
+) error {
+	if step == nil {
+		return nil
+	}
+	meta := paperstep.LoadStepExtra(step)
+	if v, ok := meta["aris_awaiting_checkpoint"].(bool); !ok || !v {
+		return nil
+	}
+	cfg := mustIdeaDiscoveryConfig()
+	paperRoot := ARISRunPaperRoot(uint64(userID), step.ManuscriptID, runVersion)
+	runID := resolveIdeaDiscoveryRunID(paperRoot, step, input)
+	if !ideaDiscoveryRunStateFileExists(paperRoot, runID) {
+		delete(meta, "aris_awaiting_checkpoint")
+		delete(meta, "aris_pause_after_phase")
+		step.Result = jsonx.MustJSON(meta)
+		return s.steps.SaveStep(ctx, step)
+	}
+	pending, err := ideaDiscoveryResumePhase(paperRoot, runID)
+	if err != nil || strings.TrimSpace(pending) == "" {
+		return nil
+	}
+	if !cfg.PhaseNeedsUserCheckpoint(pending) {
+		delete(meta, "aris_awaiting_checkpoint")
+		delete(meta, "aris_pause_after_phase")
+		step.Result = jsonx.MustJSON(meta)
+		return s.steps.SaveStep(ctx, step)
+	}
+	return nil
+}
+
+// ResumeIdeaDiscoveryFromCheckpoint 用户 continue：排队下一条 aris（pause:true 检查点或 pause:false 段间继续）。
 func (s *TopicDiscoveryRunService) ResumeIdeaDiscoveryFromCheckpoint(ctx context.Context, userID uint, runVersion int) (bool, error) {
 	step, err := s.steps.GetStep(ctx, uint64(userID), runVersion, "idea_discovery")
 	if err != nil || step == nil {
 		return false, err
 	}
-	meta := paperstep.LoadStepExtra(step)
-	if v, ok := meta["aris_awaiting_checkpoint"].(bool); !ok || !v {
+	if strings.TrimSpace(step.Status) == "completed" {
 		return false, nil
 	}
-	phase := strings.TrimSpace(fmt.Sprint(meta["aris_pause_after_phase"]))
-	if phase == "" {
-		phase = strings.TrimSpace(fmt.Sprint(meta["aris_pending_phase"]))
+	input, err := s.loadRunInput(ctx, userID, runVersion)
+	if err != nil {
+		return false, err
 	}
-	if phase != "" {
-		meta["aris_checkpoint_proceed"] = phase
+	cfg := mustIdeaDiscoveryConfig()
+	paperRoot := ARISRunPaperRoot(uint64(userID), step.ManuscriptID, runVersion)
+	runID := resolveIdeaDiscoveryRunID(paperRoot, step, input)
+	meta := paperstep.LoadStepExtra(step)
+
+	awaiting, _ := meta["aris_awaiting_checkpoint"].(bool)
+	if awaiting {
+		phase := strings.TrimSpace(fmt.Sprint(meta["aris_pause_after_phase"]))
+		if phase == "" {
+			phase = strings.TrimSpace(fmt.Sprint(meta["aris_pending_phase"]))
+		}
+		if phase != "" {
+			meta["aris_checkpoint_proceed"] = phase
+		}
+		delete(meta, "aris_awaiting_checkpoint")
+		delete(meta, "aris_pause_after_phase")
+	} else if strings.TrimSpace(step.Status) != "running" {
+		return false, nil
+	} else if ideaDiscoveryRunStateFileExists(paperRoot, runID) {
+		pending, err := ideaDiscoveryResumePhase(paperRoot, runID)
+		if err != nil {
+			return false, err
+		}
+		if strings.TrimSpace(pending) == "" {
+			return false, nil
+		}
+		if cfg.PhaseNeedsUserCheckpoint(pending) {
+			return false, nil
+		}
+	} else {
+		// 尚无 run_state：允许再排队一次 bootstrap invoke。
 	}
-	delete(meta, "aris_awaiting_checkpoint")
-	delete(meta, "aris_pause_after_phase")
+
 	meta["async_llm"] = true
 	step.Result = jsonx.MustJSON(meta)
 	step.Status = "running"
