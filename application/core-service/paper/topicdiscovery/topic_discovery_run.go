@@ -692,6 +692,13 @@ func (s *TopicDiscoveryRunService) buildRunView(manuscriptID uint64, runVersion 
 		Steps:        make([]response.TopicDiscoveryStepView, 0, len(rows)),
 	}
 	view.HumanCheckpoint = !mustIdeaDiscoveryConfig().Platform.AutoProceed
+	for _, g := range BuildIdeaDiscoveryUIGroups(mustIdeaDiscoveryConfig()) {
+		view.IdeaDiscoveryUIGroups = append(view.IdeaDiscoveryUIGroups, response.IdeaDiscoveryUIGroupView{
+			Index:    g.Index,
+			PhaseIDs: append([]string(nil), g.PhaseIDs...),
+			LabelZh:  g.LabelZh,
+		})
+	}
 
 	runStatus := "completed"
 	for _, r := range rows {

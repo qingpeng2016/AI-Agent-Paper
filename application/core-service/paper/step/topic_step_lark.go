@@ -66,7 +66,7 @@ func arisPhaseLabelZh(phase string) string {
 	}
 }
 
-// arisPhaseUiLabelZh 工作台 / 检查点对外展示（文献调研 + 论文大纲 合并为一步）。
+// arisPhaseUiLabelZh 工作台 / 检查点对外展示（Lark 等；动态分组见 topicdiscovery.IdeaDiscoveryCheckpointDetail）。
 func arisPhaseUiLabelZh(phase string) string {
 	switch strings.TrimSpace(phase) {
 	case "research-lit", "idea-creator":

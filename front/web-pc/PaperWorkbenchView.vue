@@ -49,8 +49,8 @@ import {
 } from './types'
 import {
   arisIdeaDiscoveryPhaseRows,
-  ARIS_IDEA_DISCOVERY_PHASES_LABEL_ZH,
-  arisPhaseIdLabel,
+  ideaDiscoveryUiGroupsLabelChain,
+  resolveIdeaDiscoveryUIGroups,
   arisPhaseStatusLabel,
   arisPhaseAwaitingConfirmLabel,
   isIdeaDiscoveryArisCheckpoint,
@@ -1056,9 +1056,9 @@ function buildTopicCheckpointView(
   const lines = linesFromApiStep(dto)
   const base = lines.length ? lines : CHECKPOINT_COPY[def.checkpointKey].lines
   if (pauseStage === 'idea_discovery' || pauseStage === 'topic_discovery') {
-    const phaseLines = arisIdeaDiscoveryPhaseRows(raw?.steps, raw?.run_status)
+    const phaseLines = arisIdeaDiscoveryPhaseRows(raw?.steps, raw?.run_status, raw)
       .filter((r) => r.status === 'waiting_confirm' || r.status === 'completed')
-      .map((r) => `${arisPhaseIdLabel(r.id)}：${arisPhaseStatusLabel(r.status)}`)
+      .map((r) => `${r.label}：${arisPhaseStatusLabel(r.status)}`)
     if (phaseLines.length) {
       return {
         key: def.checkpointKey,
@@ -1078,6 +1078,16 @@ const topicArisPhaseRows = computed((): ArisPhaseUiRow[] =>
   arisIdeaDiscoveryPhaseRows(
     topicDiscoveryApiRun.value?.steps,
     topicDiscoveryApiRun.value?.run_status,
+    topicDiscoveryApiRun.value,
+  ),
+)
+
+const topicIdeaDiscoveryUiGroupLabels = computed(() =>
+  ideaDiscoveryUiGroupsLabelChain(
+    resolveIdeaDiscoveryUIGroups(
+      topicDiscoveryApiRun.value,
+      topicDiscoveryApiRun.value?.steps,
+    ),
   ),
 )
 
@@ -1101,7 +1111,7 @@ const topicCheckpointPanel = computed((): TopicCheckpointView | null => {
 /** 检查点标题后缀：待确认的子阶段中文名（如文献调研），或主流程步骤 label */
 const topicCheckpointHeadingSuffix = computed((): string => {
   const raw = topicDiscoveryApiRun.value
-  const phaseLabel = arisPhaseAwaitingConfirmLabel(raw?.steps, raw?.run_status)
+  const phaseLabel = arisPhaseAwaitingConfirmLabel(raw?.steps, raw?.run_status, raw)
   if (phaseLabel) return phaseLabel
   const pause = raw?.pause_after_stage?.trim()
   if (pause) {
@@ -1250,8 +1260,8 @@ function stepStatusFromApi(raw: string): TopicFlowStepStatus {
 
 const TOPIC_STEP_RUNNING_HINT: Record<string, string> = {
   retrieve: '文献 PDF 下载与入库中…',
-  idea_discovery: `Idea Discovery：${ARIS_IDEA_DISCOVERY_PHASES_LABEL_ZH}…`,
-  topic_discovery: `Idea Discovery：${ARIS_IDEA_DISCOVERY_PHASES_LABEL_ZH}…`,
+  idea_discovery: 'Idea Discovery…',
+  topic_discovery: 'Idea Discovery…',
   topic_confirm: '等待确认并入库…',
   generate_ideas: 'AI 脑暴选题与新颖性分析中…',
   audit: 'AI 审查结论与文献综述生成中…',
@@ -1261,8 +1271,10 @@ function topicStepRunningHint(stageCode: string) {
   if (stageCode === 'idea_discovery' || stageCode === 'topic_discovery') {
     const running = topicArisPhaseRows.value.find((r) => r.status === 'running')
     const waiting = topicArisPhaseRows.value.find((r) => r.status === 'waiting_confirm')
-    if (waiting) return `段间暂停 · 下一段「${arisPhaseIdLabel(waiting.id)}」待确认并继续`
-    if (running) return `当前段「${arisPhaseIdLabel(running.id)}」运行中…`
+    if (waiting) return `段间暂停 · 下一段「${waiting.label}」待确认并继续`
+    if (running) return `当前段「${running.label}」运行中…`
+    const chain = topicIdeaDiscoveryUiGroupLabels.value
+    if (chain) return `Idea Discovery：${chain}…`
     const dto = topicDiscoveryApiRun.value?.steps.find(
       (s) => s.stage_code === 'idea_discovery' || s.stage_code === 'topic_discovery',
     )
@@ -2848,7 +2860,7 @@ watch(
                       class="paper-flow-subphase-spinner"
                       aria-hidden="true"
                     />
-                    <span class="paper-flow-subphase-name">{{ arisPhaseIdLabel(row.id) }}</span>
+                    <span class="paper-flow-subphase-name">{{ row.label }}</span>
                   </span>
                   <span class="paper-flow-subphase-status">{{ arisPhaseStatusLabel(row.status) }}</span>
                 </li>

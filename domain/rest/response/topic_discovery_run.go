@@ -15,11 +15,18 @@ type TopicDiscoveryStepView struct {
 	CompletedAt *string         `json:"completed_at,omitempty"`
 }
 
+type IdeaDiscoveryUIGroupView struct {
+	Index    int      `json:"index"`
+	PhaseIDs []string `json:"phase_ids"`
+	LabelZh  string   `json:"label_zh"`
+}
+
 type TopicDiscoveryRunView struct {
-	ManuscriptID    uint64                   `json:"manuscript_id"`
-	RunVersion      int                      `json:"run_version"`
-	RunStatus       string                   `json:"run_status"`
-	HumanCheckpoint bool                     `json:"human_checkpoint"`
-	PauseAfterStage string                   `json:"pause_after_stage,omitempty"`
-	Steps           []TopicDiscoveryStepView `json:"steps"`
+	ManuscriptID            uint64                     `json:"manuscript_id"`
+	RunVersion              int                        `json:"run_version"`
+	RunStatus               string                     `json:"run_status"`
+	HumanCheckpoint         bool                       `json:"human_checkpoint"`
+	PauseAfterStage         string                     `json:"pause_after_stage,omitempty"`
+	IdeaDiscoveryUIGroups   []IdeaDiscoveryUIGroupView `json:"idea_discovery_ui_groups,omitempty"`
+	Steps                   []TopicDiscoveryStepView   `json:"steps"`
 }

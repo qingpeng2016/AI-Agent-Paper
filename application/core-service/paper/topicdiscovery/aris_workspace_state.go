@@ -166,4 +166,6 @@ func syncIdeaDiscoveryRunProgressToMeta(meta map[string]any, paperRoot, runID st
 	if pending, err := ideaDiscoveryResumePhase(paperRoot, runID); err == nil && strings.TrimSpace(pending) != "" {
 		meta["aris_pending_phase"] = pending
 	}
+	cfg := mustIdeaDiscoveryConfig()
+	syncIdeaDiscoveryUIGroupsToMeta(meta, paperRoot, runID, cfg)
 }

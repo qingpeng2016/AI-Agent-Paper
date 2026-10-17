@@ -62,11 +62,14 @@ func TestIdeaDiscoveryPhaseNeedsUserCheckpoint(t *testing.T) {
 			t.Fatalf("phase %q: got %v want %v", tc.phase, got, tc.want)
 		}
 	}
-	cfg.Platform.CheckpointPhases = normalizeIdeaDiscoveryCheckpointPhases(map[string]bool{
-		"research-lit": true,
+	cfg.CheckpointPhases = normalizeIdeaDiscoveryCheckpointPhases(map[string]IdeaDiscoveryCheckpointPhase{
+		"research-lit": {Pause: true, LabelZh: "文献调研"},
 	})
 	if !cfg.PhaseNeedsUserCheckpoint("research-lit") {
-		t.Fatal("checkpoint_phases research-lit:true should pause")
+		t.Fatal("checkpoint_phases research-lit pause:true should pause")
+	}
+	if cfg.PhaseLabelZh("research-lit") != "文献调研" {
+		t.Fatalf("label_zh: %q", cfg.PhaseLabelZh("research-lit"))
 	}
 	if cfg.PhaseNeedsUserCheckpoint("idea-creator") {
 		t.Fatal("idea-creator default false should not pause")

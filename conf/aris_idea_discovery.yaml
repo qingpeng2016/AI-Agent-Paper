@@ -29,17 +29,29 @@ workspace:
   # run 状态 JSON（由 aris /idea-discovery 写入）：{run_state_dir}/{run_id}.json
   run_state_dir: .aris/runs
 
+# /idea-discovery run_state 各 ARIS phase（顺序与 skill 一致）
+# pause：platform.auto_proceed=false 时，执行该 phase 前是否平台人工暂停（false=连跑并再次 invoke）
+# label_zh：工作台分段进度等前端展示用中文名
+checkpoint_phases:
+  research-lit:
+    pause: false
+    label_zh: 文献调研
+  idea-creator:
+    pause: false
+    label_zh: 选题大纲
+  novelty-check:
+    pause: true
+    label_zh: 新颖性检验
+  research-review:
+    pause: true
+    label_zh: 外部审查
+  research-refine-pipeline:
+    pause: true
+    label_zh: 文献综述与实验规划
+
 platform:
-  # 只影响 skill 参数 AUTO_PROCEED 与 phase 间是否 checkpoint
+  # 传给 skill 的 AUTO_PROCEED（与 checkpoint_phases.pause 独立：前者管 skill 内行为，后者管平台段间是否停）
   auto_proceed: false
-  # auto_proceed=false 时：/idea-discovery 各 ARIS phase 在「开始执行该 phase 前」是否平台人工暂停
-  # true=暂停等人点「继续」；false=不暂停，bot 立刻再次 invoke（相邻多个 false 会连续跑完）
-  checkpoint_phases:
-    research-lit: false
-    idea-creator: false
-    novelty-check: true
-    research-review: true
-    research-refine-pipeline: true
   # true：.aris/runs/<run_id>.json 已存在时在 platform_user_prompt 追加「— resume <run_id>」；false 仅依赖 run_state/session notes 续 phase（可减轻会话历史过长）
   resume: false
   # 传给 skill 的 sources（如 local、web）；web 时由 /research-lit 联网检索

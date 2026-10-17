@@ -244,12 +244,21 @@ export function parseRetrieveLiteratureLinks(
     .filter((h) => h.url)
 }
 
+/** conf/aris_idea_discovery.yaml checkpoint_phases 合并后的工作台分段 */
+export type IdeaDiscoveryUIGroupDTO = {
+  index: number
+  phase_ids: string[]
+  label_zh: string
+}
+
 export type TopicDiscoveryRunResponse = {
   manuscript_id: number
   run_version: number
   run_status: string
   human_checkpoint: boolean
   pause_after_stage?: string
+  /** 动态 UI 段（连续 pause:false 合并 label_zh） */
+  idea_discovery_ui_groups?: IdeaDiscoveryUIGroupDTO[]
   steps: TopicDiscoveryStepDTO[]
 }
 

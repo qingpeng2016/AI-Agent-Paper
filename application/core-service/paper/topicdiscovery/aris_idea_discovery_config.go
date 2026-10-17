@@ -22,27 +22,41 @@ var ideaDiscoveryRunStatePhases = []string{
 	"research-refine-pipeline",
 }
 
-func defaultIdeaDiscoveryCheckpointPhases() map[string]bool {
-	return map[string]bool{
-		"research-lit":             false,
-		"idea-creator":             false,
-		"novelty-check":            true,
-		"research-review":          true,
-		"research-refine-pipeline": true,
+// IdeaDiscoveryCheckpointPhase 与 conf/aris_idea_discovery.yaml 顶层 checkpoint_phases 每项对齐。
+type IdeaDiscoveryCheckpointPhase struct {
+	Pause   bool   `yaml:"pause"`
+	LabelZh string `yaml:"label_zh"`
+}
+
+func defaultIdeaDiscoveryCheckpointPhases() map[string]IdeaDiscoveryCheckpointPhase {
+	return map[string]IdeaDiscoveryCheckpointPhase{
+		"research-lit":             {Pause: false, LabelZh: "文献调研"},
+		"idea-creator":             {Pause: false, LabelZh: "选题大纲"},
+		"novelty-check":            {Pause: true, LabelZh: "新颖性检验"},
+		"research-review":          {Pause: true, LabelZh: "外部审查"},
+		"research-refine-pipeline": {Pause: true, LabelZh: "文献综述与实验规划"},
 	}
 }
 
-func normalizeIdeaDiscoveryCheckpointPhases(m map[string]bool) map[string]bool {
+func normalizeIdeaDiscoveryCheckpointPhases(m map[string]IdeaDiscoveryCheckpointPhase) map[string]IdeaDiscoveryCheckpointPhase {
 	def := defaultIdeaDiscoveryCheckpointPhases()
-	out := make(map[string]bool, len(ideaDiscoveryRunStatePhases))
+	out := make(map[string]IdeaDiscoveryCheckpointPhase, len(ideaDiscoveryRunStatePhases))
 	for _, phase := range ideaDiscoveryRunStatePhases {
+		d := def[phase]
 		if m != nil {
 			if v, ok := m[phase]; ok {
-				out[phase] = v
+				entry := IdeaDiscoveryCheckpointPhase{
+					Pause:   v.Pause,
+					LabelZh: strings.TrimSpace(v.LabelZh),
+				}
+				if entry.LabelZh == "" {
+					entry.LabelZh = d.LabelZh
+				}
+				out[phase] = entry
 				continue
 			}
 		}
-		out[phase] = def[phase]
+		out[phase] = d
 	}
 	return out
 }
@@ -62,8 +76,6 @@ type ideaDiscoveryPlatform struct {
 	AutoProceed   bool   `yaml:"auto_proceed"`
 	// Resume：run_state 已存在时是否在 platform_user_prompt 追加「— resume <run_id>」（段间续跑仍靠 run_state + session notes）。
 	Resume        bool   `yaml:"resume"`
-	// CheckpointPhases：auto_proceed=false 时，各 phase 执行前是否平台人工暂停（true=暂停，false=连跑并再次 invoke）。
-	CheckpointPhases map[string]bool `yaml:"checkpoint_phases"`
 	Sources       string `yaml:"sources"`
 	ArxivDownload bool   `yaml:"arxiv_download"`
 	MaxArisPerBot int    `yaml:"max_aris_per_bot"`
@@ -80,9 +92,10 @@ const arisRunWorkspaceDir = "paper"
 
 // ARISIdeaDiscoveryConfig 与 conf/aris_idea_discovery.yaml 对齐。
 type ARISIdeaDiscoveryConfig struct {
-	Artifacts ideaDiscoveryArtifacts `yaml:"artifacts"`
-	Workspace ideaDiscoveryWorkspace `yaml:"workspace"`
-	Platform  ideaDiscoveryPlatform  `yaml:"platform"`
+	Artifacts        ideaDiscoveryArtifacts                    `yaml:"artifacts"`
+	Workspace        ideaDiscoveryWorkspace                    `yaml:"workspace"`
+	CheckpointPhases map[string]IdeaDiscoveryCheckpointPhase   `yaml:"checkpoint_phases"`
+	Platform         ideaDiscoveryPlatform                     `yaml:"platform"`
 }
 
 var (
@@ -170,32 +183,72 @@ func defaultARISIdeaDiscoveryConfig() ARISIdeaDiscoveryConfig {
 	return ARISIdeaDiscoveryConfig{
 		Artifacts: defaultIdeaDiscoveryArtifacts(),
 		Workspace: defaultIdeaDiscoveryWorkspace(),
+		CheckpointPhases: defaultIdeaDiscoveryCheckpointPhases(),
 		Platform: ideaDiscoveryPlatform{
-			AutoProceed:      false,
-			Resume:           false,
-			CheckpointPhases: defaultIdeaDiscoveryCheckpointPhases(),
-			Sources:          "web",
-			ArxivDownload:    true,
-			MaxArisPerBot:    1,
+			AutoProceed:   false,
+			Resume:        false,
+			Sources:       "web",
+			ArxivDownload: true,
+			MaxArisPerBot: 1,
 		},
 	}
 }
 
-// PhaseNeedsUserCheckpoint 下一待执行 phase 是否触发平台人工检查点（platform.checkpoint_phases[phase]==true）。
+// PhaseNeedsUserCheckpoint 下一待执行 phase 是否触发平台人工检查点（checkpoint_phases[phase].pause）。
 func (c ARISIdeaDiscoveryConfig) PhaseNeedsUserCheckpoint(pendingPhase string) bool {
 	pendingPhase = strings.TrimSpace(pendingPhase)
 	if pendingPhase == "" {
 		return false
 	}
-	m := c.Platform.CheckpointPhases
+	m := c.CheckpointPhases
 	if len(m) == 0 {
 		m = defaultIdeaDiscoveryCheckpointPhases()
 	}
-	if pause, ok := m[pendingPhase]; ok {
-		return pause
+	if entry, ok := m[pendingPhase]; ok {
+		return entry.Pause
 	}
-	// 未知 phase：保守起见暂停
 	return true
+}
+
+// PhaseLabelZh 返回 phase 展示中文名（conf checkpoint_phases.label_zh）。
+func (c ARISIdeaDiscoveryConfig) PhaseLabelZh(phase string) string {
+	phase = strings.TrimSpace(phase)
+	if phase == "" {
+		return ""
+	}
+	m := c.CheckpointPhases
+	if len(m) == 0 {
+		m = defaultIdeaDiscoveryCheckpointPhases()
+	}
+	if entry, ok := m[phase]; ok {
+		if s := strings.TrimSpace(entry.LabelZh); s != "" {
+			return s
+		}
+	}
+	return phase
+}
+
+// IdeaDiscoveryCheckpointPhaseList 按 run_state 顺序返回 phase 配置（供 API/前端展示）。
+func (c ARISIdeaDiscoveryConfig) IdeaDiscoveryCheckpointPhaseList() []struct {
+	ID      string
+	Pause   bool
+	LabelZh string
+} {
+	m := normalizeIdeaDiscoveryCheckpointPhases(c.CheckpointPhases)
+	out := make([]struct {
+		ID      string
+		Pause   bool
+		LabelZh string
+	}, 0, len(ideaDiscoveryRunStatePhases))
+	for _, id := range ideaDiscoveryRunStatePhases {
+		e := m[id]
+		out = append(out, struct {
+			ID      string
+			Pause   bool
+			LabelZh string
+		}{ID: id, Pause: e.Pause, LabelZh: e.LabelZh})
+	}
+	return out
 }
 
 func ideaDiscoveryConfigPath() string {
@@ -272,7 +325,7 @@ func normalizeIdeaDiscoveryConfig(c *ARISIdeaDiscoveryConfig) {
 	if c.Platform.MaxArisPerBot <= 0 {
 		c.Platform.MaxArisPerBot = 1
 	}
-	c.Platform.CheckpointPhases = normalizeIdeaDiscoveryCheckpointPhases(c.Platform.CheckpointPhases)
+	c.CheckpointPhases = normalizeIdeaDiscoveryCheckpointPhases(c.CheckpointPhases)
 }
 
 func ideaDiscoveryRunStatePhasesCSV() string {

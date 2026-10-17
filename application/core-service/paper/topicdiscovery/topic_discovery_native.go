@@ -2,7 +2,6 @@ package topicdiscovery
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -313,27 +312,7 @@ func (s *TopicDiscoveryRunService) finishIdeaDiscoveryAfterGate(
 }
 
 func ideaDiscoveryProgressPct(paperRoot, runID string) uint8 {
-	statePath := mustIdeaDiscoveryConfig().RunStateFileAbs(paperRoot, runID)
-	b, err := os.ReadFile(statePath)
-	if err != nil {
-		return 1
-	}
-	var st struct {
-		Phases []struct {
-			Status string `json:"status"`
-		} `json:"phases"`
-	}
-	if json.Unmarshal(b, &st) != nil || len(st.Phases) == 0 {
-		return 1
-	}
-	done := 0
-	for _, p := range st.Phases {
-		switch strings.TrimSpace(p.Status) {
-		case "done", "accepted", "provisional":
-			done++
-		}
-	}
-	return uint8(min(99, max(1, done*100/len(st.Phases))))
+	return ideaDiscoveryProgressPctByUIGroups(paperRoot, runID, mustIdeaDiscoveryConfig())
 }
 
 // buildNativeIdeaDiscoverySessionNotes run_state 续跑 + 人工检查点 PROCEED；$ARGUMENTS 在 platform_user_prompt.txt。
