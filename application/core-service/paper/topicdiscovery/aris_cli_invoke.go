@@ -26,6 +26,7 @@ type localARISInvokeResult struct {
 	Usage           llm.LLMUsage
 	CLIExecutor     string
 	CLIModel        string
+	ExecRecord      string
 }
 
 func resolveCapability(req StrategyInvokeRequest) string {
@@ -245,12 +246,12 @@ func buildARISNativeCLIArgs(prompt string) []string {
 	return args
 }
 
-func runARISCLI(ctx context.Context, workspace, prompt string) (stdout, stderr string, err error) {
+func resolveARISCLIInvocation(prompt string) (cli string, args []string) {
 	executor := strings.ToLower(strings.TrimSpace(os.Getenv("PAPER_ARIS_EXECUTOR")))
 	if executor == "" {
 		executor = "aris"
 	}
-	cli := strings.TrimSpace(os.Getenv("PAPER_ARIS_CLI"))
+	cli = strings.TrimSpace(os.Getenv("PAPER_ARIS_CLI"))
 	if cli == "" {
 		if executor == "aris" {
 			cli = "aris"
@@ -258,10 +259,6 @@ func runARISCLI(ctx context.Context, workspace, prompt string) (stdout, stderr s
 			cli = "claude"
 		}
 	}
-
-	env := os.Environ()
-
-	var args []string
 	if executor == "aris" || filepath.Base(cli) == "aris" {
 		args = buildARISNativeCLIArgs(prompt)
 	} else {
@@ -270,6 +267,14 @@ func runARISCLI(ctx context.Context, workspace, prompt string) (stdout, stderr s
 			args = append(args, "--tools", "")
 		}
 	}
+	return cli, args
+}
+
+func runARISCLI(ctx context.Context, workspace, prompt string) (stdout, stderr, execRecord string, err error) {
+	cli, args := resolveARISCLIInvocation(prompt)
+	execRecord = formatARISCLIExecRecord(workspace, cli, args, prompt)
+
+	env := os.Environ()
 
 	cmd := exec.CommandContext(ctx, cli, args...)
 	cmd.Dir = workspace
@@ -306,9 +311,9 @@ func runARISCLI(ctx context.Context, workspace, prompt string) (stdout, stderr s
 			zap.String("cli", cli),
 			zap.String("workspace", workspace),
 			zap.Error(runErr))
-		return outStr, errStr, fmt.Errorf("%s failed: %s", cli, msg)
+		return outStr, errStr, execRecord, fmt.Errorf("%s failed: %s", cli, msg)
 	}
-	return outStr, errStr, nil
+	return outStr, errStr, execRecord, nil
 }
 
 func sanitizePathSegment(s string) string {
@@ -440,12 +445,13 @@ func runLocalStrategyInvoke(ctx context.Context, req StrategyInvokeRequest, plat
 	runCtx, cancel := context.WithTimeout(ctx, arisInvokeTimeout())
 	defer cancel()
 
-	stdout, _, err := runARISCLI(runCtx, paperRoot, buildHeadlessPrompt(capability, behavior, ideaCfg.invokeDirRel()))
+	headlessPrompt := buildHeadlessPrompt(capability, behavior, ideaCfg.invokeDirRel())
+	stdout, _, execRecord, err := runARISCLI(runCtx, paperRoot, headlessPrompt)
 	if err != nil {
 		if runCtx.Err() == context.DeadlineExceeded {
-			return nil, fmt.Errorf("local ARIS/Claude invoke timeout")
+			return &localARISInvokeResult{ExecRecord: execRecord}, fmt.Errorf("local ARIS/Claude invoke timeout")
 		}
-		return nil, err
+		return &localARISInvokeResult{ExecRecord: execRecord}, err
 	}
 
 	var rawText string
@@ -487,6 +493,7 @@ func runLocalStrategyInvoke(ctx context.Context, req StrategyInvokeRequest, plat
 		Usage:           cliUsage,
 		CLIExecutor:     execLabel,
 		CLIModel:        cliModel,
+		ExecRecord:      execRecord,
 	}, nil
 }
 

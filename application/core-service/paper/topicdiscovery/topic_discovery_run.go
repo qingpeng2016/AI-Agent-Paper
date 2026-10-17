@@ -707,6 +707,9 @@ func (s *TopicDiscoveryRunService) buildRunView(manuscriptID uint64, runVersion 
 		if r.ErrorMsg != nil {
 			sv.ErrorMsg = strings.TrimSpace(*r.ErrorMsg)
 		}
+		if r.ExecCommand != nil {
+			sv.ExecCommand = strings.TrimSpace(*r.ExecCommand)
+		}
 		if len(r.Result) > 0 {
 			sv.Result = json.RawMessage(r.Result)
 		}

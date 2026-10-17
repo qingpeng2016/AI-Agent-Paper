@@ -16,6 +16,7 @@ type PaperOutputTopicStep struct {
 	ExecProgressPct uint8          `gorm:"column:exec_progress_pct;not null;default:0"`
 	Result          datatypes.JSON `gorm:"column:result"`
 	ErrorMsg      *string        `gorm:"column:error_msg"`
+	ExecCommand   *string        `gorm:"column:exec_command"`
 	InputParams   datatypes.JSON `gorm:"column:input_params"`
 	Files         datatypes.JSON `gorm:"column:files"`
 	StartedAt     *time.Time     `gorm:"column:started_at"`

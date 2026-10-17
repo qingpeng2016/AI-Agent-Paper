@@ -23,9 +23,9 @@ Run the idea-discovery evidence gate per skill contract, then reply with ONLY on
 `, runID, reportRel)
 
 	ctx := context.Background()
-	stdout, stderr, err := runARISCLI(ctx, paperRoot, prompt)
+	stdout, stderr, execRecord, err := runARISCLI(ctx, paperRoot, prompt)
 	combined := strings.TrimSpace(stdout + "\n" + stderr)
-	out := ideaDiscoveryGateOutcome{Stdout: combined}
+	out := ideaDiscoveryGateOutcome{Stdout: combined, ExecRecord: execRecord}
 	if err != nil {
 		out.Passed = false
 		out.Reasons = []string{err.Error()}
@@ -58,7 +58,8 @@ Run the idea-discovery evidence gate per skill contract, then reply with ONLY on
 }
 
 type ideaDiscoveryGateOutcome struct {
-	Passed  bool
-	Reasons []string
-	Stdout  string
+	Passed     bool
+	Reasons    []string
+	Stdout     string
+	ExecRecord string
 }

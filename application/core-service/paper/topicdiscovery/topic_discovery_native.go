@@ -223,6 +223,9 @@ func (s *TopicDiscoveryRunService) finishIdeaDiscoveryAfterGate(
 	cfg ARISIdeaDiscoveryConfig,
 ) error {
 	gate, gateErr := runIdeaDiscoveryEvidenceGate(paperRoot, runID, cfg.Artifacts.IdeaReport)
+	if strings.TrimSpace(gate.ExecRecord) != "" {
+		s.persistTopicStepExecCommand(ctx, step, gate.ExecRecord)
+	}
 	result := map[string]any{
 		"pipeline":        "aris_idea_discovery_native",
 		"behavior_key":    BehaviorIdeaDiscoveryRun,

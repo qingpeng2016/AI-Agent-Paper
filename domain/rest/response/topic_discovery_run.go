@@ -7,6 +7,7 @@ type TopicDiscoveryStepView struct {
 	Status           string          `json:"status"`
 	ExecProgressPct uint8  `json:"exec_progress_pct,omitempty"`
 	ErrorMsg        string `json:"error_msg,omitempty"`
+	ExecCommand     string `json:"exec_command,omitempty"`
 	InputParams json.RawMessage `json:"input_params,omitempty"`
 	Result json.RawMessage `json:"result,omitempty"`
 	Files  json.RawMessage `json:"files,omitempty"`
