@@ -1,6 +1,7 @@
 package topicdiscovery
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -14,12 +15,25 @@ func TestFormatARISCLIExecShellLine_promptQuoted(t *testing.T) {
 	}
 }
 
-func TestAppendTopicStepExecCommand_cumulative(t *testing.T) {
-	step := &entity.PaperOutputTopicStep{}
-	appendTopicStepExecCommand(step, "first\n")
-	appendTopicStepExecCommand(step, "second\n")
-	if step.ExecCommand == nil || !strings.Contains(*step.ExecCommand, "first") || !strings.Contains(*step.ExecCommand, "second") {
-		t.Fatalf("exec_command=%q", deref(step.ExecCommand))
+func TestAppendTopicStepExecCommand_jsonNumbered(t *testing.T) {
+	step := &entity.PaperOutputTopicStep{StageCode: "idea_discovery"}
+	rec1 := formatARISCLIExecRecord("/tmp/ws", "aris", []string{"prompt", "one"}, "one")
+	rec2 := formatARISCLIExecRecord("/tmp/ws", "aris", []string{"prompt", "two"}, "two")
+	appendTopicStepExecCommandFromRecord(step, rec1)
+	appendTopicStepExecCommandFromRecord(step, rec2)
+	if step.ExecCommand == nil {
+		t.Fatal("exec_command nil")
+	}
+	var root map[string]any
+	if err := json.Unmarshal([]byte(*step.ExecCommand), &root); err != nil {
+		t.Fatalf("not json: %v raw=%q", err, *step.ExecCommand)
+	}
+	stage, ok := root["idea_discovery"].(map[string]any)
+	if !ok {
+		t.Fatalf("idea_discovery missing: %#v", root)
+	}
+	if stage["1"] == nil || stage["2"] == nil {
+		t.Fatalf("expected keys 1 and 2: %#v", stage)
 	}
 }
 

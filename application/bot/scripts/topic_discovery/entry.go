@@ -18,19 +18,20 @@ const (
 	ModuleAIAgentPaper    = "ai_agent_paper"
 	TaskTopicDiscoveryLLM = "llm_topic_discovery"
 	scanLimit             = 20
-	ideaDiscoveryMaxRetriesNotify = 32
 )
 
 type TopicDiscoveryJob struct {
-	steps repository.PaperOutputTopicStepRepo
-	runs  *papersvc.TopicDiscoveryRunService
+	steps       repository.PaperOutputTopicStepRepo
+	runs        *papersvc.TopicDiscoveryRunService
+	manuscripts repository.PaperManuscriptRepo
 }
 
 func NewTopicDiscoveryJob(
 	steps repository.PaperOutputTopicStepRepo,
 	runs *papersvc.TopicDiscoveryRunService,
+	manuscripts repository.PaperManuscriptRepo,
 ) *TopicDiscoveryJob {
-	return &TopicDiscoveryJob{steps: steps, runs: runs}
+	return &TopicDiscoveryJob{steps: steps, runs: runs, manuscripts: manuscripts}
 }
 
 // Run 扫描 idea_discovery（status=running 且 async_llm），每轮至多一次 ARIS invoke（auto_proceed=false + 检查点）。
@@ -74,7 +75,7 @@ func (j *TopicDiscoveryJob) processOne(ctx context.Context, step *entity.PaperOu
 		return "skipped"
 	}
 	if j.runs == nil {
-		j.markFailed(ctx, step, "TopicDiscoveryRunService 未注入")
+		j.markFailed(ctx, step, "TopicDiscoveryRunService 未注入", 0, 0)
 		return "failed"
 	}
 	if papersvc.TopicStepHasPersistedOutput(step) {
@@ -90,78 +91,78 @@ func (j *TopicDiscoveryJob) processOne(ctx context.Context, step *entity.PaperOu
 
 	input, err := j.runs.LoadRunInputForUser(ctx, uint(step.UserID), step.RunVersion)
 	if err != nil {
-		j.markFailed(ctx, step, "无法加载 run 入参: "+err.Error())
+		j.markFailed(ctx, step, "无法加载 run 入参: "+err.Error(), 0, 0)
 		return "failed"
 	}
-
-	runID := strings.TrimSpace(fmt.Sprint(meta["aris_run_id"]))
-	if runID == "" {
-		runID = "(new)"
-	}
-	notification.SendNotifyLog(ctx, "topic-discovery-invoke-start",
-		zap.Uint64("step_id", step.ID),
-		zap.Uint64("manuscript_id", step.ManuscriptID),
-		zap.Int("run_version", step.RunVersion),
-		zap.String("aris_run_id", runID))
 
 	beforePrompt, beforeCompletion := tokenUsageFromMeta(meta)
 
 	if err := j.runs.RunNativeIdeaDiscoveryLLM(ctx, uint(step.UserID), step.RunVersion, step, input); err != nil {
-		notification.SendErrorLog(ctx, "topic-discovery-llm-failed",
-			zap.Uint64("step_id", step.ID),
-			zap.Uint64("manuscript_id", step.ManuscriptID),
-			zap.Int("run_version", step.RunVersion),
-			zap.Error(err))
 		if strings.TrimSpace(step.Status) != "failed" {
-			j.markFailed(ctx, step, err.Error())
+			j.markFailed(ctx, step, err.Error(), 0, 0)
+		} else {
+			meta = papersvc.LoadStepExtra(step)
+			deltaPrompt := intMeta(meta["tokens_prompt"]) - beforePrompt
+			deltaCompletion := intMeta(meta["tokens_completion"]) - beforeCompletion
+			j.notifyStep(ctx, step, papersvc.TopicStepOutcomeFailed, err.Error(), deltaPrompt, deltaCompletion)
 		}
-		notification.SendNotifyLog(ctx, "topic-discovery-invoke-failed",
-			zap.Uint64("step_id", step.ID),
-			zap.String("reason", err.Error()))
 		return "failed"
 	}
 	if strings.TrimSpace(step.Status) == "failed" {
+		meta = papersvc.LoadStepExtra(step)
+		reason := ""
+		if step.ErrorMsg != nil {
+			reason = strings.TrimSpace(*step.ErrorMsg)
+		}
+		deltaPrompt := intMeta(meta["tokens_prompt"]) - beforePrompt
+		deltaCompletion := intMeta(meta["tokens_completion"]) - beforeCompletion
+		j.notifyStep(ctx, step, papersvc.TopicStepOutcomeFailed, reason, deltaPrompt, deltaCompletion)
 		return "failed"
 	}
 
 	meta = papersvc.LoadStepExtra(step)
-	if lastErr, ok := meta["aris_invoke_last_error"].(string); ok && strings.TrimSpace(lastErr) != "" {
-		retries := intMeta(meta["aris_invoke_retries"])
-		if retries == 1 || retries >= ideaDiscoveryMaxRetriesNotify {
-			notification.SendErrorLog(ctx, "topic-discovery-aris-invoke-error",
-				zap.Uint64("step_id", step.ID),
-				zap.Uint64("manuscript_id", step.ManuscriptID),
-				zap.Int("run_version", step.RunVersion),
-				zap.Int("retry", retries),
-				zap.String("error", strings.TrimSpace(lastErr)),
-				zap.String("workspace_log", "inout/.../paper/.paper/invoke/logs/latest_invoke_error.txt"))
-		}
-	}
 	deltaPrompt := intMeta(meta["tokens_prompt"]) - beforePrompt
 	deltaCompletion := intMeta(meta["tokens_completion"]) - beforeCompletion
+
 	if v, ok := meta["aris_awaiting_checkpoint"].(bool); ok && v {
 		phase := strings.TrimSpace(fmt.Sprint(meta["aris_pause_after_phase"]))
-		notification.SendNotifyLog(ctx, "topic-discovery-checkpoint",
-			zap.Uint64("step_id", step.ID),
-			zap.String("pause_after_phase", phase),
-			zap.Int("prompt_tokens", deltaPrompt),
-			zap.Int("completion_tokens", deltaCompletion))
+		j.notifyStep(ctx, step, papersvc.TopicStepOutcomeCheckpoint, papersvc.IdeaDiscoveryCheckpointDetail(phase), deltaPrompt, deltaCompletion)
 		return "skipped"
 	}
-	if strings.TrimSpace(step.Status) != "completed" {
-		notification.SendNotifyLog(ctx, "topic-discovery-invoke-progress",
-			zap.Uint64("step_id", step.ID),
-			zap.Int("exec_progress_pct", int(step.ExecProgressPct)),
-			zap.Int("prompt_tokens", deltaPrompt),
-			zap.Int("completion_tokens", deltaCompletion))
-		return "skipped"
+	if strings.TrimSpace(step.Status) == "completed" {
+		j.notifyStep(ctx, step, papersvc.TopicStepOutcomeSuccess, "Idea Discovery 全流程已完成", deltaPrompt, deltaCompletion)
+		return "completed"
 	}
-	notification.SendNotifyLog(ctx, "topic-discovery-completed",
+	// 本 tick 已跑完一次 invoke，仍排队后续段：只打日志，不推 Lark（避免逐步刷屏）
+	logger.InfoZ(ctx, "topic-discovery-invoke-tick-done",
 		zap.Uint64("step_id", step.ID),
 		zap.Uint64("manuscript_id", step.ManuscriptID),
-		zap.Int("prompt_tokens", deltaPrompt),
-		zap.Int("completion_tokens", deltaCompletion))
-	return "completed"
+		zap.Int("exec_progress_pct", int(step.ExecProgressPct)),
+		zap.Int("prompt_tokens_delta", deltaPrompt),
+		zap.Int("completion_tokens_delta", deltaCompletion))
+	return "skipped"
+}
+
+func (j *TopicDiscoveryJob) notifyStep(
+	ctx context.Context,
+	step *entity.PaperOutputTopicStep,
+	outcome, detail string,
+	promptTokens, completionTokens int,
+) {
+	if step == nil {
+		return
+	}
+	papersvc.NotifyTopicStepExecutionResult(ctx, j.manuscripts, papersvc.TopicStepExecNotify{
+		StageCode:        "idea_discovery",
+		Outcome:          outcome,
+		UserID:           uint(step.UserID),
+		ManuscriptID:     step.ManuscriptID,
+		RunVersion:       step.RunVersion,
+		StepID:           step.ID,
+		PromptTokens:     promptTokens,
+		CompletionTokens: completionTokens,
+		Detail:           detail,
+	})
 }
 
 func tokenUsageFromMeta(meta map[string]any) (prompt, completion int) {
@@ -192,15 +193,17 @@ func (j *TopicDiscoveryJob) finishAlreadyDone(ctx context.Context, step *entity.
 	step.Status = "completed"
 	step.CompletedAt = &now
 	if err := j.steps.SaveStep(ctx, step); err != nil {
-		notification.SendErrorLog(ctx, "topic-discovery-reconcile-save", zap.Error(err))
+		logger.ErrorZ(ctx, "topic-discovery-reconcile-save", zap.Error(err))
 		return ""
 	}
 	return "completed"
 }
 
-func (j *TopicDiscoveryJob) markFailed(ctx context.Context, step *entity.PaperOutputTopicStep, reason string) {
+func (j *TopicDiscoveryJob) markFailed(ctx context.Context, step *entity.PaperOutputTopicStep, reason string, promptTokens, completionTokens int) {
 	papersvc.FailTopicStep(step, reason)
 	if err := j.steps.SaveStep(ctx, step); err != nil {
-		notification.SendErrorLog(ctx, "topic-discovery-fail-save", zap.Uint64("step_id", step.ID), zap.Error(err))
+		logger.ErrorZ(ctx, "topic-discovery-fail-save", zap.Uint64("step_id", step.ID), zap.Error(err))
+		return
 	}
+	j.notifyStep(ctx, step, papersvc.TopicStepOutcomeFailed, reason, promptTokens, completionTokens)
 }

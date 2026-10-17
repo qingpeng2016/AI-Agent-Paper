@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -103,6 +105,44 @@ func ideaDiscoveryCompletedPhaseCount(paperRoot, runID string) int {
 		}
 	}
 	return n
+}
+
+// newestIdeaDiscoveryRunStateID 工作区 .aris/runs/*.json 中最新一份的 run_id（ARIS 内建 slug 可能与平台 meta 不同）。
+func newestIdeaDiscoveryRunStateID(paperRoot string) string {
+	cfg := mustIdeaDiscoveryConfig()
+	rel := strings.TrimSpace(cfg.Workspace.RunStateDir)
+	if rel == "" {
+		rel = ".aris/runs"
+	}
+	dir := filepath.Join(paperRootJoin(paperRoot, rel), "")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return ""
+	}
+	type cand struct {
+		id  string
+		mod int64
+	}
+	var cands []cand
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+			continue
+		}
+		id := strings.TrimSuffix(e.Name(), ".json")
+		if strings.TrimSpace(id) == "" {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		cands = append(cands, cand{id: id, mod: info.ModTime().UnixNano()})
+	}
+	if len(cands) == 0 {
+		return ""
+	}
+	sort.Slice(cands, func(i, j int) bool { return cands[i].mod > cands[j].mod })
+	return cands[0].id
 }
 
 // ideaDiscoveryRunStateFileExists 是否存在 .aris/runs/{run_id}.json（如 mdd-rsfmri-graph-topology-20261015.json）。

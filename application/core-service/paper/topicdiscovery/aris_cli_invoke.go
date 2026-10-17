@@ -79,11 +79,12 @@ func buildHeadlessPrompt(capability, behavior, invokeDirRel string) string {
 
 Run the **installed** ARIS /idea-discovery skill (use bundled skill + tools via aris only; platform does not ship libs/aris).
 $ARGUMENTS are in %s/platform_user_prompt.txt (native CLI form).
+If %s/platform_session_notes.txt exists, read it for platform checkpoint PROCEED / resume hints (same as user reply in chat).
 Workspace contract: %s/idea_discovery_contract.yaml
 Manage run_state and phases inside this aris session per skill contract.
 Deliverables are Markdown only under configured artifact paths.
 behavior_key=%s
-`, invokeDirRel, invokeDirRel, behavior)
+`, invokeDirRel, invokeDirRel, invokeDirRel, behavior)
 	}
 	return fmt.Sprintf(`[AI-Agent-Paper headless invoke]
 Execute research skill /%s in this workspace.

@@ -3,7 +3,9 @@ package topicdiscovery
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 )
 
 func TestIdeaDiscoveryShouldAppendResume_freshRun(t *testing.T) {
@@ -18,6 +20,45 @@ func TestIdeaDiscoveryShouldAppendResume_ignoresDBMeta(t *testing.T) {
 	// DB 有进度但磁盘无 run_state → 仍不加 resume
 	if ideaDiscoveryShouldAppendResume(dir, "run-1") {
 		t.Fatal("resume must not depend on DB")
+	}
+}
+
+func TestNewestIdeaDiscoveryRunStateID(t *testing.T) {
+	dir := t.TempDir()
+	cfg := defaultARISIdeaDiscoveryConfig()
+	stateDir := filepath.Join(dir, ".aris", "runs")
+	if err := os.MkdirAll(stateDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	oldPath := cfg.RunStateFileAbs(dir, "older-run")
+	newPath := cfg.RunStateFileAbs(dir, "mdd-rs-fmri-idea-discovery-20261017")
+	if err := os.WriteFile(oldPath, []byte(`{"phases":[]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(newPath, []byte(`{"phases":[]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.Chtimes(oldPath, time.Now().Add(-time.Hour), time.Now().Add(-time.Hour))
+	got := newestIdeaDiscoveryRunStateID(dir)
+	if got != "mdd-rs-fmri-idea-discovery-20261017" {
+		t.Fatalf("newest run_id = %q", got)
+	}
+}
+
+func TestApplyCheckpointProceedToArgsLine(t *testing.T) {
+	meta := map[string]any{
+		"aris_checkpoint_proceed":       true,
+		"aris_checkpoint_proceed_phase": "research-lit",
+	}
+	line, phase := applyCheckpointProceedToArgsLine(meta, "base args", "research-lit")
+	if phase != "research-lit" {
+		t.Fatalf("phase=%q", phase)
+	}
+	if !strings.Contains(line, "PROCEED") || !strings.Contains(line, "research-lit") {
+		t.Fatalf("line=%q", line)
+	}
+	if _, ok := meta["aris_checkpoint_proceed"]; ok {
+		t.Fatal("flag should be consumed")
 	}
 }
 

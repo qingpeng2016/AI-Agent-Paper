@@ -21,21 +21,23 @@ const (
 	TaskTopicLiteratureDownload = "topic_literature_pdf_download"
 	scanLimit                   = 50
 	pdfDownloadMaxAttempts      = 5
-	pdfDownloadRetryDelay       = 2 * time.Second
+	pdfDownloadRetryDelay         = 2 * time.Second
 )
 
 type TopicLiteratureDownloadJob struct {
-	steps    repository.PaperOutputTopicStepRepo
-	userLit  repository.PaperUserLiteratureRepo
-	runs     *papersvc.TopicDiscoveryRunService
+	steps       repository.PaperOutputTopicStepRepo
+	userLit     repository.PaperUserLiteratureRepo
+	runs        *papersvc.TopicDiscoveryRunService
+	manuscripts repository.PaperManuscriptRepo
 }
 
 func NewTopicLiteratureDownloadJob(
 	steps repository.PaperOutputTopicStepRepo,
 	userLit repository.PaperUserLiteratureRepo,
 	runs *papersvc.TopicDiscoveryRunService,
+	manuscripts repository.PaperManuscriptRepo,
 ) *TopicLiteratureDownloadJob {
-	return &TopicLiteratureDownloadJob{steps: steps, userLit: userLit, runs: runs}
+	return &TopicLiteratureDownloadJob{steps: steps, userLit: userLit, runs: runs, manuscripts: manuscripts}
 }
 
 // Run 扫描 status=running 且 stage_code=retrieve：先第三方检索（原 API 路径已改为仅排队），再下载 PDF。
@@ -70,23 +72,15 @@ func (j *TopicLiteratureDownloadJob) processOne(ctx context.Context, step *entit
 			j.markFailed(ctx, step, nil, "TopicDiscoveryRunService 未注入，无法检索文献")
 			return "failed"
 		}
-		notification.SendNotifyLog(ctx, "topic-literature-search-start",
-			zap.Uint64("step_id", step.ID),
-			zap.Uint64("manuscript_id", step.ManuscriptID),
-			zap.Int("run_version", step.RunVersion))
 		if err := j.runs.RunRetrieveLiteratureSearch(ctx, step); err != nil {
-			notification.SendErrorLog(ctx, "topic-literature-search-failed",
-				zap.Uint64("step_id", step.ID),
-				zap.Error(err))
+			j.markFailed(ctx, step, nil, err.Error())
 			return "failed"
 		}
 	}
 
 	if len(step.Result) == 0 {
-		notification.SendErrorLog(ctx, "topic-literature-download-skip-no-result",
-			zap.Uint64("step_id", step.ID),
-			zap.Int("run_version", step.RunVersion))
-		return ""
+		j.markFailed(ctx, step, nil, "retrieve 无 result，无法下载")
+		return "failed"
 	}
 
 	items := papersvc.ParseLiteratureDownloads(step.Result)
@@ -108,12 +102,6 @@ func (j *TopicLiteratureDownloadJob) processOne(ctx context.Context, step *entit
 		j.markFailed(ctx, step, items, reason)
 		return "failed"
 	}
-
-	notification.SendNotifyLog(ctx, "topic-literature-download-start",
-		zap.Uint64("step_id", step.ID),
-		zap.Uint64("manuscript_id", step.ManuscriptID),
-		zap.Int("run_version", step.RunVersion),
-		zap.Int("hit_count", hitCount))
 
 	planned := papersvc.CountPlannedPDFDownloads(items)
 	done := 0
@@ -167,11 +155,9 @@ func downloadPDFWithRetry(ctx context.Context, pdfURL, absPath, externalKey stri
 		if lastErr == nil {
 			return nil
 		}
-		notification.SendErrorLog(ctx, "topic-literature-download-pdf-failed",
+		logger.WarnZ(ctx, "topic-literature-download-pdf-retry",
 			zap.String("external_key", externalKey),
-			zap.String("pdf_url", pdfURL),
 			zap.Int("attempt", attempt),
-			zap.Int("max_attempts", pdfDownloadMaxAttempts),
 			zap.Error(lastErr))
 		if attempt >= pdfDownloadMaxAttempts {
 			break
@@ -199,7 +185,7 @@ func (j *TopicLiteratureDownloadJob) syncUserLiterature(ctx context.Context, ste
 	}
 	result := step.Result
 	for _, err := range papersvc.SyncDownloadedUserLiterature(ctx, j.userLit, step.UserID, result, items) {
-		notification.SendErrorLog(ctx, "topic-literature-user-lit-persist-failed", zap.Error(err))
+		logger.ErrorZ(ctx, "topic-literature-user-lit-persist-failed", zap.Error(err))
 	}
 }
 
@@ -242,37 +228,35 @@ func (j *TopicLiteratureDownloadJob) finishSuccess(ctx context.Context, step *en
 		return "failed"
 	}
 	step.ExecProgressPct = 100
+	detail := fmt.Sprintf("命中 %d 篇，PDF 落盘 %d 篇", hitCount, pdfN)
 	if pdfN < hitCount {
 		meta = papersvc.MergeStepExtra(meta, map[string]any{
 			"pdf_partial": true,
 			"pdf_on_disk": pdfN,
 		})
 		step.Result = mustJSON(meta)
+		detail += "（部分无 PDF 链接或未下载成功）"
 	}
 	if err := j.steps.SaveStep(ctx, step); err != nil {
-		notification.SendErrorLog(ctx, "topic-literature-download-save-failed", zap.Uint64("step_id", step.ID), zap.Error(err))
+		logger.ErrorZ(ctx, "topic-literature-download-save-failed", zap.Uint64("step_id", step.ID), zap.Error(err))
 		return ""
 	}
 	if j.runs != nil {
 		staged, syncErr := j.runs.SyncRunLiteratureToInoutWorkspace(ctx, uint(step.UserID), step.RunVersion, j.userLit)
 		if syncErr != nil {
-			notification.SendErrorLog(ctx, "topic-literature-inout-sync-failed",
+			logger.ErrorZ(ctx, "topic-literature-inout-sync-failed",
 				zap.Uint64("step_id", step.ID),
 				zap.Error(syncErr))
 		} else {
 			logger.InfoZ(ctx, "topic-literature-inout-sync",
 				zap.Uint64("step_id", step.ID),
-				zap.Int("staged_pdfs", staged),
-				zap.String("paper_root_hint", fmt.Sprintf("user_%d/manuscript_%d/run_%d/paper/literature", step.UserID, step.ManuscriptID, step.RunVersion)))
+				zap.Int("staged_pdfs", staged))
 		}
 	}
-	notification.SendNotifyLog(ctx, "topic-literature-download-completed",
-		zap.Uint64("step_id", step.ID),
-		zap.Int("pdf_on_disk", pdfN),
-		zap.Int("hit_count", hitCount))
+	j.notifyStep(ctx, step, papersvc.TopicStepOutcomeSuccess, detail)
 	if j.runs != nil {
 		if err := j.runs.OnRetrieveCompleted(ctx, uint(step.UserID), step.RunVersion); err != nil {
-			notification.SendErrorLog(ctx, "topic-retrieve-chain-idea-discovery", zap.Error(err))
+			logger.ErrorZ(ctx, "topic-retrieve-chain-idea-discovery", zap.Error(err))
 		}
 	}
 	return "completed"
@@ -292,7 +276,42 @@ func (j *TopicLiteratureDownloadJob) markFailed(ctx context.Context, step *entit
 		step.Result = mustJSON(papersvc.MergeStepExtra(meta, patch))
 	}
 	if err := j.steps.SaveStep(ctx, step); err != nil {
-		notification.SendErrorLog(ctx, "topic-literature-download-fail-save", zap.Uint64("step_id", step.ID), zap.Error(err))
+		logger.ErrorZ(ctx, "topic-literature-download-fail-save", zap.Uint64("step_id", step.ID), zap.Error(err))
+		return
+	}
+	j.notifyStep(ctx, step, papersvc.TopicStepOutcomeFailed, reason)
+}
+
+func (j *TopicLiteratureDownloadJob) notifyStep(ctx context.Context, step *entity.PaperOutputTopicStep, outcome, detail string) {
+	if step == nil {
+		return
+	}
+	meta := papersvc.LoadStepExtra(step)
+	prompt := intMeta(meta["tokens_prompt"])
+	completion := intMeta(meta["tokens_completion"])
+	papersvc.NotifyTopicStepExecutionResult(ctx, j.manuscripts, papersvc.TopicStepExecNotify{
+		StageCode:        "retrieve",
+		Outcome:          outcome,
+		UserID:           uint(step.UserID),
+		ManuscriptID:     step.ManuscriptID,
+		RunVersion:       step.RunVersion,
+		StepID:           step.ID,
+		PromptTokens:     prompt,
+		CompletionTokens: completion,
+		Detail:           detail,
+	})
+}
+
+func intMeta(v any) int {
+	switch t := v.(type) {
+	case float64:
+		return int(t)
+	case int:
+		return t
+	case int64:
+		return int(t)
+	default:
+		return 0
 	}
 }
 

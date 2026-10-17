@@ -22,7 +22,8 @@ type (
 	ExperimentPlanService         = experimentplan.ExperimentPlanService
 	PaperFigureService            = figure.PaperFigureService
 	ManuscriptSubmissionService   = submission.ManuscriptSubmissionService
-	LiteratureDownloadItem = literature.LiteratureDownloadItem
+	LiteratureDownloadItem   = literature.LiteratureDownloadItem
+	TopicStepExecNotify      = step.TopicStepExecNotify
 )
 
 var (
@@ -40,7 +41,12 @@ var (
 	FailTopicStep              = step.FailTopicStep
 	MergeStepExtra             = step.MergeStepExtra
 	TopicStepHasPersistedOutput = step.TopicStepHasPersistedOutput
-	SyncStepFilesAppend = step.SyncStepFilesAppend
+	SyncStepFilesAppend         = step.SyncStepFilesAppend
+	NotifyTopicStepExecutionResult = step.NotifyTopicStepExecutionResult
+	TopicStepOutcomeSuccess        = step.TopicStepOutcomeSuccess
+	TopicStepOutcomeFailed         = step.TopicStepOutcomeFailed
+	TopicStepOutcomeCheckpoint     = step.TopicStepOutcomeCheckpoint
+	IdeaDiscoveryCheckpointDetail  = step.IdeaDiscoveryCheckpointDetail
 	MustJSONStep     = jsonx.MustJSONStep
 
 	ParseLiteratureDownloads           = literature.ParseLiteratureDownloads

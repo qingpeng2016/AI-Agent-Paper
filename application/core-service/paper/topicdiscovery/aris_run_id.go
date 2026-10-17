@@ -12,8 +12,11 @@ import (
 
 var runIDSlugSanitize = regexp.MustCompile(`[^a-z0-9-]+`)
 
-// resolveIdeaDiscoveryRunID 原生：direction slug + 日期；同 run 复用 meta 中已有 id。
-func resolveIdeaDiscoveryRunID(step *entity.PaperOutputTopicStep, input topicRunInput) string {
+// resolveIdeaDiscoveryRunID 原生：优先工作区 run_state 文件名，否则 meta / direction slug + 日期。
+func resolveIdeaDiscoveryRunID(paperRoot string, step *entity.PaperOutputTopicStep, input topicRunInput) string {
+	if ws := newestIdeaDiscoveryRunStateID(paperRoot); ws != "" {
+		return ws
+	}
 	if step != nil {
 		meta := paperstep.LoadStepExtra(step)
 		if s := strings.TrimSpace(fmt.Sprint(meta["aris_run_id"])); s != "" && s != "<nil>" {

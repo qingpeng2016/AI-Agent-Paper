@@ -164,6 +164,9 @@ func (s *TopicDiscoveryRunService) ConfirmTopicRound(
 		}
 	}
 
+	s.notifyTopicConfirmStep(ctx, userID, runVersion, confirmStep,
+		fmt.Sprintf("选定第 %d 轮并入库；literature_review_id=%d experiment_plan_id=%d", selectedRound, litReviewID, planID))
+
 	return s.reloadView(ctx, userID, runVersion)
 }
 
@@ -195,7 +198,38 @@ func (s *TopicDiscoveryRunService) tryFinishConfirmStepIfPersisted(
 			return false, topicConfirmWrapErr(err)
 		}
 	}
+	s.notifyTopicConfirmStep(ctx, userID, confirmStep.RunVersion, confirmStep,
+		fmt.Sprintf("选定第 %d 轮（补全确认步骤）", selectedRound))
 	return true, nil
+}
+
+func (s *TopicDiscoveryRunService) notifyTopicConfirmStep(
+	ctx context.Context,
+	userID uint,
+	runVersion int,
+	confirmStep *entity.PaperOutputTopicStep,
+	detail string,
+) {
+	if confirmStep == nil {
+		return
+	}
+	prompt, completion := 0, 0
+	if disc, err := s.steps.GetStep(ctx, uint64(userID), runVersion, "idea_discovery"); err == nil && disc != nil {
+		meta := paperstep.LoadStepExtra(disc)
+		prompt = intFromAny(meta["tokens_prompt"])
+		completion = intFromAny(meta["tokens_completion"])
+	}
+	paperstep.NotifyTopicStepExecutionResult(ctx, s.manuscripts, paperstep.TopicStepExecNotify{
+		StageCode:        "topic_confirm",
+		Outcome:          paperstep.TopicStepOutcomeSuccess,
+		UserID:           userID,
+		ManuscriptID:     confirmStep.ManuscriptID,
+		RunVersion:       runVersion,
+		StepID:           confirmStep.ID,
+		PromptTokens:     prompt,
+		CompletionTokens: completion,
+		Detail:           detail,
+	})
 }
 
 func (s *TopicDiscoveryRunService) topicConfirmArtifactsReady(

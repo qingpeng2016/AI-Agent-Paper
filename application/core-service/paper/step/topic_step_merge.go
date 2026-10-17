@@ -19,8 +19,10 @@ var resultAppendOnlyKeys = map[string]struct{}{
 var topicStepRuntimeResultKeys = map[string]struct{}{
 	"async_llm":                  {},
 	"async_llm_done":             {},
-	"aris_awaiting_checkpoint":   {},
-	"aris_pause_after_phase":     {},
+	"aris_awaiting_checkpoint":      {},
+	"aris_checkpoint_proceed":       {},
+	"aris_checkpoint_proceed_phase": {},
+	"aris_pause_after_phase":        {},
 	"aris_invoke_retries":        {},
 	"aris_invoke_last_error":     {},
 	"aris_invoke_count":          {},

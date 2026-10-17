@@ -708,7 +708,14 @@ func (s *TopicDiscoveryRunService) buildRunView(manuscriptID uint64, runVersion 
 			sv.ErrorMsg = strings.TrimSpace(*r.ErrorMsg)
 		}
 		if r.ExecCommand != nil {
-			sv.ExecCommand = strings.TrimSpace(*r.ExecCommand)
+			raw := strings.TrimSpace(*r.ExecCommand)
+			if raw != "" {
+				if json.Valid([]byte(raw)) {
+					sv.ExecCommand = json.RawMessage(raw)
+				} else {
+					sv.ExecCommand = json.RawMessage(jsonx.MustJSON(map[string]any{"_legacy_plaintext": raw}))
+				}
+			}
 		}
 		if len(r.Result) > 0 {
 			sv.Result = json.RawMessage(r.Result)

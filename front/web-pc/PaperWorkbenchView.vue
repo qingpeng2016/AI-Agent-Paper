@@ -850,10 +850,28 @@ watch(activeManuscriptId, (id, prev) => {
   void refreshTopicDiscoveryForManuscript(id)
 })
 
+function clampTopicConfirmWhileIdeaDiscoveryActive(
+  steps: TopicFlowStepRuntime[],
+): TopicFlowStepRuntime[] {
+  const idea = steps.find(
+    (s) => s.stageCode === 'idea_discovery' || s.stageCode === 'topic_discovery',
+  )
+  if (!idea || idea.status === 'completed') return steps
+  return steps.map((s) =>
+    s.stageCode === 'topic_confirm' && s.status === 'running'
+      ? { ...s, status: 'pending' as TopicFlowStepStatus }
+      : s,
+  )
+}
+
 const currentTopicRun = computed((): TopicRunDemo => {
   const id = activeManuscriptId.value
   if (!id) return createIdleTopicRun()
-  return topicRunsByManuscript.value[id] ?? createIdleTopicRun()
+  const run = topicRunsByManuscript.value[id] ?? createIdleTopicRun()
+  return {
+    ...run,
+    steps: clampTopicConfirmWhileIdeaDiscoveryActive(run.steps),
+  }
 })
 
 const topicRunVisible = computed(
@@ -1455,7 +1473,7 @@ function linesFromApiStep(step?: TopicDiscoveryStepDTO): string[] {
 /** 展示态：run_status + steps；人工暂停时统一为 checkpoint（后端可能仍标 running） */
 function topicRunFromApi(data: TopicDiscoveryRunResponse): TopicRunDemo {
   let status = runStatusFromApi(data.run_status)
-  const steps: TopicFlowStepRuntime[] = TOPIC_DISCOVERY_FLOW_STEPS.map((def) => {
+  let steps: TopicFlowStepRuntime[] = TOPIC_DISCOVERY_FLOW_STEPS.map((def) => {
     const st = data.steps.find((s) => s.stage_code === def.stageCode)
     return {
       stageCode: def.stageCode,
@@ -1464,6 +1482,7 @@ function topicRunFromApi(data: TopicDiscoveryRunResponse): TopicRunDemo {
       status: st ? stepStatusFromApi(st.status) : 'pending',
     }
   })
+  steps = clampTopicConfirmWhileIdeaDiscoveryActive(steps)
 
   const pauseStage = topicPauseStageFromApi(data)
   const anyStepRunning = steps.some((s) => s.status === 'running')
@@ -1656,30 +1675,40 @@ function optimisticMarkFirstStepRunning(msId: string) {
   })
 }
 
-/** 检查点继续：下一步先标 running，与 retrieve 异步时立刻出现转圈 */
+/** 检查点继续：原生 idea_discovery 段内 continue 仍标 idea_discovery；全流程完成后才标 topic_confirm */
 function optimisticMarkNextStepRunning(msId: string) {
   const cur = topicRunsByManuscript.value[msId] ?? createIdleTopicRun()
   const steps = cur.steps.map((s) => ({ ...s }))
   let marked = false
-  const pendingIdx = steps.findIndex((s) => s.status === 'pending')
-  if (pendingIdx >= 0) {
-    steps[pendingIdx].status = 'running'
-    topicContinueOptimisticStage.value = steps[pendingIdx].stageCode
+  const ideaIdx = steps.findIndex(
+    (s) => s.stageCode === 'idea_discovery' || s.stageCode === 'topic_discovery',
+  )
+
+  if (ideaIdx >= 0 && steps[ideaIdx].status !== 'completed') {
+    steps[ideaIdx].status = 'running'
+    topicContinueOptimisticStage.value = steps[ideaIdx].stageCode
     marked = true
   } else {
-    for (let i = 0; i < steps.length - 1; i++) {
-      if (steps[i].status === 'completed' && steps[i + 1].status === 'pending') {
-        steps[i + 1].status = 'running'
-        topicContinueOptimisticStage.value = steps[i + 1].stageCode
-        marked = true
-        break
+    const pendingIdx = steps.findIndex((s) => s.status === 'pending')
+    if (pendingIdx >= 0) {
+      steps[pendingIdx].status = 'running'
+      topicContinueOptimisticStage.value = steps[pendingIdx].stageCode
+      marked = true
+    } else {
+      for (let i = 0; i < steps.length - 1; i++) {
+        if (steps[i].status === 'completed' && steps[i + 1].status === 'pending') {
+          steps[i + 1].status = 'running'
+          topicContinueOptimisticStage.value = steps[i + 1].stageCode
+          marked = true
+          break
+        }
       }
     }
   }
   if (!marked) topicContinueOptimisticStage.value = null
   persistTopicRun(msId, {
     status: 'running',
-    steps,
+    steps: clampTopicConfirmWhileIdeaDiscoveryActive(steps),
     checkpoint: null,
   })
 }

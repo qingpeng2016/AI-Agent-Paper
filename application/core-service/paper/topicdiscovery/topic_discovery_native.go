@@ -40,7 +40,7 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 	}
 
 	paperRoot := ARISRunPaperRoot(uint64(userID), step.ManuscriptID, runVersion)
-	runID := resolveIdeaDiscoveryRunID(step, input)
+	runID := resolveIdeaDiscoveryRunID(paperRoot, step, input)
 
 	invokeCtx := s.buildTopicStrategyInvokeContext(ctx, userID, runVersion, step, input, 1, 1, nil, nil)
 	maxChain := cfg.Platform.MaxArisPerBot
@@ -71,10 +71,18 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 		if resuming {
 			argsLine += fmt.Sprintf(` — resume %s`, runID)
 		}
+		proceedPhase := ""
+		if meta != nil {
+			argsLine, proceedPhase = applyCheckpointProceedToArgsLine(meta, argsLine, pendingPhase)
+			if proceedPhase != "" {
+				step.Result = jsonx.MustJSON(meta)
+				_ = s.steps.SaveStep(ctx, step)
+			}
+		}
 		if err := writeNativePlatformArguments(paperRoot, argsLine); err != nil {
 			return err
 		}
-		userExtra := buildNativeIdeaDiscoverySessionNotes(cfg, runID, pendingPhase, resuming)
+		userExtra := buildNativeIdeaDiscoverySessionNotes(cfg, runID, pendingPhase, resuming, proceedPhase)
 		req := BuildTopicDiscoveryInvokeRequest(BehaviorIdeaDiscoveryRun, route.CapabilityID, input, invokeCtx)
 
 		raw, usage, err := s.invokeTopicDiscoveryBehavior(ctx, step, req, userExtra)
@@ -306,12 +314,50 @@ func ideaDiscoveryProgressPct(paperRoot, runID string) uint8 {
 	return uint8(min(99, max(1, done*100/len(st.Phases))))
 }
 
-// buildNativeIdeaDiscoverySessionNotes 仅 run_state 续跑元数据；$ARGUMENTS 已在 platform_user_prompt.txt（与原生 CLI 一致）。
-func buildNativeIdeaDiscoverySessionNotes(cfg ARISIdeaDiscoveryConfig, runID, resumePhase string, resuming bool) string {
-	if !resuming && resumePhase == "" {
-		return fmt.Sprintf("run_id=%s", runID)
+// buildNativeIdeaDiscoverySessionNotes run_state 续跑 + 人工检查点 PROCEED；$ARGUMENTS 在 platform_user_prompt.txt。
+func buildNativeIdeaDiscoverySessionNotes(cfg ARISIdeaDiscoveryConfig, runID, resumePhase string, resuming bool, checkpointProceedPhase string) string {
+	checkpointProceedPhase = strings.TrimSpace(checkpointProceedPhase)
+	var b strings.Builder
+	fmt.Fprintf(&b, "run_id=%s", runID)
+	if resumePhase != "" || resuming {
+		fmt.Fprintf(&b, " resume_phase=%s resuming=%v", resumePhase, resuming)
 	}
-	return fmt.Sprintf("run_id=%s resume_phase=%s resuming=%v", runID, resumePhase, resuming)
+	if checkpointProceedPhase != "" {
+		fmt.Fprintf(&b, "\n%s", checkpointProceedSessionNote(checkpointProceedPhase))
+	}
+	return b.String()
+}
+
+func checkpointProceedSessionNote(phase string) string {
+	phase = strings.TrimSpace(phase)
+	if phase == "" {
+		phase = "research-lit"
+	}
+	return fmt.Sprintf(
+		`Platform user checkpoint reply: PROCEED (confirm and continue). Under AUTO_PROCEED=false this is explicit approval to execute phase %q now — run the skill work (e.g. /research-lit search, verify, optional arxiv PDF download per contract). Do not stop at a pre-execution staging checkpoint or re-ask the same decision.`,
+		phase,
+	)
+}
+
+func applyCheckpointProceedToArgsLine(meta map[string]any, argsLine, defaultPhase string) (string, string) {
+	if meta == nil {
+		return argsLine, ""
+	}
+	v, ok := meta["aris_checkpoint_proceed"].(bool)
+	if !ok || !v {
+		return argsLine, ""
+	}
+	phase := strings.TrimSpace(fmt.Sprint(meta["aris_checkpoint_proceed_phase"]))
+	if phase == "" {
+		phase = strings.TrimSpace(defaultPhase)
+	}
+	delete(meta, "aris_checkpoint_proceed")
+	delete(meta, "aris_checkpoint_proceed_phase")
+	suffix := fmt.Sprintf(
+		` — user checkpoint: PROCEED, execute phase %q now (do not re-stage; run /research-lit including search and ARXIV_DOWNLOAD per contract)`,
+		phase,
+	)
+	return argsLine + suffix, phase
 }
 
 func mergeNativeIdeaDiscoveryArtifacts(result map[string]any, paperRoot string, cfg ARISIdeaDiscoveryConfig) {
@@ -429,6 +475,12 @@ func (s *TopicDiscoveryRunService) ResumeIdeaDiscoveryFromCheckpoint(ctx context
 		return false, nil
 	}
 	delete(meta, "aris_awaiting_checkpoint")
+	phase := strings.TrimSpace(fmt.Sprint(meta["aris_pause_after_phase"]))
+	if phase == "" {
+		phase = "research-lit"
+	}
+	meta["aris_checkpoint_proceed"] = true
+	meta["aris_checkpoint_proceed_phase"] = phase
 	meta["async_llm"] = true
 	step.Result = jsonx.MustJSON(meta)
 	step.Status = "running"
