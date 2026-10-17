@@ -1,6 +1,6 @@
 // topic_discovery bot：定时扫库，对「排队中的 Idea Discovery」触发 ARIS。
 // 真正调 CLI 的逻辑在 TopicDiscoveryRunService.RunNativeIdeaDiscoveryLLM（只走 /idea-discovery）。
-// 配置见 conf/aris_idea_discovery.yaml：JSON 该步未 done 且用户已确认 → 每 tick 一次 aris，然后退出。
+// run_state 仅读 .aris/runs/*.json（ARIS 写入，平台不写）：无 JSON 或 JSON 该段未 done 且 DB executing → 每 tick 一次 aris，然后退出。
 package topicdiscovery
 
 import (

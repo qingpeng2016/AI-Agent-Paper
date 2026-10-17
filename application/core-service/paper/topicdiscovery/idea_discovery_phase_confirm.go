@@ -116,8 +116,9 @@ func phaseUserConfirmedForInvoke(meta map[string]any, phase string) bool {
 	return phaseStatusInMeta(meta, phase) == IdeaDiscoveryPhaseExecuting
 }
 
-// IdeaDiscoveryBotMayInvokePending 仅 pending 段为 executing 且 run_state 该段未 done 时 bot 可打 aris。
-func IdeaDiscoveryBotMayInvokePending(meta map[string]any, pendingPhase string) bool {
+// IdeaDiscoveryBotMayInvokePending：只读工作区 run_state（ARIS 写入，平台不写）。
+// DB 该 pending 为 executing；无 JSON 则打一次 aris；有 JSON 则该段在 JSON 里未 done 才打 aris。
+func IdeaDiscoveryBotMayInvokePending(meta map[string]any, pendingPhase, paperRoot, runID string) bool {
 	pendingPhase = strings.TrimSpace(pendingPhase)
 	if pendingPhase == "" {
 		return false
@@ -128,7 +129,10 @@ func IdeaDiscoveryBotMayInvokePending(meta map[string]any, pendingPhase string) 
 	if ideaDiscoveryNeedsUserConfirm(meta, pendingPhase, mustIdeaDiscoveryConfig()) {
 		return false
 	}
-	return true
+	if !ideaDiscoveryRunStateFileExists(paperRoot, runID) {
+		return true
+	}
+	return !isRunStatePhaseDone(paperRoot, runID, pendingPhase)
 }
 
 func hasLegacyIdeaDiscoveryRuntimeKeys(meta map[string]any) bool {

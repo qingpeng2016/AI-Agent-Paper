@@ -7,7 +7,7 @@ import (
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
 )
 
-// PrepareIdeaDiscoveryBotInvoke：run_state 该段未 done，且 runtime_state 里该段为 true（用户已确认）→ 允许打一条 aris。
+// PrepareIdeaDiscoveryBotInvoke：只读 ARIS 的 run_state JSON；无文件或 JSON 该 pending 未 done 且 DB 为 executing → 本 tick 打一条 aris。
 func (s *TopicDiscoveryRunService) PrepareIdeaDiscoveryBotInvoke(
 	ctx context.Context,
 	userID uint,
@@ -30,7 +30,6 @@ func (s *TopicDiscoveryRunService) PrepareIdeaDiscoveryBotInvoke(
 	cfg := mustIdeaDiscoveryConfig()
 	paperRoot := ARISRunPaperRoot(uint64(userID), step.ManuscriptID, runVersion)
 	runID := resolveIdeaDiscoveryRunID(paperRoot, step, input)
-	_ = seedIdeaDiscoveryRunStateFromWorkspace(paperRoot, runID)
 
 	pending, err := ideaDiscoveryResumePhase(paperRoot, runID)
 	if err != nil {
@@ -44,7 +43,7 @@ func (s *TopicDiscoveryRunService) PrepareIdeaDiscoveryBotInvoke(
 		return false, nil
 	}
 
-	if !IdeaDiscoveryBotMayInvokePending(meta, pending) {
+	if !IdeaDiscoveryBotMayInvokePending(meta, pending, paperRoot, runID) {
 		paperstep.PersistStepExtra(step, meta)
 		_ = s.steps.SaveStep(ctx, step)
 		if ideaDiscoveryNeedsUserConfirm(meta, pending, cfg) {

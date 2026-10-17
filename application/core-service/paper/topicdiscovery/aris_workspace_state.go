@@ -74,6 +74,16 @@ func runStatePhaseCompleted(status string) bool {
 	}
 }
 
+func runStateEntryPhaseID(phase, name, id string) string {
+	if s := strings.TrimSpace(phase); s != "" {
+		return s
+	}
+	if s := strings.TrimSpace(name); s != "" {
+		return s
+	}
+	return strings.TrimSpace(id)
+}
+
 func runStatePhaseStatus(paperRoot, runID, phaseID string) (status string, found bool) {
 	phaseID = strings.TrimSpace(phaseID)
 	if phaseID == "" {

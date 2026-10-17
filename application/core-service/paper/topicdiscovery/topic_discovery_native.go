@@ -104,7 +104,6 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 		_, _ = s.ingestARISWorkspaceLiterature(ctx, userID, runVersion, step.ManuscriptID, paperRoot, cfg)
 	}
 
-	_ = seedIdeaDiscoveryRunStateFromWorkspace(paperRoot, runID)
 	pendingPhase, err = ideaDiscoveryResumePhase(paperRoot, runID)
 	if err != nil {
 		return err
@@ -116,7 +115,9 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 	normalizeIdeaDiscoveryRuntimeMeta(meta)
 	syncIdeaDiscoveryRunProgressToMeta(meta, paperRoot, runID)
 
-	if IdeaDiscoveryBotMayInvokePending(meta, pendingPhase) && !isRunStatePhaseDone(paperRoot, runID, pendingPhase) {
+	// 仅当 ARIS 已落 run_state 且该段仍未 done 时续排队；invoke 后仍无 JSON 则停 bot，避免空转。
+	if ideaDiscoveryRunStateFileExists(paperRoot, runID) &&
+		IdeaDiscoveryBotMayInvokePending(meta, pendingPhase, paperRoot, runID) {
 		meta["async_llm"] = true
 		meta["async_llm_done"] = false
 		paperstep.PersistStepExtra(step, meta)
