@@ -103,7 +103,7 @@ func (j *TopicDiscoveryJob) processOne(ctx context.Context, step *entity.PaperOu
 
 	beforePrompt, beforeCompletion := tokenUsageFromMeta(meta)
 
-	// 每 tick 一条 aris prompt（与手动一致）；未跑完则 async_llm 留 true，下轮 bot 再调。
+	// async_llm=true 时每次 tick 最多一条 aris；pause:false 段 invoke 后仍 true，靠 bot 间隔（如 10s）再跑下一条。
 	if err = j.runs.RunNativeIdeaDiscoveryLLM(ctx, uint(step.UserID), step.RunVersion, step, input); err != nil {
 		if strings.TrimSpace(step.Status) != "failed" {
 			j.markFailed(ctx, step, err.Error(), 0, 0)
@@ -141,7 +141,7 @@ func (j *TopicDiscoveryJob) processOne(ctx context.Context, step *entity.PaperOu
 		j.notifyStep(ctx, step, papersvc.TopicStepOutcomeSuccess, "Idea Discovery 全流程已完成", deltaPrompt, deltaCompletion)
 		return "completed"
 	}
-	// async_llm 仍为 true、run 未结束：下轮 bot 再一条命令。
+	// pause:false 且 invoke 后 async_llm 仍为 true：等 bot 间隔（如 10s）再跑下一条。
 	logger.InfoZ(ctx, "topic-discovery-invoke-tick-done",
 		zap.Uint64("step_id", step.ID),
 		zap.Uint64("manuscript_id", step.ManuscriptID),

@@ -153,7 +153,7 @@ func topicStepOutcomeLabels(outcome, stageLabel string) (resultLabel, logMsg str
 func IdeaDiscoveryCheckpointDetail(pauseAfterPhase string) string {
 	p := strings.TrimSpace(pauseAfterPhase)
 	if p == "" {
-		return "Idea Discovery 段间检查点，待用户在平台确认并继续"
+		return "Idea Discovery 本轮 ARIS 已结束，待用户在平台确认并继续（勿重复自动调 CLI）"
 	}
-	return fmt.Sprintf("Idea Discovery 已完成本轮 invoke，下一阶段「%s」（%s）需在平台确认后继续", arisPhaseUiLabelZh(p), p)
+	return fmt.Sprintf("Idea Discovery 本轮 ARIS 已结束（当前阶段 %s / %s），请在平台点继续后再执行下一条命令", arisPhaseUiLabelZh(p), p)
 }
