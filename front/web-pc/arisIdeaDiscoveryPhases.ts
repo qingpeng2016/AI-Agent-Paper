@@ -64,7 +64,7 @@ function parsePhaseStatus(result: Record<string, unknown>, phase: string): IdeaD
       const entry = (stage as Record<string, unknown>)[slot]
       if (!entry || typeof entry !== 'object') continue
       const o = entry as Record<string, unknown>
-      if String(o.name ?? '').trim() === p) {
+        if (String(o.name ?? '').trim() === p) {
         return normalizePhaseStatusValue(o.status)
       }
     }
