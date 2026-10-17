@@ -26,10 +26,7 @@ const DEFAULT_IDEA_DISCOVERY_UI_GROUPS: IdeaDiscoveryUIGroupDTO[] = [
   { index: 3, phase_ids: ['research-refine-pipeline'], label_zh: '文献综述与实验规划' },
 ]
 
-function parsePhaseStatus(result: Record<string, unknown>, phase: string): IdeaDiscoveryPhaseStatus {
-  const p = phase.trim()
-  if (!p) return IDEA_DISCOVERY_PHASE_STATUS.not_started
-  const v = result[p]
+function normalizePhaseStatusValue(v: unknown): IdeaDiscoveryPhaseStatus {
   if (typeof v === 'string') {
     const s = v.trim().toLowerCase()
     if (s === IDEA_DISCOVERY_PHASE_STATUS.not_started || s === 'pending') {
@@ -54,6 +51,33 @@ function parsePhaseStatus(result: Record<string, unknown>, phase: string): IdeaD
   }
   if (v === true || v === 1) return IDEA_DISCOVERY_PHASE_STATUS.executing
   return IDEA_DISCOVERY_PHASE_STATUS.not_started
+}
+
+/** runtime_state.stage（序号 1..n）或旧版扁平 phase key */
+function parsePhaseStatus(result: Record<string, unknown>, phase: string): IdeaDiscoveryPhaseStatus {
+  const p = phase.trim()
+  if (!p) return IDEA_DISCOVERY_PHASE_STATUS.not_started
+  const stage = result.stage
+  if (stage && typeof stage === 'object' && !Array.isArray(stage)) {
+    const slots = Object.keys(stage as object).sort((a, b) => Number(a) - Number(b))
+    for (const slot of slots) {
+      const entry = (stage as Record<string, unknown>)[slot]
+      if (!entry || typeof entry !== 'object') continue
+      const o = entry as Record<string, unknown>
+      if String(o.name ?? '').trim() === p) {
+        return normalizePhaseStatusValue(o.status)
+      }
+    }
+  }
+  return normalizePhaseStatusValue(result[p])
+}
+
+function ideaDiscoveryAsyncLLMQueued(result: Record<string, unknown>): boolean {
+  const other = result.other
+  if (other && typeof other === 'object' && !Array.isArray(other)) {
+    if ((other as Record<string, unknown>).async_llm === true) return true
+  }
+  return result.async_llm === true
 }
 
 /** 全 pipeline 中第一个 awaiting_confirm（仅它展示「待确认」） */
@@ -175,7 +199,7 @@ export function isIdeaDiscoveryArisCheckpoint(
   const step = ideaDiscoveryStepDto(steps)
   if (!step) return false
   const result = (step.result ?? {}) as Record<string, unknown>
-  if (result.async_llm === true) return false
+  if (ideaDiscoveryAsyncLLMQueued(result)) return false
   if (isAnyIdeaDiscoveryPhaseExecuting(steps)) return false
   return firstIdeaDiscoveryPhaseAwaitingConfirm(result) != null
 }

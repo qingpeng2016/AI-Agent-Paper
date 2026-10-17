@@ -413,6 +413,12 @@ export const IDEA_DISCOVERY_PHASE_STATUS = {
 export type IdeaDiscoveryPhaseStatus =
   (typeof IDEA_DISCOVERY_PHASE_STATUS)[keyof typeof IDEA_DISCOVERY_PHASE_STATUS]
 
+/** idea_discovery runtime_state.stage 单条（序号 "1".."5"） */
+export type IdeaDiscoveryRuntimeStageEntry = {
+  name: string
+  status: IdeaDiscoveryPhaseStatus | string
+}
+
 /** 工作台展示的 4 步（前两段 ARIS phase 合并为一行） */
 export const ARIS_IDEA_DISCOVERY_UI_PHASES = [
   'lit-idea-creator',

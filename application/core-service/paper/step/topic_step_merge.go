@@ -2,7 +2,9 @@ package step
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,7 +27,17 @@ var ideaDiscoveryPhaseConfirmKeys = map[string]struct{}{
 	"research-refine-pipeline":  {},
 }
 
+// ideaDiscoveryPhaseOrder 与 topicdiscovery.ideaDiscoveryRunStatePhases 顺序一致（stage 序号 1..n）。
+var ideaDiscoveryPhaseOrder = []string{
+	"research-lit",
+	"idea-creator",
+	"novelty-check",
+	"research-review",
+	"research-refine-pipeline",
+}
+
 const topicStepRuntimeOtherKey = "other"
+const topicStepRuntimeStageKey = "stage"
 
 var topicStepRuntimeResultKeys = map[string]struct{}{
 	"async_llm":                  {},
@@ -98,7 +110,7 @@ func LoadStepResultMap(step *entity.PaperOutputTopicStep) map[string]any {
 }
 
 func isTopicStepRuntimeKey(k string) bool {
-	if k == topicStepRuntimeOtherKey {
+	if k == topicStepRuntimeOtherKey || k == topicStepRuntimeStageKey {
 		return true
 	}
 	if _, ok := topicStepRuntimeResultKeys[k]; ok {
@@ -135,6 +147,49 @@ func expandIdeaDiscoveryRuntimeOther(rt map[string]any) {
 	}
 }
 
+func expandIdeaDiscoveryRuntimeStage(rt map[string]any) {
+	if rt == nil {
+		return
+	}
+	raw, ok := rt[topicStepRuntimeStageKey].(map[string]any)
+	if !ok || raw == nil {
+		return
+	}
+	for i := range ideaDiscoveryPhaseOrder {
+		slot := strconv.Itoa(i + 1)
+		entry, ok := raw[slot].(map[string]any)
+		if !ok || entry == nil {
+			continue
+		}
+		name := strings.TrimSpace(fmt.Sprint(entry["name"]))
+		if name == "" {
+			continue
+		}
+		if _, exists := rt[name]; !exists {
+			rt[name] = entry["status"]
+		}
+	}
+}
+
+func compactIdeaDiscoveryRuntimeStage(rt map[string]any) {
+	if rt == nil {
+		return
+	}
+	stages := map[string]any{}
+	for i, id := range ideaDiscoveryPhaseOrder {
+		st := strings.TrimSpace(fmt.Sprint(rt[id]))
+		if st == "" || st == "<nil>" {
+			st = "not_started"
+		}
+		stages[strconv.Itoa(i+1)] = map[string]any{
+			"name":   id,
+			"status": st,
+		}
+		delete(rt, id)
+	}
+	rt[topicStepRuntimeStageKey] = stages
+}
+
 func compactIdeaDiscoveryRuntimeOther(rt map[string]any) {
 	if rt == nil {
 		return
@@ -146,7 +201,7 @@ func compactIdeaDiscoveryRuntimeOther(rt map[string]any) {
 		}
 	}
 	for k, v := range rt {
-		if k == topicStepRuntimeOtherKey || k == "async_llm" {
+		if k == topicStepRuntimeOtherKey || k == topicStepRuntimeStageKey {
 			continue
 		}
 		if _, phase := ideaDiscoveryPhaseConfirmKeys[k]; phase {
@@ -170,6 +225,7 @@ func LoadStepExtra(step *entity.PaperOutputTopicStep) map[string]any {
 	res := unmarshalJSONMap(step.Result)
 	rt := unmarshalJSONMap(step.RuntimeState)
 	if isIdeaDiscoveryTopicStep(step) {
+		expandIdeaDiscoveryRuntimeStage(rt)
 		expandIdeaDiscoveryRuntimeOther(rt)
 	}
 	out := make(map[string]any, len(res)+len(rt))
@@ -210,6 +266,7 @@ func PersistStepExtra(step *entity.PaperOutputTopicStep, meta map[string]any) {
 		}
 	}
 	if isIdeaDiscoveryTopicStep(step) {
+		compactIdeaDiscoveryRuntimeStage(rt)
 		compactIdeaDiscoveryRuntimeOther(rt)
 	}
 	step.RuntimeState = jsonx.MustJSON(rt)
