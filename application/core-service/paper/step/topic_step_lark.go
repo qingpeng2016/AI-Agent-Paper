@@ -139,5 +139,5 @@ func IdeaDiscoveryCheckpointDetail(pauseAfterPhase string) string {
 	if p == "" {
 		return "Idea Discovery 段间检查点，待用户在平台确认并继续"
 	}
-	return fmt.Sprintf("Idea Discovery 子阶段「%s」（%s）执行一轮后暂停，待确认并继续", arisPhaseLabelZh(p), p)
+	return fmt.Sprintf("Idea Discovery 已完成本轮 invoke，下一阶段「%s」（%s）需在平台确认后继续", arisPhaseLabelZh(p), p)
 }

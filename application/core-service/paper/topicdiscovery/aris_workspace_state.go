@@ -64,14 +64,8 @@ func readRunStateResumeTarget(paperRoot, runID string) (phase string, complete b
 }
 
 func runStatePhaseNeedsWork(status string) bool {
-	switch strings.TrimSpace(strings.ToLower(status)) {
-	case "accepted", "skipped":
-		return false
-	case "provisional":
-		return false
-	default:
-		return true
-	}
+	// ARIS run_state: done = artifact produced (may be ✓ unaccepted); resume skips to next pending phase.
+	return !runStatePhaseCompleted(status)
 }
 
 func runStatePhaseCompleted(status string) bool {
