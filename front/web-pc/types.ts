@@ -408,7 +408,7 @@ export const ARIS_IDEA_DISCOVERY_PHASES_LABEL = ARIS_IDEA_DISCOVERY_PHASES.join(
 export const TOPIC_DISCOVERY_FLOW_STEPS: TopicFlowStepDef[] = [
   {
     stageCode: 'idea_discovery',
-    label: '选题发现（/idea-discovery · web 文献）',
+    label: '选题发现-全流程',
     checkpointKey: 'idea_discovery_ready',
   },
   { stageCode: 'topic_confirm', label: '确认并完成', checkpointKey: 'topic_confirm_ready' },

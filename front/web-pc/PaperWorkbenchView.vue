@@ -39,7 +39,6 @@ import {
   PAPER_MODULES,
   appendOperationLog,
   TOPIC_DISCOVERY_FLOW_STEPS,
-  ARIS_IDEA_DISCOVERY_PHASES_LABEL_ZH,
   getPaperModuleMeta,
   type EnvironmentPreferenceForm,
   type PaperManuscriptItem,
@@ -50,6 +49,7 @@ import {
 } from './types'
 import {
   arisIdeaDiscoveryPhaseRows,
+  ARIS_IDEA_DISCOVERY_PHASES_LABEL_ZH,
   arisPhaseIdLabel,
   arisPhaseStatusLabel,
   type ArisPhaseUiRow,
