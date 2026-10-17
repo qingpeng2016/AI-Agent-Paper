@@ -1,6 +1,6 @@
 // topic_discovery bot：定时扫库，对「排队中的 Idea Discovery」触发 ARIS。
 // 真正调 CLI 的逻辑在 TopicDiscoveryRunService.RunNativeIdeaDiscoveryLLM（只走 /idea-discovery）。
-// 配置见 conf/aris_idea_discovery.yaml（checkpoint、每 tick 一条 aris，不自动连 invoke）。
+// 配置见 conf/aris_idea_discovery.yaml：JSON 该步未 done 且用户已确认 → 每 tick 一次 aris，然后退出。
 package topicdiscovery
 
 import (
@@ -95,16 +95,18 @@ func (j *TopicDiscoveryJob) processOne(ctx context.Context, step *entity.PaperOu
 		j.markFailed(ctx, step, "无法加载 run 入参: "+err.Error(), 0, 0)
 		return "failed"
 	}
-	_ = j.runs.ReconcileIdeaDiscoveryBotAwaiting(ctx, uint(step.UserID), step.RunVersion, step, input)
-	meta = papersvc.LoadStepExtra(step)
-	// 仅 pause:true 且已有 run_state 时挡 bot；无 JSON 时不应等前端确认。
-	if v, ok := meta["aris_awaiting_checkpoint"].(bool); ok && v {
+	invoke, err := j.runs.PrepareIdeaDiscoveryBotInvoke(ctx, uint(step.UserID), step.RunVersion, step, input)
+	if err != nil {
+		j.markFailed(ctx, step, err.Error(), 0, 0)
+		return "failed"
+	}
+	if !invoke {
 		return "skipped"
 	}
 
+	meta = papersvc.LoadStepExtra(step)
 	beforePrompt, beforeCompletion := tokenUsageFromMeta(meta)
 
-	// async_llm=true：本 tick 只跑一条 aris；成功后清 async_llm，下一条须用户 Continue 或 API 再排队。
 	if err = j.runs.RunNativeIdeaDiscoveryLLM(ctx, uint(step.UserID), step.RunVersion, step, input); err != nil {
 		if strings.TrimSpace(step.Status) != "failed" {
 			j.markFailed(ctx, step, err.Error(), 0, 0)
@@ -132,9 +134,9 @@ func (j *TopicDiscoveryJob) processOne(ctx context.Context, step *entity.PaperOu
 	deltaPrompt := intMeta(meta["tokens_prompt"]) - beforePrompt
 	deltaCompletion := intMeta(meta["tokens_completion"]) - beforeCompletion
 
-	// invoke 后进入人工检查点（conf checkpoint_phases.pause + auto_proceed=false）。
-	if v, ok := meta["aris_awaiting_checkpoint"].(bool); ok && v {
-		phase := strings.TrimSpace(fmt.Sprint(meta["aris_pause_after_phase"]))
+	// invoke 后：run_state pending 段在 conf 里需人工确认且 runtime_state 尚未 {phase:true}。
+	if phase := strings.TrimSpace(fmt.Sprint(meta["aris_pending_phase"])); phase != "" &&
+		papersvc.IdeaDiscoveryNeedsUserConfirm(meta, phase) {
 		j.notifyStep(ctx, step, papersvc.TopicStepOutcomeCheckpoint, papersvc.IdeaDiscoveryCheckpointDetail(phase), deltaPrompt, deltaCompletion)
 		return "skipped"
 	}
@@ -142,7 +144,6 @@ func (j *TopicDiscoveryJob) processOne(ctx context.Context, step *entity.PaperOu
 		j.notifyStep(ctx, step, papersvc.TopicStepOutcomeSuccess, "Idea Discovery 全流程已完成", deltaPrompt, deltaCompletion)
 		return "completed"
 	}
-	// invoke 后 async_llm 已清：本脚本本轮结束；下一条等 Continue 后再由 scheduler 拉起。
 	logger.InfoZ(ctx, "topic-discovery-invoke-tick-done",
 		zap.Uint64("step_id", step.ID),
 		zap.Uint64("manuscript_id", step.ManuscriptID),

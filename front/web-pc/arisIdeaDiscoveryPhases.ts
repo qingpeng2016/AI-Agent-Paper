@@ -3,6 +3,11 @@ import type {
   TopicDiscoveryRunResponse,
   TopicDiscoveryStepDTO,
 } from './src/api/topicDiscovery'
+import {
+  ARIS_IDEA_DISCOVERY_PHASES,
+  IDEA_DISCOVERY_PHASE_STATUS,
+  type IdeaDiscoveryPhaseStatus,
+} from './types'
 
 export type ArisPhaseUiStatus = 'pending' | 'running' | 'waiting_confirm' | 'awaiting_continue' | 'completed'
 
@@ -20,6 +25,48 @@ const DEFAULT_IDEA_DISCOVERY_UI_GROUPS: IdeaDiscoveryUIGroupDTO[] = [
   { index: 2, phase_ids: ['research-review'], label_zh: '外部审查' },
   { index: 3, phase_ids: ['research-refine-pipeline'], label_zh: '文献综述与实验规划' },
 ]
+
+function parsePhaseStatus(result: Record<string, unknown>, phase: string): IdeaDiscoveryPhaseStatus {
+  const p = phase.trim()
+  if (!p) return IDEA_DISCOVERY_PHASE_STATUS.not_started
+  const v = result[p]
+  if (typeof v === 'string') {
+    const s = v.trim().toLowerCase()
+    if (s === IDEA_DISCOVERY_PHASE_STATUS.not_started || s === 'pending') {
+      return IDEA_DISCOVERY_PHASE_STATUS.not_started
+    }
+    if (s === IDEA_DISCOVERY_PHASE_STATUS.awaiting_confirm || s === 'waiting_confirm') {
+      return IDEA_DISCOVERY_PHASE_STATUS.awaiting_confirm
+    }
+    if (
+      s === IDEA_DISCOVERY_PHASE_STATUS.executing ||
+      s === 'running' ||
+      s === 'confirmed' ||
+      s === 'true' ||
+      s === '1'
+    ) {
+      return IDEA_DISCOVERY_PHASE_STATUS.executing
+    }
+    if (s === IDEA_DISCOVERY_PHASE_STATUS.completed || s === 'done') {
+      return IDEA_DISCOVERY_PHASE_STATUS.completed
+    }
+    return IDEA_DISCOVERY_PHASE_STATUS.not_started
+  }
+  if (v === true || v === 1) return IDEA_DISCOVERY_PHASE_STATUS.executing
+  return IDEA_DISCOVERY_PHASE_STATUS.not_started
+}
+
+/** 全 pipeline 中第一个 awaiting_confirm（仅它展示「待确认」） */
+export function firstIdeaDiscoveryPhaseAwaitingConfirm(
+  result: Record<string, unknown>,
+): string | null {
+  for (const id of ARIS_IDEA_DISCOVERY_PHASES) {
+    if (parsePhaseStatus(result, id) === IDEA_DISCOVERY_PHASE_STATUS.awaiting_confirm) {
+      return id
+    }
+  }
+  return null
+}
 
 function parseUiGroupsFromStepResult(result: Record<string, unknown> | undefined): IdeaDiscoveryUIGroupDTO[] {
   const raw = result?.aris_ui_groups
@@ -57,15 +104,6 @@ export function ideaDiscoveryUiGroupsLabelChain(groups: IdeaDiscoveryUIGroupDTO[
   return groups.map((g) => g.label_zh).join(' → ')
 }
 
-function uiGroupIndexForPhase(groups: IdeaDiscoveryUIGroupDTO[], phase: string): number {
-  const p = phase.trim()
-  if (!p) return 0
-  for (const g of groups) {
-    if (g.phase_ids.includes(p)) return g.index
-  }
-  return 0
-}
-
 function ideaDiscoveryStepDto(
   steps: TopicDiscoveryStepDTO[] | undefined,
 ): TopicDiscoveryStepDTO | undefined {
@@ -74,7 +112,46 @@ function ideaDiscoveryStepDto(
   )
 }
 
-/** idea_discovery 步仍为 running，但 ARIS 段间检查点等人确认（与 bot 是否在跑无关） */
+function uiGroupPhaseStatuses(
+  group: IdeaDiscoveryUIGroupDTO,
+  result: Record<string, unknown>,
+): IdeaDiscoveryPhaseStatus[] {
+  return group.phase_ids.map((id) => parsePhaseStatus(result, id))
+}
+
+function uiGroupToRowStatus(
+  group: IdeaDiscoveryUIGroupDTO,
+  result: Record<string, unknown>,
+  firstAwaiting: string | null,
+): ArisPhaseUiStatus {
+  const statuses = uiGroupPhaseStatuses(group, result)
+  if (statuses.length === 0) return 'pending'
+  if (statuses.every((s) => s === IDEA_DISCOVERY_PHASE_STATUS.completed)) {
+    return 'completed'
+  }
+  if (statuses.some((s) => s === IDEA_DISCOVERY_PHASE_STATUS.executing)) {
+    return 'running'
+  }
+  if (
+    firstAwaiting &&
+    group.phase_ids.includes(firstAwaiting) &&
+    statuses.some((s) => s === IDEA_DISCOVERY_PHASE_STATUS.awaiting_confirm)
+  ) {
+    return 'waiting_confirm'
+  }
+  if (statuses.some((s) => s === IDEA_DISCOVERY_PHASE_STATUS.awaiting_confirm)) {
+    return 'pending'
+  }
+  if (statuses.every((s) => s === IDEA_DISCOVERY_PHASE_STATUS.not_started)) {
+    return 'pending'
+  }
+  if (statuses.some((s) => s === IDEA_DISCOVERY_PHASE_STATUS.completed)) {
+    return 'running'
+  }
+  return 'pending'
+}
+
+/** idea_discovery 步仍为 running，但 ARIS 段间检查点等人确认 */
 export function isIdeaDiscoveryArisCheckpoint(
   steps: TopicDiscoveryStepDTO[] | undefined,
   runStatus?: string,
@@ -83,7 +160,7 @@ export function isIdeaDiscoveryArisCheckpoint(
   const step = ideaDiscoveryStepDto(steps)
   if (!step) return false
   const result = (step.result ?? {}) as Record<string, unknown>
-  return result.aris_awaiting_checkpoint === true
+  return firstIdeaDiscoveryPhaseAwaitingConfirm(result) != null
 }
 
 /** 当前待用户确认的 UI 段中文名（无则 null） */
@@ -98,7 +175,7 @@ export function arisPhaseAwaitingConfirmLabel(
   return waiting?.label ?? null
 }
 
-/** 由 run_state 进度 + conf 合并 UI 段推导展示行 */
+/** 由 runtime_state 各 phase 四态 + UI 段推导展示行 */
 export function arisIdeaDiscoveryPhaseRows(
   steps: TopicDiscoveryStepDTO[] | undefined,
   runStatus?: string,
@@ -125,44 +202,13 @@ export function arisIdeaDiscoveryPhaseRows(
   }
 
   const result = (step.result ?? {}) as Record<string, unknown>
-  const awaiting =
-    result.aris_awaiting_checkpoint === true ||
-    (runStatus === 'checkpoint' && String(result.aris_pause_after_phase ?? '').trim() !== '')
-  const betweenInvokes = result.aris_between_invokes === true
-  const pausePhase = String(result.aris_pause_after_phase ?? '').trim()
-  const pendingPhase = String(result.aris_pending_phase ?? '').trim()
-  const nextPhase = awaiting ? pausePhase : pendingPhase || pausePhase
+  const firstAwaiting = firstIdeaDiscoveryPhaseAwaitingConfirm(result)
 
-  let uiNextIdx = uiGroupIndexForPhase(uiGroups, nextPhase)
-  if (!nextPhase && step.status === 'running') {
-    const fromMeta = result.aris_ui_group_index
-    if (typeof fromMeta === 'number' && Number.isFinite(fromMeta)) {
-      uiNextIdx = fromMeta
-    } else {
-      const completed = typeof result.aris_ui_groups_completed === 'number' ? result.aris_ui_groups_completed : 0
-      uiNextIdx = Math.min(uiGroups.length - 1, Math.max(0, completed))
-    }
-  }
-
-  return uiGroups.map((g) => {
-    const i = g.index
-    if (i < uiNextIdx) {
-      return { id: String(i), label: g.label_zh, status: 'completed' as const }
-    }
-    if (i === uiNextIdx) {
-      if (awaiting) {
-        return { id: String(i), label: g.label_zh, status: 'waiting_confirm' as const }
-      }
-      if (betweenInvokes && step.status === 'running') {
-        return { id: String(i), label: g.label_zh, status: 'awaiting_continue' as const }
-      }
-      if (step.status === 'running') {
-        return { id: String(i), label: g.label_zh, status: 'running' as const }
-      }
-      return { id: String(i), label: g.label_zh, status: 'pending' as const }
-    }
-    return { id: String(i), label: g.label_zh, status: 'pending' as const }
-  })
+  return uiGroups.map((g) => ({
+    id: String(g.index),
+    label: g.label_zh,
+    status: uiGroupToRowStatus(g, result, firstAwaiting),
+  }))
 }
 
 export function arisPhaseStatusLabel(status: ArisPhaseUiStatus): string {

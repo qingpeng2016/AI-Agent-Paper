@@ -187,6 +187,14 @@ func defaultARISIdeaDiscoveryConfig() ARISIdeaDiscoveryConfig {
 	}
 }
 
+// FirstCheckpointPhaseID 与 conf checkpoint_phases 顺序一致的首个 ARIS phase（默认创建 run 即视为用户已确认该段）。
+func (c ARISIdeaDiscoveryConfig) FirstCheckpointPhaseID() string {
+	if len(ideaDiscoveryRunStatePhases) == 0 {
+		return "research-lit"
+	}
+	return ideaDiscoveryRunStatePhases[0]
+}
+
 // PhaseNeedsUserCheckpoint 下一待执行 phase 是否触发平台人工检查点（checkpoint_phases[phase].pause）。
 func (c ARISIdeaDiscoveryConfig) PhaseNeedsUserCheckpoint(pendingPhase string) bool {
 	pendingPhase = strings.TrimSpace(pendingPhase)

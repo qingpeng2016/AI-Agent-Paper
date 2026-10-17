@@ -49,10 +49,7 @@ func readRunStateResumeTarget(paperRoot, runID string) (phase string, complete b
 		return "", false, err
 	}
 	for _, ph := range st.Phases {
-		id := strings.TrimSpace(ph.Phase)
-		if id == "" {
-			id = strings.TrimSpace(ph.Name)
-		}
+		id := runStateEntryPhaseID(ph.Phase, ph.Name, "")
 		if id == "" {
 			continue
 		}
@@ -75,6 +72,40 @@ func runStatePhaseCompleted(status string) bool {
 	default:
 		return false
 	}
+}
+
+func runStatePhaseStatus(paperRoot, runID, phaseID string) (status string, found bool) {
+	phaseID = strings.TrimSpace(phaseID)
+	if phaseID == "" {
+		return "", false
+	}
+	path := mustIdeaDiscoveryConfig().RunStateFileAbs(paperRoot, runID)
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return "", false
+	}
+	var st struct {
+		Phases []struct {
+			Phase  string `json:"phase"`
+			Name   string `json:"name"`
+			Status string `json:"status"`
+		} `json:"phases"`
+	}
+	if json.Unmarshal(b, &st) != nil {
+		return "", false
+	}
+	for _, ph := range st.Phases {
+		id := runStateEntryPhaseID(ph.Phase, ph.Name, "")
+		if id == phaseID {
+			return ph.Status, true
+		}
+	}
+	return "", false
+}
+
+func isRunStatePhaseDone(paperRoot, runID, phaseID string) bool {
+	st, ok := runStatePhaseStatus(paperRoot, runID, phaseID)
+	return ok && runStatePhaseCompleted(st)
 }
 
 // ideaDiscoveryCompletedPhaseCount 读工作区 run_state，已完成 phase 数量（DB 未同步时的依据）。
@@ -161,5 +192,6 @@ func syncIdeaDiscoveryRunProgressToMeta(meta map[string]any, paperRoot, runID st
 		meta["aris_pending_phase"] = pending
 	}
 	cfg := mustIdeaDiscoveryConfig()
+	syncIdeaDiscoveryPhaseStatusesToMeta(meta, paperRoot, runID, cfg)
 	syncIdeaDiscoveryUIGroupsToMeta(meta, paperRoot, runID, cfg)
 }

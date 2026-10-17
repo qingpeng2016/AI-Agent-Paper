@@ -46,7 +46,8 @@ var (
 	TopicStepOutcomeSuccess        = step.TopicStepOutcomeSuccess
 	TopicStepOutcomeFailed         = step.TopicStepOutcomeFailed
 	TopicStepOutcomeCheckpoint     = step.TopicStepOutcomeCheckpoint
-	IdeaDiscoveryCheckpointDetail  = topicdiscovery.IdeaDiscoveryCheckpointDetail
+	IdeaDiscoveryCheckpointDetail   = topicdiscovery.IdeaDiscoveryCheckpointDetail
+	IdeaDiscoveryNeedsUserConfirm   = topicdiscovery.IdeaDiscoveryNeedsUserConfirm
 	MustJSONStep     = jsonx.MustJSONStep
 
 	ParseLiteratureDownloads           = literature.ParseLiteratureDownloads

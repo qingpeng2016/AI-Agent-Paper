@@ -34,10 +34,14 @@ func (s *TopicDiscoveryRunService) stageBeginTopicDiscoveryAsync(
 	step.CompletedAt = nil
 	step.ExecProgressPct = 0
 	meta := paperstep.LoadStepExtra(step)
+	cfg := mustIdeaDiscoveryConfig()
+	first := cfg.FirstCheckpointPhaseID()
 	meta["async_llm"] = true
+	setPhaseStatusInMeta(meta, first, IdeaDiscoveryPhaseExecuting)
+	normalizeIdeaDiscoveryRuntimeMeta(meta)
 	delete(meta, "exec_progress_completed_calls")
 	delete(meta, "exec_progress_planned_calls")
-	step.Result = jsonx.MustJSON(meta)
+	paperstep.PersistStepExtra(step, meta)
 	return s.steps.SaveStep(ctx, step)
 }
 

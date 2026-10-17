@@ -218,6 +218,7 @@ func isResearchLitPhaseDone(paperRoot, runID string) bool {
 	}
 	var st struct {
 		Phases []struct {
+			Phase  string `json:"phase"`
 			ID     string `json:"id"`
 			Name   string `json:"name"`
 			Status string `json:"status"`
@@ -227,10 +228,7 @@ func isResearchLitPhaseDone(paperRoot, runID string) bool {
 		return false
 	}
 	for _, p := range st.Phases {
-		id := strings.TrimSpace(p.ID)
-		if id == "" {
-			id = strings.TrimSpace(p.Name)
-		}
+		id := runStateEntryPhaseID(p.Phase, p.Name, p.ID)
 		if id != "research-lit" {
 			continue
 		}

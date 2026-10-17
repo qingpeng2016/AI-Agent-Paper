@@ -402,6 +402,17 @@ export const ARIS_IDEA_DISCOVERY_PHASES = [
 
 export type ArisIdeaDiscoveryPhaseId = (typeof ARIS_IDEA_DISCOVERY_PHASES)[number]
 
+/** 与后端 runtime_state 各 phase 值一致（idea_discovery 步） */
+export const IDEA_DISCOVERY_PHASE_STATUS = {
+  not_started: 'not_started',
+  awaiting_confirm: 'awaiting_confirm',
+  executing: 'executing',
+  completed: 'completed',
+} as const
+
+export type IdeaDiscoveryPhaseStatus =
+  (typeof IDEA_DISCOVERY_PHASE_STATUS)[keyof typeof IDEA_DISCOVERY_PHASE_STATUS]
+
 /** 工作台展示的 4 步（前两段 ARIS phase 合并为一行） */
 export const ARIS_IDEA_DISCOVERY_UI_PHASES = [
   'lit-idea-creator',

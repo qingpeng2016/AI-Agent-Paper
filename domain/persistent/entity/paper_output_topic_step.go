@@ -15,6 +15,7 @@ type PaperOutputTopicStep struct {
 	Status          string         `gorm:"column:status;size:16;not null;default:pending"`
 	ExecProgressPct uint8          `gorm:"column:exec_progress_pct;not null;default:0"`
 	Result          datatypes.JSON `gorm:"column:result"`
+	RuntimeState    datatypes.JSON `gorm:"column:runtime_state"`
 	ErrorMsg      *string        `gorm:"column:error_msg"`
 	ExecCommand   *string        `gorm:"column:exec_command"`
 	InputParams   datatypes.JSON `gorm:"column:input_params"`

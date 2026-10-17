@@ -16,13 +16,18 @@ var resultAppendOnlyKeys = map[string]struct{}{
 	literature.ExtraKeyLiteraturePlatformRequests: {},
 }
 
+// ideaDiscoveryPhaseConfirmKeys 与 conf/aris_idea_discovery.yaml checkpoint_phases 的 key 一致；值为四态英文字符串（见 topicdiscovery.IdeaDiscoveryPhase*）。
+var ideaDiscoveryPhaseConfirmKeys = map[string]struct{}{
+	"research-lit":              {},
+	"idea-creator":              {},
+	"novelty-check":             {},
+	"research-review":           {},
+	"research-refine-pipeline":  {},
+}
+
 var topicStepRuntimeResultKeys = map[string]struct{}{
 	"async_llm":                  {},
 	"async_llm_done":             {},
-	"aris_awaiting_checkpoint":      {},
-	"aris_checkpoint_proceed":       {},
-	"aris_checkpoint_proceed_phase": {},
-	"aris_pause_after_phase":        {},
 	"aris_invoke_retries":        {},
 	"aris_invoke_last_error":     {},
 	"aris_invoke_count":          {},
@@ -73,9 +78,9 @@ func FailTopicStep(step *entity.PaperOutputTopicStep, reason string) {
 	step.Status = "failed"
 	step.ErrorMsg = &reason
 	step.ExecProgressPct = 0
-	meta := LoadStepResultMap(step)
+	meta := LoadStepExtra(step)
 	clearTopicStepRuntimeKeys(meta)
-	step.Result = jsonx.MustJSON(meta)
+	PersistStepExtra(step, meta)
 	now := time.Now()
 	if step.CompletedAt == nil {
 		step.CompletedAt = &now
@@ -90,9 +95,60 @@ func LoadStepResultMap(step *entity.PaperOutputTopicStep) map[string]any {
 	return unmarshalJSONMap(step.Result)
 }
 
-// LoadStepExtra 兼容旧名：数据均在 result 列。
+func isTopicStepRuntimeKey(k string) bool {
+	if _, ok := topicStepRuntimeResultKeys[k]; ok {
+		return true
+	}
+	_, ok := ideaDiscoveryPhaseConfirmKeys[k]
+	return ok
+}
+
+// LoadStepExtra 合并 result（业务）与 runtime_state（运行态）；旧数据仅有 result 内 runtime key 时仍可读。
 func LoadStepExtra(step *entity.PaperOutputTopicStep) map[string]any {
-	return LoadStepResultMap(step)
+	if step == nil {
+		return map[string]any{}
+	}
+	res := unmarshalJSONMap(step.Result)
+	rt := unmarshalJSONMap(step.RuntimeState)
+	out := make(map[string]any, len(res)+len(rt))
+	for k, v := range res {
+		if !isTopicStepRuntimeKey(k) {
+			out[k] = v
+		}
+	}
+	for k, v := range rt {
+		out[k] = v
+	}
+	for k, v := range res {
+		if !isTopicStepRuntimeKey(k) {
+			continue
+		}
+		if _, ok := rt[k]; !ok {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+// PersistStepExtra 运行态写入 runtime_state，其余写入 result。
+func PersistStepExtra(step *entity.PaperOutputTopicStep, meta map[string]any) {
+	if step == nil {
+		return
+	}
+	if meta == nil {
+		meta = map[string]any{}
+	}
+	rt := map[string]any{}
+	res := map[string]any{}
+	for k, v := range meta {
+		if isTopicStepRuntimeKey(k) {
+			rt[k] = v
+		} else {
+			res[k] = v
+		}
+	}
+	step.RuntimeState = jsonx.MustJSON(rt)
+	step.Result = jsonx.MustJSON(res)
 }
 
 // MergeStepResultMap 将 patch 合入 base；平台请求日志等 append-only 键只追加。

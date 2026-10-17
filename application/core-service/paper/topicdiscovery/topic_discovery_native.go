@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/internal/jsonx"
 	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/lang"
 	paperstep "github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/step"
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
@@ -23,8 +22,7 @@ func mustIdeaDiscoveryConfig() ARISIdeaDiscoveryConfig {
 	return cfg
 }
 
-// RunNativeIdeaDiscoveryLLM 原生 /idea-discovery：每次 bot 进入只跑一条 aris，落库后清 async_llm。
-// 无 .aris/runs/{run_id}.json 时不挂前端确认；有 JSON 后仅 pause:true 段才 aris_awaiting_checkpoint。
+// RunNativeIdeaDiscoveryLLM 原生 /idea-discovery：bot 经 PrepareIdeaDiscoveryBotInvoke 放行后，本函数只打一条 aris 并落库。
 func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 	ctx context.Context,
 	userID uint,
@@ -51,28 +49,10 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 		return s.finishIdeaDiscoveryAfterGate(ctx, step, userID, runVersion, route, paperRoot, runID, cfg)
 	}
 	meta := paperstep.LoadStepExtra(step)
-	hasRunState := ideaDiscoveryRunStateFileExists(paperRoot, runID)
-	// 无 run_state JSON：与手动首次 aris 一致，不挂平台确认，直接 invoke。
-	if !hasRunState {
-		delete(meta, "aris_awaiting_checkpoint")
-		delete(meta, "aris_pause_after_phase")
-		delete(meta, "aris_checkpoint_proceed")
-	} else if cfg.PhaseNeedsUserCheckpoint(pendingPhase) {
-		// 已有 run_state 且下一段 pause:true：未 Continue 前不调 CLI。
-		proceed := strings.TrimSpace(fmt.Sprint(meta["aris_checkpoint_proceed"])) == strings.TrimSpace(pendingPhase)
-		if !proceed {
-			return s.saveIdeaDiscoveryAwaitingUserContinue(ctx, step, paperRoot, runID, pendingPhase)
-		}
-		delete(meta, "aris_checkpoint_proceed")
-	} else {
-		delete(meta, "aris_awaiting_checkpoint")
-		delete(meta, "aris_pause_after_phase")
-	}
-	delete(meta, "aris_awaiting_checkpoint")
-	delete(meta, "aris_between_invokes")
+	normalizeIdeaDiscoveryRuntimeMeta(meta)
 	meta["aris_run_id"] = runID
 	meta["native_run_id"] = runID
-	step.Result = jsonx.MustJSON(meta)
+	paperstep.PersistStepExtra(step, meta)
 	step.ExecProgressPct = ideaDiscoveryProgressPct(paperRoot, runID)
 	_ = s.steps.SaveStep(ctx, step)
 
@@ -85,6 +65,12 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 		return err
 	}
 	argsLine := cfg.FormatIdeaDiscoveryArgsLine(input, strings.TrimSpace(input.Venue), locale)
+	if phaseUserConfirmedForInvoke(meta, pendingPhase) {
+		argsLine += fmt.Sprintf(
+			"\n\n— platform: user confirmed phase %s (runtime_state); complete this pipeline phase in this invoke.",
+			pendingPhase,
+		)
+	}
 	if err := writeNativePlatformArguments(paperRoot, argsLine); err != nil {
 		return err
 	}
@@ -104,7 +90,7 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 	meta["tokens_completion"] = usage.CompletionTokens
 	delete(meta, "aris_invoke_last_error")
 	delete(meta, "aris_invoke_retries")
-	step.Result = jsonx.MustJSON(meta)
+	paperstep.PersistStepExtra(step, meta)
 
 	runID = resolveIdeaDiscoveryRunID(paperRoot, step, input)
 	pendingPhase, err = ideaDiscoveryResumePhase(paperRoot, runID)
@@ -119,7 +105,6 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 	}
 
 	_ = seedIdeaDiscoveryRunStateFromWorkspace(paperRoot, runID)
-	hasRunState = ideaDiscoveryRunStateFileExists(paperRoot, runID)
 	pendingPhase, err = ideaDiscoveryResumePhase(paperRoot, runID)
 	if err != nil {
 		return err
@@ -127,10 +112,23 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 	if pendingPhase == "" {
 		return s.finishIdeaDiscoveryAfterGate(ctx, step, userID, runVersion, route, paperRoot, runID, cfg)
 	}
-	if !hasRunState || !cfg.PhaseNeedsUserCheckpoint(pendingPhase) {
-		return s.saveIdeaDiscoveryAfterInvokeIdle(ctx, step, paperRoot, runID)
+	meta = paperstep.LoadStepExtra(step)
+	normalizeIdeaDiscoveryRuntimeMeta(meta)
+	syncIdeaDiscoveryRunProgressToMeta(meta, paperRoot, runID)
+
+	if phaseUserConfirmedForInvoke(meta, pendingPhase) && !isRunStatePhaseDone(paperRoot, runID, pendingPhase) {
+		meta["async_llm"] = true
+		meta["async_llm_done"] = false
+		paperstep.PersistStepExtra(step, meta)
+		step.Status = "running"
+		step.ExecProgressPct = ideaDiscoveryProgressPct(paperRoot, runID)
+		return s.steps.SaveStep(ctx, step)
 	}
-	return s.saveIdeaDiscoveryAwaitingUserContinue(ctx, step, paperRoot, runID, pendingPhase)
+
+	if ideaDiscoveryNeedsUserConfirm(meta, pendingPhase, cfg) {
+		return s.saveIdeaDiscoveryAwaitingUserContinue(ctx, step, paperRoot, runID, pendingPhase)
+	}
+	return s.saveIdeaDiscoveryAfterInvokeIdle(ctx, step, paperRoot, runID)
 }
 
 func (s *TopicDiscoveryRunService) saveIdeaDiscoveryAfterInvokeIdle(
@@ -140,18 +138,15 @@ func (s *TopicDiscoveryRunService) saveIdeaDiscoveryAfterInvokeIdle(
 ) error {
 	meta := paperstep.LoadStepExtra(step)
 	syncIdeaDiscoveryRunProgressToMeta(meta, paperRoot, runID)
-	delete(meta, "aris_awaiting_checkpoint")
-	delete(meta, "aris_pause_after_phase")
-	delete(meta, "aris_checkpoint_proceed")
 	delete(meta, "async_llm")
 	meta["async_llm_done"] = false
-	meta["aris_between_invokes"] = true
+	normalizeIdeaDiscoveryRuntimeMeta(meta)
 	if ideaDiscoveryRunStateFileExists(paperRoot, runID) {
 		meta["aris_run_state_ready"] = true
 	} else {
 		meta["aris_run_state_ready"] = false
 	}
-	step.Result = jsonx.MustJSON(meta)
+	paperstep.PersistStepExtra(step, meta)
 	step.Status = "running"
 	step.ExecProgressPct = ideaDiscoveryProgressPct(paperRoot, runID)
 	return s.steps.SaveStep(ctx, step)
@@ -164,12 +159,11 @@ func (s *TopicDiscoveryRunService) saveIdeaDiscoveryAwaitingUserContinue(
 ) error {
 	meta := paperstep.LoadStepExtra(step)
 	syncIdeaDiscoveryRunProgressToMeta(meta, paperRoot, runID)
-	meta["aris_awaiting_checkpoint"] = true
-	meta["aris_pause_after_phase"] = strings.TrimSpace(pendingPhase)
-	delete(meta, "aris_between_invokes")
+	setPhaseStatusInMeta(meta, pendingPhase, IdeaDiscoveryPhaseAwaitingConfirm)
+	normalizeIdeaDiscoveryRuntimeMeta(meta)
 	delete(meta, "async_llm")
 	meta["async_llm_done"] = false
-	step.Result = jsonx.MustJSON(meta)
+	paperstep.PersistStepExtra(step, meta)
 	step.Status = "running"
 	step.ExecProgressPct = ideaDiscoveryProgressPct(paperRoot, runID)
 	return s.steps.SaveStep(ctx, step)
@@ -205,8 +199,8 @@ func (s *TopicDiscoveryRunService) handleIdeaDiscoveryInvokeFailure(
 	retriable := retries <= ideaDiscoveryMaxInvokeRetries && isRetriableIdeaDiscoveryInvokeError(invokeErr)
 	if retriable {
 		meta["async_llm"] = true
-		delete(meta, "aris_awaiting_checkpoint")
-		step.Result = jsonx.MustJSON(meta)
+		normalizeIdeaDiscoveryRuntimeMeta(meta)
+		paperstep.PersistStepExtra(step, meta)
 		step.Status = "running"
 		step.CompletedAt = nil
 		_ = s.steps.SaveStep(ctx, step)
@@ -286,19 +280,17 @@ func (s *TopicDiscoveryRunService) finishIdeaDiscoveryAfterGate(
 	for k, v := range aggregate {
 		result[k] = v
 	}
-	step.Result = jsonx.MustJSON(result)
-
 	meta := paperstep.LoadStepExtra(step)
+	for k, v := range result {
+		meta[k] = v
+	}
 	meta["strategy_route"] = strategyRouteMeta(route)
-	meta["pipeline"] = "aris_idea_discovery_native"
-	meta["aris_run_id"] = runID
-	meta["gate_passed"] = gate.Passed
 	delete(meta, "async_llm")
-	delete(meta, "aris_awaiting_checkpoint")
+	normalizeIdeaDiscoveryRuntimeMeta(meta)
 	delete(meta, "aris_invoke_retries")
 	meta["async_llm_done"] = true
 	delete(meta, "awaiting_user_confirm")
-	step.Result = jsonx.MustJSON(meta)
+	paperstep.PersistStepExtra(step, meta)
 
 	done := time.Now()
 	_, _ = s.ingestARISWorkspaceLiterature(ctx, userID, runVersion, step.ManuscriptID, paperRoot, cfg)
@@ -435,7 +427,7 @@ func readFileMax(abs string, max int) string {
 	return string(b)
 }
 
-// ReconcileIdeaDiscoveryBotAwaiting 修正 DB 里误挂的检查点（无 run_state 或 pause:false 段不应挡 bot）。
+// ReconcileIdeaDiscoveryBotAwaiting 把旧版 aris_* 运行态迁移为 runtime_state 内 {"research-lit": true} 形式。
 func (s *TopicDiscoveryRunService) ReconcileIdeaDiscoveryBotAwaiting(
 	ctx context.Context,
 	userID uint,
@@ -447,32 +439,15 @@ func (s *TopicDiscoveryRunService) ReconcileIdeaDiscoveryBotAwaiting(
 		return nil
 	}
 	meta := paperstep.LoadStepExtra(step)
-	if v, ok := meta["aris_awaiting_checkpoint"].(bool); !ok || !v {
+	if !hasLegacyIdeaDiscoveryRuntimeKeys(meta) {
 		return nil
 	}
-	cfg := mustIdeaDiscoveryConfig()
-	paperRoot := ARISRunPaperRoot(uint64(userID), step.ManuscriptID, runVersion)
-	runID := resolveIdeaDiscoveryRunID(paperRoot, step, input)
-	if !ideaDiscoveryRunStateFileExists(paperRoot, runID) {
-		delete(meta, "aris_awaiting_checkpoint")
-		delete(meta, "aris_pause_after_phase")
-		step.Result = jsonx.MustJSON(meta)
-		return s.steps.SaveStep(ctx, step)
-	}
-	pending, err := ideaDiscoveryResumePhase(paperRoot, runID)
-	if err != nil || strings.TrimSpace(pending) == "" {
-		return nil
-	}
-	if !cfg.PhaseNeedsUserCheckpoint(pending) {
-		delete(meta, "aris_awaiting_checkpoint")
-		delete(meta, "aris_pause_after_phase")
-		step.Result = jsonx.MustJSON(meta)
-		return s.steps.SaveStep(ctx, step)
-	}
-	return nil
+	normalizeIdeaDiscoveryRuntimeMeta(meta)
+	paperstep.PersistStepExtra(step, meta)
+	return s.steps.SaveStep(ctx, step)
 }
 
-// ResumeIdeaDiscoveryFromCheckpoint 用户 continue：排队下一条 aris（pause:true 检查点或 pause:false 段间继续）。
+// ResumeIdeaDiscoveryFromCheckpoint 用户点「确认并继续」：runtime_state 里当前 pending 段置 true，并 async_llm 排队 bot。
 func (s *TopicDiscoveryRunService) ResumeIdeaDiscoveryFromCheckpoint(ctx context.Context, userID uint, runVersion int) (bool, error) {
 	step, err := s.steps.GetStep(ctx, uint64(userID), runVersion, "idea_discovery")
 	if err != nil || step == nil {
@@ -485,41 +460,24 @@ func (s *TopicDiscoveryRunService) ResumeIdeaDiscoveryFromCheckpoint(ctx context
 	if err != nil {
 		return false, err
 	}
-	cfg := mustIdeaDiscoveryConfig()
 	paperRoot := ARISRunPaperRoot(uint64(userID), step.ManuscriptID, runVersion)
 	runID := resolveIdeaDiscoveryRunID(paperRoot, step, input)
 	meta := paperstep.LoadStepExtra(step)
+	normalizeIdeaDiscoveryRuntimeMeta(meta)
 
-	awaiting, _ := meta["aris_awaiting_checkpoint"].(bool)
-	if awaiting {
-		phase := strings.TrimSpace(fmt.Sprint(meta["aris_pause_after_phase"]))
-		if phase == "" {
-			phase = strings.TrimSpace(fmt.Sprint(meta["aris_pending_phase"]))
-		}
-		if phase != "" {
-			meta["aris_checkpoint_proceed"] = phase
-		}
-		delete(meta, "aris_awaiting_checkpoint")
-		delete(meta, "aris_pause_after_phase")
-	} else if strings.TrimSpace(step.Status) != "running" {
-		return false, nil
-	} else if ideaDiscoveryRunStateFileExists(paperRoot, runID) {
-		pending, err := ideaDiscoveryResumePhase(paperRoot, runID)
-		if err != nil {
-			return false, err
-		}
-		if strings.TrimSpace(pending) == "" {
-			return false, nil
-		}
-		if cfg.PhaseNeedsUserCheckpoint(pending) {
-			return false, nil
-		}
-	} else {
-		// 尚无 run_state：允许再排队一次 bootstrap invoke。
+	pending, err := ideaDiscoveryResumePhase(paperRoot, runID)
+	if err != nil {
+		return false, err
 	}
-
+	if strings.TrimSpace(pending) == "" {
+		pending = pendingPhaseFromMeta(meta)
+	}
+	if strings.TrimSpace(pending) == "" {
+		return false, nil
+	}
+	setPhaseStatusInMeta(meta, pending, IdeaDiscoveryPhaseExecuting)
 	meta["async_llm"] = true
-	step.Result = jsonx.MustJSON(meta)
+	paperstep.PersistStepExtra(step, meta)
 	step.Status = "running"
 	step.CompletedAt = nil
 	if err := s.steps.SaveStep(ctx, step); err != nil {
@@ -547,7 +505,7 @@ func (s *TopicDiscoveryRunService) ResumeIdeaDiscoveryExecution(ctx context.Cont
 	meta["async_llm"] = true
 	delete(meta, "aris_invoke_last_error")
 	delete(meta, "error")
-	step.Result = jsonx.MustJSON(meta)
+	paperstep.PersistStepExtra(step, meta)
 	step.Status = "running"
 	step.CompletedAt = nil
 	if err := s.steps.SaveStep(ctx, step); err != nil {

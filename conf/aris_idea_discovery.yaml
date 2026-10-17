@@ -63,5 +63,5 @@ platform:
   arxiv_download: true
   # 单次文献阶段最多下载几篇 PDF（CLI 参数 ARXIV_MAX_DOWNLOAD: <N>；仅 arxiv_download: true 时生效）
   arxiv_max_download: 5
-  # 每 bot tick 最多 1 次 aris；成功后不自动再 invoke，须用户 Continue
+  # 每 bot tick 最多 1 次 aris；段内 drain 时 invoke 后保留 async_llm，由下一轮 scheduler 再跑
   max_aris_per_bot: 1

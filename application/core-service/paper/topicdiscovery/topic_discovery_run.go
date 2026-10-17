@@ -724,7 +724,10 @@ func (s *TopicDiscoveryRunService) buildRunView(manuscriptID uint64, runVersion 
 				}
 			}
 		}
-		if len(r.Result) > 0 {
+		merged := paperstep.LoadStepExtra(&r)
+		if len(merged) > 0 {
+			sv.Result = json.RawMessage(jsonx.MustJSON(merged))
+		} else if len(r.Result) > 0 {
 			sv.Result = json.RawMessage(r.Result)
 		}
 		if len(r.Files) > 0 {
@@ -755,7 +758,8 @@ func (s *TopicDiscoveryRunService) buildRunView(manuscriptID uint64, runVersion 
 		for _, r := range rows {
 			if r.StageCode == "idea_discovery" && strings.TrimSpace(r.Status) == "running" {
 				meta := paperstep.LoadStepExtra(&r)
-				if v, ok := meta["aris_awaiting_checkpoint"].(bool); ok && v {
+				pending := pendingPhaseFromMeta(meta)
+				if IdeaDiscoveryNeedsUserConfirm(meta, pending) {
 					view.PauseAfterStage = "idea_discovery"
 					runStatus = "checkpoint"
 					break
