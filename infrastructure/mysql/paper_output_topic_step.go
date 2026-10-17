@@ -28,7 +28,7 @@ func (r *PaperOutputTopicStepImpl) BeginRun(ctx context.Context, userID, manuscr
 	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var maxVer *int
 		if err := tx.Model(&entity.PaperOutputTopicStep{}).
-			Where("user_id = ?", userID).
+			Where("user_id = ? AND manuscript_id = ?", userID, manuscriptID).
 			Select("COALESCE(MAX(run_version), 0)").
 			Scan(&maxVer).Error; err != nil {
 			return err
