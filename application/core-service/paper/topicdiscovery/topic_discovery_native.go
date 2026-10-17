@@ -53,6 +53,7 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 		if pendingPhase == "" {
 			return s.finishIdeaDiscoveryAfterGate(ctx, step, userID, runVersion, route, paperRoot, runID, cfg)
 		}
+		phaseAtInvokeStart := pendingPhase
 
 		meta := paperstep.LoadStepExtra(step)
 		delete(meta, "aris_awaiting_checkpoint")
@@ -64,10 +65,8 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 		_ = s.steps.SaveStep(ctx, step)
 
 		syncIdeaDiscoveryRunProgressToMeta(meta, paperRoot, runID)
-		// platform.resume 只控制 $ARGUMENTS 是否追加「— resume」；不清理 ARIS CLI 在 cwd 下的会话文件。
-		if ideaDiscoveryInvokeCount(meta) == 0 {
-			cfg.ClearCLIWorkspaceSessions(paperRoot)
-		}
+		// 每次 invoke 前清理 workspace 下 CLI 会话，避免同 run 多次 prompt 累积 Claude 上下文。
+		cfg.ClearCLIWorkspaceSessions(paperRoot)
 		// resume 与 auto_proceed 无关；CLI「— resume」由 conf platform.resume 控制。
 		resuming := cfg.ShouldAppendCLIResume(paperRoot, runID)
 		locale := invokeCtx.Language
@@ -127,6 +126,7 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 			meta["aris_pause_after_phase"] = pendingPhase
 			delete(meta, "async_llm")
 			meta["async_llm_done"] = false
+			ideaDiscoveryStallClear(meta, pendingPhase)
 			step.Result = jsonx.MustJSON(meta)
 			step.Status = "running"
 			step.ExecProgressPct = ideaDiscoveryProgressPct(paperRoot, runID)
@@ -135,6 +135,24 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 		if !cfg.Platform.AutoProceed {
 			meta = paperstep.LoadStepExtra(step)
 			syncIdeaDiscoveryRunProgressToMeta(meta, paperRoot, runID)
+			if phaseAtInvokeStart != "" && pendingPhase == phaseAtInvokeStart {
+				stallN := ideaDiscoveryStallBump(meta, pendingPhase)
+				if stallN >= ideaDiscoveryMaxStallInvokes {
+					reason := ideaDiscoveryStallExceededError(pendingPhase, runID, stallN).Error()
+					paperstep.FailTopicStep(step, reason)
+					meta["async_llm"] = false
+					delete(meta, "aris_awaiting_checkpoint")
+					step.Result = jsonx.MustJSON(meta)
+					step.ExecProgressPct = ideaDiscoveryProgressPct(paperRoot, runID)
+					_ = s.steps.SaveStep(ctx, step)
+					return fmt.Errorf("%s", reason)
+				}
+				meta["aris_checkpoint_proceed"] = true
+				meta["aris_checkpoint_proceed_phase"] = pendingPhase
+			} else if phaseAtInvokeStart != "" && pendingPhase != phaseAtInvokeStart {
+				ideaDiscoveryStallClear(meta, phaseAtInvokeStart)
+				ideaDiscoveryStallClear(meta, pendingPhase)
+			}
 			meta["async_llm"] = true
 			delete(meta, "aris_awaiting_checkpoint")
 			delete(meta, "aris_pause_after_phase")
@@ -237,6 +255,7 @@ func isNonRetriableIdeaDiscoveryInvokeError(msg string) bool {
 		"无法解析 skill",
 		"retrieve 未完成",
 		"aris failed",
+		"prompt is too long",
 	}
 	for _, n := range needles {
 		if strings.Contains(msg, n) {
