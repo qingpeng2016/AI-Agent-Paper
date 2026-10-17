@@ -20,7 +20,7 @@ artifacts:
   # 语料索引路径（/research-lit 可写入；ingest 时可选读标题/URL）
   corpus_json: .paper/corpus.json
 
-# 相对 inout/user_*/manuscript_*/run_*/paper/ 的平台路径（主根 = paperRoot）
+# 相对 inout/user_*/manuscript_*/run_*/paper/ 的平台路径（主根 = paperRoot，后续 ARIS skill 共用）
 workspace:
   # ARIS invoke 元数据：request.json、platform_user_prompt.txt、contract 等
   invoke_dir: .paper/invoke

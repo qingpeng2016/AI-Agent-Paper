@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/lang"
 	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/storage"
 	"gopkg.in/yaml.v3"
 )
@@ -44,6 +45,9 @@ type ideaDiscoveryWorkspace struct {
 	InvokeLogsDir string `yaml:"invoke_logs_dir"`
 	RunStateDir   string `yaml:"run_state_dir"`
 }
+
+// arisRunWorkspaceDir inout/.../run_N/ 下 ARIS 工作区目录（与后续 skill 共用，产物以子路径区分）。
+const arisRunWorkspaceDir = "paper"
 
 // ARISIdeaDiscoveryConfig 与 conf/aris_idea_discovery.yaml 对齐。
 type ARISIdeaDiscoveryConfig struct {
@@ -258,7 +262,7 @@ func (c ARISIdeaDiscoveryConfig) artifactConfigMap() map[string]string {
 	}
 }
 
-func (c ARISIdeaDiscoveryConfig) formatSkillArgumentsLine(paperRoot, dir, venue string) string {
+func (c ARISIdeaDiscoveryConfig) formatSkillArgumentsLine(paperRoot, dir, venue, language string) string {
 	ap := "false"
 	if c.Platform.AutoProceed {
 		ap = "true"
@@ -285,6 +289,9 @@ func (c ARISIdeaDiscoveryConfig) formatSkillArgumentsLine(paperRoot, dir, venue 
 			lib = abs
 		}
 		line += fmt.Sprintf(`, paper library: %s`, lib)
+	}
+	if loc := lang.NormalizeContentLanguage(language); loc != "" {
+		line += fmt.Sprintf(`, language: %s`, loc)
 	}
 	return line
 }

@@ -12,7 +12,7 @@ type PaperManuscriptRepo interface {
 	ListByUser(ctx context.Context, userID uint) ([]entity.PaperManuscript, error)
 	ListByUserPaged(ctx context.Context, userID uint, offset, limit int) ([]entity.PaperManuscript, error)
 	CountByUserActive(ctx context.Context, userID uint) (int64, error)
-	Create(ctx context.Context, userID uint, title string, disciplineID *uint64, contentLanguage string) (*entity.PaperManuscript, error)
+	Create(ctx context.Context, userID uint, title string, disciplineID *uint64, language string) (*entity.PaperManuscript, error)
 	SetCurrentForUser(ctx context.Context, userID, manuscriptID uint) error
 	UpdateSubmissionSummary(
 		ctx context.Context,

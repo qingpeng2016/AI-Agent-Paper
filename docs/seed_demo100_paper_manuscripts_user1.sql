@@ -3,7 +3,7 @@
 -- 若 id 1–100 已被占用请先 DELETE 或改区间
 DELETE FROM paper_manuscript WHERE user_id=1 AND id BETWEEN 1 AND 100;
 INSERT INTO `paper_manuscript`
-(`id`, `user_id`, `title`, `discipline_id`, `content_language`, `status`, `is_current`, `created_at`, `updated_at`)
+(`id`, `user_id`, `title`, `discipline_id`, `language`, `status`, `is_current`, `created_at`, `updated_at`)
 VALUES
 (1, 1, 'Demo 论文 v1：多模态 RAG 方向研究', NULL, 'en', 'active', 0, '2026-09-02 01:03:00', '2026-09-02 01:03:00'),
 (2, 1, 'Demo 论文 v2：联邦图学习 方向研究', NULL, 'en', 'active', 0, '2026-09-03 02:06:00', '2026-09-03 02:06:00'),

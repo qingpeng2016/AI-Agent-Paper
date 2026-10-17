@@ -62,12 +62,12 @@ func (r *PaperManuscriptImpl) CountByUserActive(ctx context.Context, userID uint
 	return n, err
 }
 
-func (r *PaperManuscriptImpl) Create(ctx context.Context, userID uint, title string, disciplineID *uint64, contentLanguage string) (*entity.PaperManuscript, error) {
+func (r *PaperManuscriptImpl) Create(ctx context.Context, userID uint, title string, disciplineID *uint64, language string) (*entity.PaperManuscript, error) {
 	row := entity.PaperManuscript{
 		UserID:           userID,
 		Title:            title,
 		DisciplineID:     disciplineID,
-		ContentLanguage:  contentLanguage,
+		Language:         language,
 		Status:           "active",
 		DraftStatus:      "writing",
 		SubmissionStatus: "not_submitted",

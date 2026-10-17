@@ -20,20 +20,28 @@ func JSONStringFieldsLocaleHint(locale string) string {
 	return "JSON 内字符串字段使用中文。"
 }
 
-// PromptLocaleVars 供策略调用 context 占位符（与论文 content_language 一致）。
+// PromptLocaleVars 供策略调用 context 占位符（与 paper_manuscript.language 一致）。
 func PromptLocaleVars(locale string) map[string]string {
 	locale = NormalizeContentLanguage(locale)
 	if locale == "en" {
 		return map[string]string{
-			"content_language": "en",
+			"language": "en",
 			"output_language_rule": "Manuscript working language is English: all natural-language output, Markdown bodies, " +
 				"and JSON string fields must be written in English (proper nouns and standard acronyms excepted).",
 		}
 	}
 	return map[string]string{
-		"content_language": "zh",
+		"language": "zh",
 		"output_language_rule": "本论文工作语言为中文：所有自然语言输出、Markdown 正文与 JSON 字符串字段须使用中文（专有名词、标准缩写除外）。",
 	}
+}
+
+// DeliverableLanguageHint 写入 ARIS platform_user_prompt / RESEARCH_BRIEF，约束交付 Markdown 语言。
+func DeliverableLanguageHint(locale string) string {
+	if NormalizeContentLanguage(locale) == "en" {
+		return "English (en): write all deliverable Markdown and natural-language outputs in English."
+	}
+	return "中文 (zh)：所有交付物 Markdown 与自然语言输出使用中文。"
 }
 
 func MergePromptVars(vars map[string]string, locale string) map[string]string {

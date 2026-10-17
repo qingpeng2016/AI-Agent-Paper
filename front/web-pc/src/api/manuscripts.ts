@@ -4,7 +4,7 @@ type ApiEnvelope<T> = {
   data?: T
 }
 
-export type ManuscriptContentLanguage = 'zh' | 'en'
+export type ManuscriptLanguage = 'zh' | 'en'
 
 export const PAPER_LIST_PAGE_SIZE = 20
 
@@ -25,7 +25,7 @@ export type PaperManuscriptApiItem = {
   title: string
   status: 'active' | 'archived'
   is_current: boolean
-  content_language: ManuscriptContentLanguage
+  language: ManuscriptLanguage
   discipline_code?: string
   discipline_label?: string
   created_at?: string
@@ -160,9 +160,9 @@ export async function fetchPaperManuscripts(options?: {
 export async function createPaperManuscript(
   title: string,
   disciplineCode: string,
-  contentLanguage: ManuscriptContentLanguage = 'en',
+  language: ManuscriptLanguage = 'en',
 ): Promise<PaperManuscriptListResponse> {
-  const lang = contentLanguage === 'zh' ? 'zh' : 'en'
+  const lang = language === 'zh' ? 'zh' : 'en'
   const res = await fetch('/api/v1/paper/manuscripts', {
     method: 'POST',
     credentials: 'include',
@@ -170,7 +170,7 @@ export async function createPaperManuscript(
     body: JSON.stringify({
       title: title.trim(),
       discipline_code: disciplineCode,
-      content_language: lang,
+      language: lang,
     }),
   })
   if (!res.ok) {

@@ -79,7 +79,7 @@
 
 ## 4. 选题发现
 
-绑定 `paper_manuscript`（含 **论文语言** `content_language` zh/en）。
+绑定 `paper_manuscript`（含 **论文语言** `language` zh/en）。
 
 ### 4.1 流程概览
 

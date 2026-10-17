@@ -74,7 +74,7 @@ func (s *ExperimentPlanService) RunExperimentPlanLLM(ctx context.Context, review
 	invokeCtx := topicdiscovery.StrategyInvokeContext{
 		ManuscriptID:    review.ManuscriptID,
 		UserID:          uint64(review.UserID),
-		ContentLanguage: locale,
+		Language: locale,
 		Direction:       direction,
 		VenueLabel:      venue,
 	}

@@ -20,7 +20,7 @@ type StrategyInvokeContext struct {
 	ManuscriptID       uint64          `json:"manuscript_id"`
 	UserID             uint64          `json:"user_id"`
 	RunVersion         int             `json:"run_version"`
-	ContentLanguage    string          `json:"content_language"`
+	Language           string          `json:"language"`
 	Direction          string          `json:"direction"`
 	Keywords           []string        `json:"keywords,omitempty"`
 	VenueCodes         []string        `json:"venue_codes,omitempty"`

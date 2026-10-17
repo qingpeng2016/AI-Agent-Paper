@@ -84,7 +84,7 @@ func (s *ManuscriptService) manuscriptItemView(ctx context.Context, row entity.P
 		Title:           row.Title,
 		Status:          row.Status,
 		IsCurrent:       row.IsCurrent,
-		ContentLanguage: lang.NormalizeContentLanguage(row.ContentLanguage),
+		Language: lang.NormalizeContentLanguage(row.Language),
 		CreatedAt:       row.CreatedAt.UTC().Format(time.RFC3339),
 		DraftVersion:     row.DraftVersion,
 		DraftStatus:      row.DraftStatus,
@@ -109,7 +109,7 @@ func (s *ManuscriptService) manuscriptItemView(ctx context.Context, row entity.P
 func (s *ManuscriptService) Create(
 	ctx context.Context,
 	userID uint,
-	title, disciplineCode, contentLanguage string,
+	title, disciplineCode, 	language string,
 ) (*response.PaperManuscriptListView, error) {
 	title = strings.TrimSpace(title)
 	disciplineCode = strings.TrimSpace(disciplineCode)
@@ -127,7 +127,7 @@ func (s *ManuscriptService) Create(
 		return nil, errorx.ErrParamsError.WithDetail("无效学科：" + disciplineCode)
 	}
 	discID := uint64(disc.ID)
-	langNorm := lang.NormalizeContentLanguage(contentLanguage)
+	langNorm := lang.NormalizeContentLanguage(language)
 	ms, err := s.manuscripts.Create(ctx, userID, title, &discID, langNorm)
 	if err != nil {
 		return nil, err

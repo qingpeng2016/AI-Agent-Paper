@@ -67,7 +67,11 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 		syncIdeaDiscoveryRunProgressToMeta(meta, paperRoot, runID)
 		// resume 与 auto_proceed 无关：仅当 .aris/runs/<run_id>.json 存在则追加，false/true 均相同。
 		resuming := ideaDiscoveryShouldAppendResume(paperRoot, runID)
-		argsLine := cfg.formatSkillArgumentsLine(paperRoot, compactDirectionForPrompt(input), strings.TrimSpace(input.Venue))
+		locale := invokeCtx.Language
+		if err := PrepareNativeIdeaDiscoveryWorkspace(paperRoot, input, locale, cfg); err != nil {
+			return err
+		}
+		argsLine := cfg.formatSkillArgumentsLine(paperRoot, compactDirectionForPrompt(input), strings.TrimSpace(input.Venue), locale)
 		if resuming {
 			argsLine += fmt.Sprintf(` — resume %s`, runID)
 		}
@@ -401,9 +405,9 @@ func PrepareNativeIdeaDiscoveryWorkspace(paperRoot string, input topicRunInput, 
 	dir := compactDirectionForPrompt(input)
 	kw := keywordsLine(input)
 	venue := strings.TrimSpace(input.Venue)
-	_ = locale
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Research Brief\n\n")
+	fmt.Fprintf(&b, "## Language\n%s\n\n", lang.DeliverableLanguageHint(locale))
 	fmt.Fprintf(&b, "## Direction\n%s\n\n", dir)
 	if kw != "" {
 		fmt.Fprintf(&b, "## Keywords\n%s\n\n", kw)

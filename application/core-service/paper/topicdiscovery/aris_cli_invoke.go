@@ -83,6 +83,7 @@ If %s/platform_session_notes.txt exists, read it for platform checkpoint PROCEED
 Workspace contract: %s/idea_discovery_contract.yaml
 Manage run_state and phases inside this aris session per skill contract.
 Deliverables are Markdown only under configured artifact paths.
+Honor language in platform_user_prompt.txt (and context.language in request.json if present) for all deliverable Markdown.
 behavior_key=%s
 `, invokeDirRel, invokeDirRel, invokeDirRel, behavior)
 	}
@@ -349,32 +350,27 @@ func arisInvokeSessionDir(req StrategyInvokeRequest) (sessionDir string, cleanup
 	if uid == 0 {
 		return "", func() {}, fmt.Errorf("invoke context 缺少 user_id")
 	}
-	behavior := sanitizePathSegment(req.BehaviorKey)
-	_ = behavior
-	base := storage.ArisInvokeWorkRoot()
-	sessionDir = filepath.Join(
-		base,
-		fmt.Sprintf("user_%d", uid),
-		fmt.Sprintf("manuscript_%d", mid),
-		fmt.Sprintf("run_%d", rv),
-	)
+	sessionDir = arisRunSessionDir(uid, mid, rv)
 	if err := os.MkdirAll(sessionDir, 0o755); err != nil {
 		return "", func() {}, err
 	}
-	// 同一 run 多 ARIS phase 共用 workspace（idea-stage/、refine-logs/）。
 	return sessionDir, func() {}, nil
 }
 
-// ARISRunPaperRoot 本 run 的 ARIS workspace 内 paper 根目录。
-func ARISRunPaperRoot(userID uint64, manuscriptID uint64, runVersion int) string {
+// arisRunSessionDir inout/user_*/manuscript_*/run_*。
+func arisRunSessionDir(userID uint64, manuscriptID uint64, runVersion int) string {
 	base := storage.ArisInvokeWorkRoot()
-	sessionDir := filepath.Join(
+	return filepath.Join(
 		base,
 		fmt.Sprintf("user_%d", userID),
 		fmt.Sprintf("manuscript_%d", manuscriptID),
 		fmt.Sprintf("run_%d", runVersion),
 	)
-	return filepath.Join(sessionDir, "paper")
+}
+
+// ARISRunPaperRoot 本 run 的 ARIS 工作区根（…/run_N/paper/）。
+func ARISRunPaperRoot(userID uint64, manuscriptID uint64, runVersion int) string {
+	return filepath.Join(arisRunSessionDir(userID, manuscriptID, runVersion), arisRunWorkspaceDir)
 }
 
 func runLocalStrategyInvoke(ctx context.Context, req StrategyInvokeRequest, platformUser string) (*localARISInvokeResult, error) {
@@ -390,15 +386,15 @@ func runLocalStrategyInvoke(ctx context.Context, req StrategyInvokeRequest, plat
 	}
 	defer cleanup()
 
-	paperRoot := filepath.Join(sessionDir, "paper")
 	ideaCfg := mustIdeaDiscoveryConfig()
+	paperRoot := filepath.Join(sessionDir, arisRunWorkspaceDir)
 	if strings.Contains(behavior, "discovery.run") {
 		briefInput := topicRunInput{
 			Direction: req.Context.Direction,
 			Keywords:  req.Context.Keywords,
 			Venue:     req.Context.VenueLabel,
 		}
-		if err := PrepareNativeIdeaDiscoveryWorkspace(paperRoot, briefInput, req.Context.ContentLanguage, ideaCfg); err != nil {
+		if err := PrepareNativeIdeaDiscoveryWorkspace(paperRoot, briefInput, req.Context.Language, ideaCfg); err != nil {
 			return nil, err
 		}
 		if err := writeIdeaDiscoveryContractFile(paperRoot, ideaCfg); err != nil {
@@ -429,7 +425,7 @@ func runLocalStrategyInvoke(ctx context.Context, req StrategyInvokeRequest, plat
 	promptPath := filepath.Join(invokeDir, "platform_user_prompt.txt")
 	if strings.Contains(behavior, "discovery.run") {
 		if b, err := os.ReadFile(promptPath); err != nil || len(strings.TrimSpace(string(b))) == 0 {
-			argsLine := ideaCfg.formatSkillArgumentsLine(paperRoot, req.Context.Direction, req.Context.VenueLabel)
+			argsLine := ideaCfg.formatSkillArgumentsLine(paperRoot, req.Context.Direction, req.Context.VenueLabel, req.Context.Language)
 			if err := os.WriteFile(promptPath, []byte(argsLine), 0o644); err != nil {
 				return nil, err
 			}

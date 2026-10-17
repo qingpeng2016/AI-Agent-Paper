@@ -335,7 +335,7 @@ CREATE TABLE IF NOT EXISTS `paper_manuscript` (
   `target_words`      INT UNSIGNED DEFAULT NULL COMMENT '目标字数',
   `citation_style`    VARCHAR(64)  DEFAULT NULL COMMENT 'apa|ieee|acm|…',
   `discipline_id`     BIGINT UNSIGNED DEFAULT NULL COMMENT '学科 ID',
-  `content_language`  VARCHAR(8)   NOT NULL DEFAULT 'en' COMMENT 'zh|en：与 AI 沟通及产出文本语言',
+  `language`          VARCHAR(8)   NOT NULL DEFAULT 'en' COMMENT 'zh|en：与 AI 沟通及产出文本语言',
   `reference_gate_enabled` TINYINT(1) NOT NULL DEFAULT 1 COMMENT '参考文献门禁',
   `workspace_uri`     VARCHAR(512) DEFAULT NULL COMMENT '平台 provision 的工作区根路径',
   `forked_from_manuscript_id` BIGINT UNSIGNED DEFAULT NULL COMMENT '从另一篇论文 fork 时链接',

@@ -306,10 +306,10 @@ const manuscriptSwitchPendingId = ref<string | null>(null)
 
 const createManuscriptDialogVisible = ref(false)
 const createManuscriptSubmitting = ref(false)
-const createManuscriptForm = reactive<{ disciplineCode: string; title: string; contentLanguage: 'zh' | 'en' }>({
+const createManuscriptForm = reactive<{ disciplineCode: string; title: string; language: 'zh' | 'en' }>({
   disciplineCode: '',
   title: '',
-  contentLanguage: 'en',
+  language: 'en',
 })
 let createManuscriptDialogResolve: ((ok: boolean) => void) | null = null
 
@@ -350,7 +350,7 @@ async function openCreateManuscriptDialog(): Promise<boolean> {
   await reloadTopicDiscoveryFormOptions()
   createManuscriptForm.disciplineCode = ''
   createManuscriptForm.title = ''
-  createManuscriptForm.contentLanguage = 'en'
+  createManuscriptForm.language = 'en'
   resetCreateManuscriptUpload()
   createManuscriptDialogVisible.value = true
   return new Promise((resolve) => {
@@ -383,7 +383,7 @@ async function submitCreateManuscriptDialog() {
     const data = await createPaperManuscript(
       title,
       createManuscriptForm.disciplineCode,
-      createManuscriptForm.contentLanguage,
+      createManuscriptForm.language,
     )
     applyManuscriptListFromApi(data)
     topicForm.disciplineCode = createManuscriptForm.disciplineCode
@@ -2280,7 +2280,7 @@ watch(
               <div class="paper-create-ms-lang" role="radiogroup" aria-label="论文语言">
                 <label class="paper-create-ms-lang__option">
                   <input
-                    v-model="createManuscriptForm.contentLanguage"
+                    v-model="createManuscriptForm.language"
                     type="radio"
                     name="paper-create-ms-lang"
                     value="en"
@@ -2289,7 +2289,7 @@ watch(
                 </label>
                 <label class="paper-create-ms-lang__option">
                   <input
-                    v-model="createManuscriptForm.contentLanguage"
+                    v-model="createManuscriptForm.language"
                     type="radio"
                     name="paper-create-ms-lang"
                     value="zh"

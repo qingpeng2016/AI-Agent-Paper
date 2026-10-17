@@ -107,7 +107,7 @@ func (s *TopicDiscoveryRunService) buildTopicStrategyInvokeContext(
 		ManuscriptID:    step.ManuscriptID,
 		UserID:          uint64(userID),
 		RunVersion:      runVersion,
-		ContentLanguage: s.contentLocaleForStep(ctx, step),
+		Language: s.contentLocaleForStep(ctx, step),
 		Direction:       input.Direction,
 		Keywords:        input.Keywords,
 		VenueCodes:      input.VenueCodes,

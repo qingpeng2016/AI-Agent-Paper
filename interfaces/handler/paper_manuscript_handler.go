@@ -53,7 +53,7 @@ func (h *PaperManuscriptHandler) PostCreateManuscript(c *gin.Context) {
 		response.ResponseErr(c, errorx.ErrParamsError)
 		return
 	}
-	data, err := h.ms.Create(c.Request.Context(), userID, req.Title, req.DisciplineCode, req.ContentLanguage)
+	data, err := h.ms.Create(c.Request.Context(), userID, req.Title, req.DisciplineCode, req.Language)
 	if err != nil {
 		response.ResponseErr(c, err)
 		return

@@ -647,7 +647,7 @@ func (s *TopicDiscoveryRunService) contentLocaleForStep(ctx context.Context, ste
 	if err != nil || ms == nil {
 		return "en"
 	}
-	return lang.NormalizeContentLanguage(ms.ContentLanguage)
+	return lang.NormalizeContentLanguage(ms.Language)
 }
 
 func llmUserMessage(userPrefix, userExtra string) string {
