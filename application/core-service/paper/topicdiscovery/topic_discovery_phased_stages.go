@@ -3,6 +3,8 @@ package topicdiscovery
 import (
 	"context"
 	"strings"
+
+	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
 )
 
 // topicDiscoveryPhasedStages：工作流 1 五段 ARIS skill，每段一条 paper_output_topic_step；最后 topic_confirm。
@@ -34,6 +36,23 @@ func isPhasedTopicStage(stageCode string) bool {
 		}
 	}
 	return false
+}
+
+func ideaDiscoveryPhaseIDToStageCode(phaseID string) string {
+	switch strings.TrimSpace(phaseID) {
+	case "research-lit":
+		return "research_lit"
+	case "idea-creator":
+		return "idea_creator"
+	case "novelty-check":
+		return "novelty_check"
+	case "research-review":
+		return "research_review"
+	case "research-refine-pipeline":
+		return "research_refine"
+	default:
+		return strings.ReplaceAll(strings.TrimSpace(phaseID), "-", "_")
+	}
 }
 
 func topicStageCodeToPhaseID(stageCode string) string {
@@ -72,6 +91,36 @@ func (s *TopicDiscoveryRunService) stagesForRun(ctx context.Context, userID uint
 		return topicDiscoveryPhasedStages
 	}
 	return topicDiscoveryStages
+}
+
+// IdeaDiscoveryRuntimeStageQueueStep bot 扫描：idea_discovery running，且 runtime_state 为
+// other.async_llm=true + stage 中有一段 status=executing（见 idea_discovery_runtime_state.go）。
+func IdeaDiscoveryRuntimeStageQueueStep(step *entity.PaperOutputTopicStep) bool {
+	if step == nil || strings.TrimSpace(step.Status) != "running" {
+		return false
+	}
+	switch strings.TrimSpace(step.StageCode) {
+	case "idea_discovery", "topic_discovery":
+	default:
+		return false
+	}
+	if !runtimeStateOtherAsyncLLM(step.RuntimeState) {
+		return false
+	}
+	return ExecutingPhaseFromRuntimeState(step.RuntimeState) != ""
+}
+
+// StepUsesRuntimeStagePhasedInvoke 是否走五段 ARIS（非 bundled），以 runtime_state.stage 为准。
+func StepUsesRuntimeStagePhasedInvoke(step *entity.PaperOutputTopicStep) bool {
+	if step == nil {
+		return false
+	}
+	switch strings.TrimSpace(step.StageCode) {
+	case "idea_discovery", "topic_discovery":
+	default:
+		return false
+	}
+	return runtimeStateStageMap(step.RuntimeState) != nil
 }
 
 func (s *TopicDiscoveryRunService) phasedStagesPriorCompleted(ctx context.Context, userID uint, runVersion int, stageCode string) (bool, error) {

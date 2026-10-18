@@ -10,6 +10,7 @@ import (
 	"time"
 
 	papersvc "github.com/qingpeng2016/ai-agent-paper/application/core-service/paper"
+	tdcore "github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/topicdiscovery"
 	"github.com/qingpeng2016/ai-agent-paper/common/dederi/logger"
 	"github.com/qingpeng2016/ai-agent-paper/common/notification"
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
@@ -90,6 +91,10 @@ func (j *TopicDiscoveryJob) processOne(ctx context.Context, step *entity.PaperOu
 	meta := papersvc.LoadStepExtra(step)
 	// 仅 API 启动 LLM 后设的 async_llm=true 会进 bot；其余 running 步忽略。
 	if async, ok := meta["async_llm"].(bool); !ok || !async {
+		return "skipped"
+	}
+	// runtime_state.stage 五段模式由 llm_idea_discovery_phases 处理，避免再打 /idea-discovery。
+	if tdcore.IdeaDiscoveryRuntimeStageQueueStep(step) {
 		return "skipped"
 	}
 	input, err := j.runs.LoadRunInputForUser(ctx, uint(step.UserID), step.RunVersion)

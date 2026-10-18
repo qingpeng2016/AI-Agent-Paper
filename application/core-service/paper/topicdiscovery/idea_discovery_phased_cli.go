@@ -30,16 +30,7 @@ func buildIdeaDiscoveryPhaseCLIPrompt(phaseID, argsLine string, cfg ARISIdeaDisc
 }
 
 func executingIdeaDiscoveryPhaseFromMeta(meta map[string]any) string {
-	if meta == nil {
-		return ""
-	}
-	normalizeIdeaDiscoveryRuntimeMeta(meta)
-	for _, id := range ideaDiscoveryRunStatePhases {
-		if phaseStatusInMeta(meta, id) == IdeaDiscoveryPhaseExecuting {
-			return id
-		}
-	}
-	return ""
+	return executingPhaseFromRuntimeMeta(meta)
 }
 
 func nextIdeaDiscoveryPhaseID(phase string) string {

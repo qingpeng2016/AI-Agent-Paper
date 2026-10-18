@@ -19,11 +19,6 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryPhaseLLM(
 ) error {
 	cfg := mustIdeaDiscoveryConfig()
 
-	route, err := s.requireTopicStrategyRoute(ctx, BehaviorIdeaDiscoveryRun)
-	if err != nil {
-		return err
-	}
-
 	paperRoot := ARISRunPaperRoot(uint64(userID), step.ManuscriptID, runVersion)
 	invokeCtx := s.buildTopicStrategyInvokeContext(ctx, userID, runVersion, step, input, 1, 1, nil, nil)
 
@@ -32,6 +27,12 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryPhaseLLM(
 	phase := executingIdeaDiscoveryPhaseFromMeta(meta)
 	if phase == "" {
 		return fmt.Errorf("phased invoke: 无 executing 段")
+	}
+	stageCode := ideaDiscoveryPhaseIDToStageCode(phase)
+	behaviorKey := topicStageBehaviorKey(stageCode)
+	route, err := s.requireTopicStrategyRoute(ctx, behaviorKey)
+	if err != nil {
+		return err
 	}
 
 	runID := resolveIdeaDiscoveryRunID(paperRoot, step, input)
@@ -52,8 +53,8 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryPhaseLLM(
 		return err
 	}
 
-	req := BuildTopicDiscoveryInvokeRequest(BehaviorIdeaDiscoveryPhase, phase, input, invokeCtx)
-	raw, usage, err := s.invokeLocalARIS(ctx, step, req, route, "")
+	req := BuildTopicDiscoveryInvokeRequest(behaviorKey, route.CapabilityID, input, invokeCtx)
+	raw, usage, err := s.invokeTopicDiscoveryBehavior(ctx, step, req, "")
 	if err != nil {
 		return s.handleIdeaDiscoveryInvokeFailure(ctx, step, paperRoot, cfg, err)
 	}

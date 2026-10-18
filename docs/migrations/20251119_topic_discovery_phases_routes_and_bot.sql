@@ -48,7 +48,7 @@ INSERT INTO `bot_schedule_config` (
   'ai_agent_paper',
   'llm_idea_discovery_phases',
   2,
-  '选题五段 step（research_lit→research_refine）：每段一条 ARIS /research-lit 等，需 invoke_mode=phased',
+  '选题 idea_discovery+runtime_state.stage：按 executing 段打 /research-lit 等（非 /idea-discovery）',
   1,
   1
 )

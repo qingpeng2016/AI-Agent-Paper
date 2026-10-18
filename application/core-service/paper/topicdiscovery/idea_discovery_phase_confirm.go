@@ -305,6 +305,6 @@ func ideaDiscoveryNeedsUserConfirm(meta map[string]any, pendingPhase string, cfg
 		return false
 	}
 	normalizeIdeaDiscoveryRuntimeMeta(meta)
-	st := phaseStatusInMeta(meta, pendingPhase)
+	st := phaseStatusFromRuntimeMeta(meta, pendingPhase)
 	return st != IdeaDiscoveryPhaseExecuting && st != IdeaDiscoveryPhaseCompleted
 }
