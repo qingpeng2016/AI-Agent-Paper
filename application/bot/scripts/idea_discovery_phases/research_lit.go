@@ -3,6 +3,8 @@ package ideadiscoveryphases
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -65,7 +67,6 @@ func (j *IdeaDiscoveryPhasesJob) invokeResearchLit(ctx context.Context, step *en
 	}
 	paperRoot := topicdiscovery.ARISRunPaperRoot(uint64(userID), step.ManuscriptID, runVersion)
 	invokeCtx := svc.PhasedBotBuildInvokeContext(ctx, userID, runVersion, step, input)
-	runID := topicdiscovery.PhasedBotResolveRunID(paperRoot, step, input)
 
 	// 1. 准备 workspace：清 CLI session、落 RESEARCH_BRIEF/参数，供 /research-lit 读取。
 	cfg.ClearCLIWorkspaceSessions(paperRoot)
@@ -82,14 +83,13 @@ func (j *IdeaDiscoveryPhasesJob) invokeResearchLit(ctx context.Context, step *en
 		return err
 	}
 
-	// 3. 校验产物：research-lit 需有约定文件（如 LITERATURE_LANDSCAPE.md）；失败则 status=failed 或保持 running 下 tick 重试。
-	if !topicdiscovery.IdeaDiscoveryPhasedPhaseSucceeded(paperRoot, runID, phaseID, cfg) {
-		if topicdiscovery.IdeaDiscoveryPhasedBotMayRetryPhase(cfg) {
-			step.Status = topicStepRunning
-			return j.steps.SaveStep(ctx, step)
+	// 3. 校验产物：paper 目录下必须有 LITERATURE_LANDSCAPE.md，否则本段 failed。
+	if err = researchLitRequireLandscapeMD(paperRoot); err != nil {
+		papersvc.FailTopicStep(step, err.Error())
+		if saveErr := j.steps.SaveStep(ctx, step); saveErr != nil {
+			return saveErr
 		}
-		reason := fmt.Sprintf("Idea Discovery 阶段 /%s 未产出约定产物", phaseID)
-		return svc.PhasedBotPersistStageFailed(ctx, step, reason)
+		return err
 	}
 
 	_ = svc.PhasedBotIngestLiterature(ctx, userID, runVersion, step.ManuscriptID, paperRoot, cfg)
@@ -106,6 +106,24 @@ func (j *IdeaDiscoveryPhasesJob) invokeResearchLit(ctx context.Context, step *en
 		return nil
 	}
 	return svc.PhasedBotBeginNextStageAsync(ctx, userID, runVersion, topicdiscovery.NextPhasedTopicStageCode(researchLitStageCode))
+}
+
+const researchLitLandscapeFile = "LITERATURE_LANDSCAPE.md"
+
+// researchLitRequireLandscapeMD 校验 ARIS paper 工作区（…/run_N/paper）下存在 LITERATURE_LANDSCAPE.md。
+func researchLitRequireLandscapeMD(paperRoot string) error {
+	path := filepath.Join(strings.TrimSpace(paperRoot), researchLitLandscapeFile)
+	st, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("Idea Discovery /research-lit 未产出 %s（期望: %s）", researchLitLandscapeFile, path)
+		}
+		return fmt.Errorf("校验 %s: %w", researchLitLandscapeFile, err)
+	}
+	if st.IsDir() {
+		return fmt.Errorf("Idea Discovery /research-lit 产物异常: %s 是目录而非文件", path)
+	}
+	return nil
 }
 
 // researchLitInvokeBehavior 查 research_lit 的 strategy route，组装 Invoke 请求并走本地 ARIS CLI 一次。
