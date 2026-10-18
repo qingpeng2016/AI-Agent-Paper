@@ -39,6 +39,9 @@ func NewTopicDiscoveryJob(
 
 // Run 每轮 bot 任务：最多处理 scanLimit 条 running 的 idea_discovery step。
 func (j *TopicDiscoveryJob) Run(ctx context.Context) {
+	// TODO(调试)：验证 bot tick 间隔与会话/上下文；测完删除。
+	time.Sleep(10 * time.Second)
+
 	rows, err := j.steps.ListByStatusAndStage(ctx, "running", "idea_discovery", scanLimit)
 	if err != nil {
 		notification.SendErrorLog(ctx, "topic-discovery-list-failed", zap.Error(err))
