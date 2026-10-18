@@ -13,7 +13,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// RunNoveltyCheck 处理 entry 传入的 novelty_check step：组装 /novelty-check 并 invoke ARIS。
+// RunNoveltyCheck 对 running 的 novelty_check step 执行一次 /novelty-check ARIS。
 func (j *IdeaDiscoveryPhasesJob) RunNoveltyCheck(ctx context.Context, step *entity.PaperOutputTopicStep) (scanned, invoked, skipped, failed int) {
 	if step == nil || j.runs == nil {
 		return 0, 0, 0, 0
@@ -26,157 +26,149 @@ func (j *IdeaDiscoveryPhasesJob) RunNoveltyCheck(ctx context.Context, step *enti
 	runVersion := step.RunVersion
 	priorOK, err := j.noveltyCheckPriorCompleted(ctx, userID, runVersion)
 	if err != nil {
-		noveltyCheckMarkFailed(j, ctx, step, err.Error(), 0, 0)
+		papersvc.FailTopicStep(step, err.Error())
+		if saveErr := j.steps.SaveStep(ctx, step); saveErr != nil {
+			logger.ErrorZ(ctx, "idea-discovery-phases-fail-save", zap.Uint64("step_id", step.ID), zap.Error(saveErr))
+		}
+		noveltyCheckNotify(j, ctx, step, papersvc.TopicStepOutcomeFailed, err.Error(), 0, 0)
 		return 1, 0, 0, 1
 	}
 	if !priorOK {
 		return 0, 0, 0, 0
 	}
 	scanned = 1
-	switch j.processNoveltyCheckStep(ctx, step) {
-	case topicStepCompleted:
-		invoked++
-	case topicStepFailed:
-		failed++
-	default:
-		skipped++
-	}
-	return scanned, invoked, skipped, failed
-}
 
-// noveltyCheckPriorCompleted 前序 research_lit、idea_creator 是否均已 completed。
-func (j *IdeaDiscoveryPhasesJob) noveltyCheckPriorCompleted(ctx context.Context, userID uint, runVersion int) (bool, error) {
-	for _, code := range noveltyCheckPriorStages {
-		step, err := j.steps.GetStep(ctx, uint64(userID), runVersion, code)
-		if err != nil {
-			return false, err
-		}
-		if step == nil || strings.TrimSpace(step.Status) != topicStepCompleted {
-			return false, nil
-		}
-	}
-	return true, nil
-}
-
-// processNoveltyCheckStep 处理单条 novelty_check：invoke、通知，返回 completed/failed/skipped。
-func (j *IdeaDiscoveryPhasesJob) processNoveltyCheckStep(ctx context.Context, step *entity.PaperOutputTopicStep) string {
-	userID := uint(step.UserID)
-	runVersion := step.RunVersion
-	if err := j.runNoveltyCheckTick(ctx, userID, runVersion, step); err != nil {
+	phaseID := topicdiscovery.TopicStageCodeToPhaseID(noveltyCheckStageCode)
+	if err := j.invokeNoveltyCheck(ctx, step, phaseID); err != nil {
 		if strings.TrimSpace(step.Status) != topicStepFailed {
-			noveltyCheckMarkFailed(j, ctx, step, err.Error(), 0, 0)
-		} else {
-			noveltyCheckNotify(j, ctx, step, papersvc.TopicStepOutcomeFailed, err.Error(), 0, 0)
+			papersvc.FailTopicStep(step, err.Error())
+			if saveErr := j.steps.SaveStep(ctx, step); saveErr != nil {
+				logger.ErrorZ(ctx, "idea-discovery-phases-fail-save", zap.Uint64("step_id", step.ID), zap.Error(saveErr))
+			}
 		}
-		return topicStepFailed
+		noveltyCheckNotify(j, ctx, step, papersvc.TopicStepOutcomeFailed, err.Error(), 0, 0)
+		return scanned, 0, 0, 1
 	}
-	if strings.TrimSpace(step.Status) == topicStepCompleted {
-		phaseID := topicdiscovery.TopicStageCodeToPhaseID(noveltyCheckStageCode)
+
+	switch strings.TrimSpace(step.Status) {
+	case topicStepCompleted:
 		noveltyCheckNotify(j, ctx, step, papersvc.TopicStepOutcomeSuccess,
 			fmt.Sprintf("Idea Discovery · %s 已完成", phaseID), 0, 0)
 		if topicdiscovery.TopicStageNeedsUserCheckpoint(phaseID) {
 			noveltyCheckNotify(j, ctx, step, papersvc.TopicStepOutcomeCheckpoint,
 				topicdiscovery.TopicStageCheckpointDetail(phaseID), 0, 0)
 		}
-		return topicStepCompleted
+		return scanned, 1, 0, 0
+	case topicStepFailed:
+		return scanned, 0, 0, 1
+	default:
+		return scanned, 0, 1, 0
 	}
-	if strings.TrimSpace(step.Status) == topicStepFailed {
-		noveltyCheckNotify(j, ctx, step, papersvc.TopicStepOutcomeFailed,
-			fmt.Sprintf("Idea Discovery · %s 失败", topicdiscovery.TopicStageCodeToPhaseID(noveltyCheckStageCode)), 0, 0)
-		return topicStepFailed
-	}
-	logger.InfoZ(ctx, "idea-discovery-phases-invoke-tick",
-		zap.Uint64("step_id", step.ID),
-		zap.String("stage_code", noveltyCheckStageCode),
-		zap.String("phase_id", topicdiscovery.TopicStageCodeToPhaseID(noveltyCheckStageCode)))
-	return topicStepSkipped
 }
 
-// runNoveltyCheckTick 组装工作区与 /novelty-check 请求，执行一次 ARIS 并写回 step。
-func (j *IdeaDiscoveryPhasesJob) runNoveltyCheckTick(ctx context.Context, userID uint, runVersion int, step *entity.PaperOutputTopicStep) error {
-	input, err := j.runs.LoadRunInputForUser(ctx, userID, runVersion)
-	if err != nil {
-		return err
+func (j *IdeaDiscoveryPhasesJob) noveltyCheckPriorCompleted(ctx context.Context, userID uint, runVersion int) (bool, error) {
+	for _, code := range noveltyCheckPriorStages {
+		st, err := j.steps.GetStep(ctx, uint64(userID), runVersion, code)
+		if err != nil {
+			return false, err
+		}
+		if st == nil || strings.TrimSpace(st.Status) != topicStepCompleted {
+			return false, nil
+		}
 	}
-	if step == nil || strings.TrimSpace(step.StageCode) != noveltyCheckStageCode {
-		return fmt.Errorf("非 novelty_check step: %q", step.StageCode)
-	}
+	return true, nil
+}
+
+// invokeNoveltyCheck 本段固定 ARIS /novelty-check，一次 tick 走完四步（只改 step.status，不写 runtime_state/extra 编排字段）。
+func (j *IdeaDiscoveryPhasesJob) invokeNoveltyCheck(ctx context.Context, step *entity.PaperOutputTopicStep, phaseID string) error {
+	userID := uint(step.UserID)
+	runVersion := step.RunVersion
 	svc := j.runs
 	cfg := topicdiscovery.MustIdeaDiscoveryConfig()
-	route, err := svc.PhasedBotRequireRoute(ctx, topicdiscovery.TopicStageBehaviorKey(noveltyCheckStageCode))
+
+	input, err := svc.LoadRunInputForUser(ctx, userID, runVersion)
 	if err != nil {
 		return err
 	}
 	paperRoot := topicdiscovery.ARISRunPaperRoot(uint64(userID), step.ManuscriptID, runVersion)
 	invokeCtx := svc.PhasedBotBuildInvokeContext(ctx, userID, runVersion, step, input)
 	runID := topicdiscovery.PhasedBotResolveRunID(paperRoot, step, input)
+
+	// 1. 准备 workspace：清 CLI session、落 RESEARCH_BRIEF/参数，供 /novelty-check 读取。
 	cfg.ClearCLIWorkspaceSessions(paperRoot)
-	if err := topicdiscovery.PrepareNativeIdeaDiscoveryWorkspace(paperRoot, input, invokeCtx.Language, cfg); err != nil {
+	if err = topicdiscovery.PrepareNativeIdeaDiscoveryWorkspace(paperRoot, input, invokeCtx.Language, cfg); err != nil {
 		return err
 	}
 	argsLine := cfg.FormatIdeaDiscoveryArgsLine(input, strings.TrimSpace(input.Venue), invokeCtx.Language)
-	if err := topicdiscovery.WriteNativePlatformArguments(paperRoot, argsLine); err != nil {
+	if err = topicdiscovery.WriteNativePlatformArguments(paperRoot, argsLine); err != nil {
 		return err
 	}
-	req := topicdiscovery.BuildTopicDiscoveryInvokeRequest(topicdiscovery.TopicStageBehaviorKey(noveltyCheckStageCode), route.CapabilityID, input, invokeCtx)
-	_, _, err = svc.PhasedBotInvokeBehavior(ctx, step, req, "")
-	if err != nil {
-		return svc.PhasedBotHandleInvokeFailure(ctx, step, paperRoot, cfg, err)
-	}
-	return j.advanceNoveltyCheckAfterInvoke(ctx, step, userID, runVersion, route, paperRoot, runID, cfg)
-}
 
-// advanceNoveltyCheckAfterInvoke 校验新颖性阶段产物，completed 本段或失败，并按配置开 research_review。
-func (j *IdeaDiscoveryPhasesJob) advanceNoveltyCheckAfterInvoke(
-	ctx context.Context,
-	step *entity.PaperOutputTopicStep,
-	userID uint,
-	runVersion int,
-	route *entity.PaperStrategyRoute,
-	paperRoot, runID string,
-	cfg topicdiscovery.ARISIdeaDiscoveryConfig,
-) error {
-	svc := j.runs
-	if !topicdiscovery.IdeaDiscoveryPhasedPhaseSucceeded(paperRoot, runID, topicdiscovery.TopicStageCodeToPhaseID(noveltyCheckStageCode), cfg) {
+	// 2. invoke：按 paper_llm_strategy_route 打一次 /novelty-check。
+	if err = j.noveltyCheckInvokeBehavior(ctx, step, svc, input, invokeCtx, paperRoot, cfg); err != nil {
+		return err
+	}
+
+	// 3. 校验产物：novelty-check 需有约定文件；失败则 status=failed 或保持 running 下 tick 重试。
+	if !topicdiscovery.IdeaDiscoveryPhasedPhaseSucceeded(paperRoot, runID, phaseID, cfg) {
 		if topicdiscovery.IdeaDiscoveryPhasedBotMayRetryPhase(cfg) {
 			step.Status = topicStepRunning
 			return j.steps.SaveStep(ctx, step)
 		}
-		reason := fmt.Sprintf("Idea Discovery 阶段 /%s 未产出约定产物", topicdiscovery.TopicStageCodeToPhaseID(noveltyCheckStageCode))
+		reason := fmt.Sprintf("Idea Discovery 阶段 /%s 未产出约定产物", phaseID)
 		return svc.PhasedBotPersistStageFailed(ctx, step, reason)
 	}
-	if err := noveltyCheckCompleteStep(j, ctx, step); err != nil {
+
+	// 4. 更新 status：本段 completed；无段间 pause 则把下一段（research_review）标 running，否则下一段保持 pending 等 API 继续。
+	now := time.Now()
+	step.Status = topicStepCompleted
+	step.ExecProgressPct = 100
+	step.CompletedAt = &now
+	if err := j.steps.SaveStep(ctx, step); err != nil {
 		return err
 	}
-	if cfg.PhaseNeedsUserCheckpoint(topicdiscovery.TopicStageCodeToPhaseID(noveltyCheckStageCode)) {
+	if cfg.PhaseNeedsUserCheckpoint(phaseID) {
 		return nil
 	}
 	return svc.PhasedBotBeginNextStageAsync(ctx, userID, runVersion, topicdiscovery.NextPhasedTopicStageCode(noveltyCheckStageCode))
 }
 
-// noveltyCheckCompleteStep 将 novelty_check 标为 completed（100%）。
-func noveltyCheckCompleteStep(j *IdeaDiscoveryPhasesJob, ctx context.Context, step *entity.PaperOutputTopicStep) error {
-	if step == nil {
-		return nil
+// noveltyCheckInvokeBehavior 查 novelty_check 的 strategy route，组装 Invoke 请求并走本地 ARIS CLI 一次。
+func (j *IdeaDiscoveryPhasesJob) noveltyCheckInvokeBehavior(
+	ctx context.Context,
+	step *entity.PaperOutputTopicStep,
+	svc *papersvc.TopicDiscoveryRunService,
+	input topicdiscovery.TopicRunInput,
+	invokeCtx topicdiscovery.StrategyInvokeContext,
+	paperRoot string,
+	cfg topicdiscovery.ARISIdeaDiscoveryConfig,
+) error {
+	behaviorKey := topicdiscovery.TopicStageBehaviorKey(noveltyCheckStageCode)
+	route, err := svc.PhasedBotRequireRoute(ctx, behaviorKey)
+	if err != nil {
+		return err
 	}
-	now := time.Now()
-	step.Status = topicStepCompleted
-	step.ExecProgressPct = 100
-	step.CompletedAt = &now
-	return j.steps.SaveStep(ctx, step)
+	req := topicdiscovery.StrategyInvokeRequest{
+		BehaviorKey:  behaviorKey,
+		CapabilityID: strings.TrimSpace(route.CapabilityID),
+		Context:      invokeCtx,
+		Options: topicdiscovery.StrategyInvokeOptions{
+			AuditLevelCode:   input.AuditLevel,
+			IntensityCode:    input.Intensity,
+			ExecRounds:       input.ExecRounds,
+			MaxIdeas:         input.MaxIdeas,
+			MaxPapers:        input.MaxPapers,
+			SourceCodes:      input.SourceCodes,
+			RandomReferences: input.RandomReferences,
+		},
+	}
+	_, _, err = svc.PhasedBotInvokeBehavior(ctx, step, req, "")
+	if err != nil {
+		return svc.PhasedBotHandleInvokeFailure(ctx, step, paperRoot, cfg, err)
+	}
+	return nil
 }
 
-// noveltyCheckMarkFailed 落库 failed 并推送失败通知。
-func noveltyCheckMarkFailed(j *IdeaDiscoveryPhasesJob, ctx context.Context, step *entity.PaperOutputTopicStep, reason string, promptTokens, completionTokens int) {
-	papersvc.FailTopicStep(step, reason)
-	if err := j.steps.SaveStep(ctx, step); err != nil {
-		logger.ErrorZ(ctx, "idea-discovery-phases-fail-save", zap.Uint64("step_id", step.ID), zap.Error(err))
-		return
-	}
-	noveltyCheckNotify(j, ctx, step, papersvc.TopicStepOutcomeFailed, reason, promptTokens, completionTokens)
-}
-
-// noveltyCheckNotify 推送本 step 执行结果（成功/失败/检查点）。
 func noveltyCheckNotify(j *IdeaDiscoveryPhasesJob, ctx context.Context, step *entity.PaperOutputTopicStep, outcome, detail string, promptTokens, completionTokens int) {
 	if step == nil {
 		return

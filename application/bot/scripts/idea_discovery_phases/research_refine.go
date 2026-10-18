@@ -12,7 +12,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// RunResearchRefine 处理 entry 传入的 research_refine step：组装 /research-refine-pipeline 并 invoke ARIS。
+// RunResearchRefine 对 running 的 research_refine step 执行一次 /research-refine-pipeline ARIS。
 func (j *IdeaDiscoveryPhasesJob) RunResearchRefine(ctx context.Context, step *entity.PaperOutputTopicStep) (scanned, invoked, skipped, failed int) {
 	if step == nil || j.runs == nil {
 		return 0, 0, 0, 0
@@ -25,140 +25,144 @@ func (j *IdeaDiscoveryPhasesJob) RunResearchRefine(ctx context.Context, step *en
 	runVersion := step.RunVersion
 	priorOK, err := j.researchRefinePriorCompleted(ctx, userID, runVersion)
 	if err != nil {
-		researchRefineMarkFailed(j, ctx, step, err.Error(), 0, 0)
+		papersvc.FailTopicStep(step, err.Error())
+		if saveErr := j.steps.SaveStep(ctx, step); saveErr != nil {
+			logger.ErrorZ(ctx, "idea-discovery-phases-fail-save", zap.Uint64("step_id", step.ID), zap.Error(saveErr))
+		}
+		researchRefineNotify(j, ctx, step, papersvc.TopicStepOutcomeFailed, err.Error(), 0, 0)
 		return 1, 0, 0, 1
 	}
 	if !priorOK {
 		return 0, 0, 0, 0
 	}
 	scanned = 1
-	switch j.processResearchRefineStep(ctx, step) {
-	case topicStepCompleted:
-		invoked++
-	case topicStepFailed:
-		failed++
-	default:
-		skipped++
-	}
-	return scanned, invoked, skipped, failed
-}
 
-// researchRefinePriorCompleted 前序四段是否均已 completed。
-func (j *IdeaDiscoveryPhasesJob) researchRefinePriorCompleted(ctx context.Context, userID uint, runVersion int) (bool, error) {
-	for _, code := range researchRefinePriorStages {
-		step, err := j.steps.GetStep(ctx, uint64(userID), runVersion, code)
-		if err != nil {
-			return false, err
-		}
-		if step == nil || strings.TrimSpace(step.Status) != topicStepCompleted {
-			return false, nil
-		}
-	}
-	return true, nil
-}
-
-// processResearchRefineStep 处理单条 research_refine：invoke、通知，返回 completed/failed/skipped。
-func (j *IdeaDiscoveryPhasesJob) processResearchRefineStep(ctx context.Context, step *entity.PaperOutputTopicStep) string {
-	userID := uint(step.UserID)
-	runVersion := step.RunVersion
-	if err := j.runResearchRefineTick(ctx, userID, runVersion, step); err != nil {
+	phaseID := topicdiscovery.TopicStageCodeToPhaseID(researchRefineStageCode)
+	if err := j.invokeResearchRefine(ctx, step, phaseID); err != nil {
 		if strings.TrimSpace(step.Status) != topicStepFailed {
-			researchRefineMarkFailed(j, ctx, step, err.Error(), 0, 0)
-		} else {
-			researchRefineNotify(j, ctx, step, papersvc.TopicStepOutcomeFailed, err.Error(), 0, 0)
+			papersvc.FailTopicStep(step, err.Error())
+			if saveErr := j.steps.SaveStep(ctx, step); saveErr != nil {
+				logger.ErrorZ(ctx, "idea-discovery-phases-fail-save", zap.Uint64("step_id", step.ID), zap.Error(saveErr))
+			}
 		}
-		return topicStepFailed
+		researchRefineNotify(j, ctx, step, papersvc.TopicStepOutcomeFailed, err.Error(), 0, 0)
+		return scanned, 0, 0, 1
 	}
-	if strings.TrimSpace(step.Status) == topicStepCompleted {
-		phaseID := topicdiscovery.TopicStageCodeToPhaseID(researchRefineStageCode)
+
+	switch strings.TrimSpace(step.Status) {
+	case topicStepCompleted:
 		researchRefineNotify(j, ctx, step, papersvc.TopicStepOutcomeSuccess,
 			fmt.Sprintf("Idea Discovery · %s 已完成", phaseID), 0, 0)
 		if topicdiscovery.TopicStageNeedsUserCheckpoint(phaseID) {
 			researchRefineNotify(j, ctx, step, papersvc.TopicStepOutcomeCheckpoint,
 				topicdiscovery.TopicStageCheckpointDetail(phaseID), 0, 0)
 		}
-		return topicStepCompleted
+		return scanned, 1, 0, 0
+	case topicStepFailed:
+		return scanned, 0, 0, 1
+	default:
+		return scanned, 0, 1, 0
 	}
-	if strings.TrimSpace(step.Status) == topicStepFailed {
-		researchRefineNotify(j, ctx, step, papersvc.TopicStepOutcomeFailed,
-			fmt.Sprintf("Idea Discovery · %s 失败", topicdiscovery.TopicStageCodeToPhaseID(researchRefineStageCode)), 0, 0)
-		return topicStepFailed
-	}
-	logger.InfoZ(ctx, "idea-discovery-phases-invoke-tick",
-		zap.Uint64("step_id", step.ID),
-		zap.String("stage_code", researchRefineStageCode),
-		zap.String("phase_id", topicdiscovery.TopicStageCodeToPhaseID(researchRefineStageCode)))
-	return topicStepSkipped
 }
 
-// runResearchRefineTick 组装工作区与 /research-refine-pipeline 请求，执行一次 ARIS 并写回 step。
-func (j *IdeaDiscoveryPhasesJob) runResearchRefineTick(ctx context.Context, userID uint, runVersion int, step *entity.PaperOutputTopicStep) error {
-	input, err := j.runs.LoadRunInputForUser(ctx, userID, runVersion)
-	if err != nil {
-		return err
+func (j *IdeaDiscoveryPhasesJob) researchRefinePriorCompleted(ctx context.Context, userID uint, runVersion int) (bool, error) {
+	for _, code := range researchRefinePriorStages {
+		st, err := j.steps.GetStep(ctx, uint64(userID), runVersion, code)
+		if err != nil {
+			return false, err
+		}
+		if st == nil || strings.TrimSpace(st.Status) != topicStepCompleted {
+			return false, nil
+		}
 	}
-	if step == nil || strings.TrimSpace(step.StageCode) != researchRefineStageCode {
-		return fmt.Errorf("非 research_refine step: %q", step.StageCode)
-	}
+	return true, nil
+}
+
+// invokeResearchRefine 本段固定 ARIS /research-refine-pipeline，一次 tick 走完四步（只改 step.status，不写 runtime_state/extra 编排字段）。
+func (j *IdeaDiscoveryPhasesJob) invokeResearchRefine(ctx context.Context, step *entity.PaperOutputTopicStep, phaseID string) error {
+	userID := uint(step.UserID)
+	runVersion := step.RunVersion
 	svc := j.runs
 	cfg := topicdiscovery.MustIdeaDiscoveryConfig()
-	route, err := svc.PhasedBotRequireRoute(ctx, topicdiscovery.TopicStageBehaviorKey(researchRefineStageCode))
+
+	input, err := svc.LoadRunInputForUser(ctx, userID, runVersion)
 	if err != nil {
 		return err
 	}
 	paperRoot := topicdiscovery.ARISRunPaperRoot(uint64(userID), step.ManuscriptID, runVersion)
 	invokeCtx := svc.PhasedBotBuildInvokeContext(ctx, userID, runVersion, step, input)
 	runID := topicdiscovery.PhasedBotResolveRunID(paperRoot, step, input)
+
+	// 1. 准备 workspace：清 CLI session、落 RESEARCH_BRIEF/参数，供 /research-refine-pipeline 读取。
 	cfg.ClearCLIWorkspaceSessions(paperRoot)
-	if err := topicdiscovery.PrepareNativeIdeaDiscoveryWorkspace(paperRoot, input, invokeCtx.Language, cfg); err != nil {
+	if err = topicdiscovery.PrepareNativeIdeaDiscoveryWorkspace(paperRoot, input, invokeCtx.Language, cfg); err != nil {
 		return err
 	}
 	argsLine := cfg.FormatIdeaDiscoveryArgsLine(input, strings.TrimSpace(input.Venue), invokeCtx.Language)
-	if err := topicdiscovery.WriteNativePlatformArguments(paperRoot, argsLine); err != nil {
+	if err = topicdiscovery.WriteNativePlatformArguments(paperRoot, argsLine); err != nil {
 		return err
 	}
-	req := topicdiscovery.BuildTopicDiscoveryInvokeRequest(topicdiscovery.TopicStageBehaviorKey(researchRefineStageCode), route.CapabilityID, input, invokeCtx)
-	_, _, err = svc.PhasedBotInvokeBehavior(ctx, step, req, "")
-	if err != nil {
-		return svc.PhasedBotHandleInvokeFailure(ctx, step, paperRoot, cfg, err)
-	}
-	return j.advanceResearchRefineAfterInvoke(ctx, step, userID, runVersion, route, paperRoot, runID, cfg)
-}
 
-// advanceResearchRefineAfterInvoke 校验 refine 产物；成功则走 idea_discovery gate 收尾（topic_confirm）。
-func (j *IdeaDiscoveryPhasesJob) advanceResearchRefineAfterInvoke(
-	ctx context.Context,
-	step *entity.PaperOutputTopicStep,
-	userID uint,
-	runVersion int,
-	route *entity.PaperStrategyRoute,
-	paperRoot, runID string,
-	cfg topicdiscovery.ARISIdeaDiscoveryConfig,
-) error {
-	svc := j.runs
-	if !topicdiscovery.IdeaDiscoveryPhasedPhaseSucceeded(paperRoot, runID, topicdiscovery.TopicStageCodeToPhaseID(researchRefineStageCode), cfg) {
+	// 2. invoke：按 paper_llm_strategy_route 打一次 /research-refine-pipeline。
+	if err = j.researchRefineInvokeBehavior(ctx, step, svc, input, invokeCtx, paperRoot, cfg); err != nil {
+		return err
+	}
+
+	// 3. 校验产物：research-refine 需有约定文件；失败则 status=failed 或保持 running 下 tick 重试。
+	if !topicdiscovery.IdeaDiscoveryPhasedPhaseSucceeded(paperRoot, runID, phaseID, cfg) {
 		if topicdiscovery.IdeaDiscoveryPhasedBotMayRetryPhase(cfg) {
 			step.Status = topicStepRunning
 			return j.steps.SaveStep(ctx, step)
 		}
-		reason := fmt.Sprintf("Idea Discovery 阶段 /%s 未产出约定产物", topicdiscovery.TopicStageCodeToPhaseID(researchRefineStageCode))
+		reason := fmt.Sprintf("Idea Discovery 阶段 /%s 未产出约定产物", phaseID)
 		return svc.PhasedBotPersistStageFailed(ctx, step, reason)
 	}
-	// 五段末段：下一段为 topic_confirm，由 gate 收尾并标 completed（与原先 advance 一致）。
+
+	// 4. 更新 status：五段末段，走 idea_discovery gate（topic_confirm）收尾并标本段 completed。
+	behaviorKey := topicdiscovery.TopicStageBehaviorKey(researchRefineStageCode)
+	route, err := svc.PhasedBotRequireRoute(ctx, behaviorKey)
+	if err != nil {
+		return err
+	}
 	return svc.PhasedBotFinishAfterGate(ctx, step, userID, runVersion, route, paperRoot, runID, cfg)
 }
 
-// researchRefineMarkFailed 落库 failed 并推送失败通知。
-func researchRefineMarkFailed(j *IdeaDiscoveryPhasesJob, ctx context.Context, step *entity.PaperOutputTopicStep, reason string, promptTokens, completionTokens int) {
-	papersvc.FailTopicStep(step, reason)
-	if err := j.steps.SaveStep(ctx, step); err != nil {
-		logger.ErrorZ(ctx, "idea-discovery-phases-fail-save", zap.Uint64("step_id", step.ID), zap.Error(err))
-		return
+// researchRefineInvokeBehavior 查 research_refine 的 strategy route，组装 Invoke 请求并走本地 ARIS CLI 一次。
+func (j *IdeaDiscoveryPhasesJob) researchRefineInvokeBehavior(
+	ctx context.Context,
+	step *entity.PaperOutputTopicStep,
+	svc *papersvc.TopicDiscoveryRunService,
+	input topicdiscovery.TopicRunInput,
+	invokeCtx topicdiscovery.StrategyInvokeContext,
+	paperRoot string,
+	cfg topicdiscovery.ARISIdeaDiscoveryConfig,
+) error {
+	behaviorKey := topicdiscovery.TopicStageBehaviorKey(researchRefineStageCode)
+	route, err := svc.PhasedBotRequireRoute(ctx, behaviorKey)
+	if err != nil {
+		return err
 	}
-	researchRefineNotify(j, ctx, step, papersvc.TopicStepOutcomeFailed, reason, promptTokens, completionTokens)
+	req := topicdiscovery.StrategyInvokeRequest{
+		BehaviorKey:  behaviorKey,
+		CapabilityID: strings.TrimSpace(route.CapabilityID),
+		Context:      invokeCtx,
+		Options: topicdiscovery.StrategyInvokeOptions{
+			AuditLevelCode:   input.AuditLevel,
+			IntensityCode:    input.Intensity,
+			ExecRounds:       input.ExecRounds,
+			MaxIdeas:         input.MaxIdeas,
+			MaxPapers:        input.MaxPapers,
+			SourceCodes:      input.SourceCodes,
+			RandomReferences: input.RandomReferences,
+		},
+	}
+	_, _, err = svc.PhasedBotInvokeBehavior(ctx, step, req, "")
+	if err != nil {
+		return svc.PhasedBotHandleInvokeFailure(ctx, step, paperRoot, cfg, err)
+	}
+	return nil
 }
 
-// researchRefineNotify 推送本 step 执行结果（成功/失败/检查点）。
 func researchRefineNotify(j *IdeaDiscoveryPhasesJob, ctx context.Context, step *entity.PaperOutputTopicStep, outcome, detail string, promptTokens, completionTokens int) {
 	if step == nil {
 		return
