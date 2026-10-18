@@ -48,6 +48,7 @@ func (j *IdeaDiscoveryPhasesJob) RunNoveltyCheck(ctx context.Context) (scanned, 
 	return scanned, invoked, skipped, failed
 }
 
+// noveltyCheckQueueStep 是否为本段待 bot 处理的 running 行（stage=novelty_check 且 async_llm）。
 func noveltyCheckQueueStep(step *entity.PaperOutputTopicStep) bool {
 	if step == nil || strings.TrimSpace(step.Status) != "running" {
 		return false
@@ -60,6 +61,7 @@ func noveltyCheckQueueStep(step *entity.PaperOutputTopicStep) bool {
 	return ok && async
 }
 
+// noveltyCheckPriorCompleted 前序 research_lit、idea_creator 是否均已 completed。
 func (j *IdeaDiscoveryPhasesJob) noveltyCheckPriorCompleted(ctx context.Context, userID uint, runVersion int) (bool, error) {
 	for _, code := range noveltyCheckPriorStages {
 		step, err := j.steps.GetStep(ctx, uint64(userID), runVersion, code)
@@ -73,6 +75,7 @@ func (j *IdeaDiscoveryPhasesJob) noveltyCheckPriorCompleted(ctx context.Context,
 	return true, nil
 }
 
+// noveltyCheckPrepareInvoke 本 tick 是否允许调 ARIS（async_llm、前序、状态、非人工暂停）。
 func (j *IdeaDiscoveryPhasesJob) noveltyCheckPrepareInvoke(ctx context.Context, userID uint, runVersion int, step *entity.PaperOutputTopicStep) (bool, error) {
 	meta := paperstep.LoadStepExtra(step)
 	if v, ok := meta["async_llm"].(bool); !ok || !v {
@@ -100,6 +103,7 @@ func (j *IdeaDiscoveryPhasesJob) noveltyCheckPrepareInvoke(ctx context.Context, 
 	return true, nil
 }
 
+// processNoveltyCheckStep 处理单条 novelty_check：invoke、通知，返回 completed/failed/skipped。
 func (j *IdeaDiscoveryPhasesJob) processNoveltyCheckStep(ctx context.Context, step *entity.PaperOutputTopicStep) string {
 	if step == nil || j.runs == nil {
 		return "skipped"
@@ -165,6 +169,7 @@ func (j *IdeaDiscoveryPhasesJob) processNoveltyCheckStep(ctx context.Context, st
 	return "skipped"
 }
 
+// runNoveltyCheckTick 组装工作区与 /novelty-check 请求，执行一次 ARIS 并写回 step。
 func (j *IdeaDiscoveryPhasesJob) runNoveltyCheckTick(ctx context.Context, userID uint, runVersion int, step *entity.PaperOutputTopicStep) error {
 	input, err := j.runs.LoadRunInputForUser(ctx, userID, runVersion)
 	if err != nil {
@@ -214,6 +219,7 @@ func (j *IdeaDiscoveryPhasesJob) runNoveltyCheckTick(ctx context.Context, userID
 	return j.advanceNoveltyCheckAfterInvoke(ctx, step, userID, runVersion, route, paperRoot, runID, cfg)
 }
 
+// advanceNoveltyCheckAfterInvoke 校验新颖性阶段产物，completed 本段或失败，并按配置开 research_review。
 func (j *IdeaDiscoveryPhasesJob) advanceNoveltyCheckAfterInvoke(
 	ctx context.Context,
 	step *entity.PaperOutputTopicStep,
@@ -249,6 +255,7 @@ func (j *IdeaDiscoveryPhasesJob) advanceNoveltyCheckAfterInvoke(
 	return svc.PhasedBotBeginNextStageAsync(ctx, userID, runVersion, noveltyCheckNextStage)
 }
 
+// noveltyCheckCompleteStep 将 novelty_check 标为 completed（100%）。
 func noveltyCheckCompleteStep(j *IdeaDiscoveryPhasesJob, ctx context.Context, step *entity.PaperOutputTopicStep) error {
 	if step == nil {
 		return nil
@@ -260,6 +267,7 @@ func noveltyCheckCompleteStep(j *IdeaDiscoveryPhasesJob, ctx context.Context, st
 	return j.steps.SaveStep(ctx, step)
 }
 
+// noveltyCheckIntMeta 从 step meta 读取 int（兼容 JSON float64）。
 func noveltyCheckIntMeta(v any) int {
 	switch t := v.(type) {
 	case float64:
@@ -273,6 +281,7 @@ func noveltyCheckIntMeta(v any) int {
 	}
 }
 
+// noveltyCheckMarkFailed 落库 failed 并推送失败通知。
 func noveltyCheckMarkFailed(j *IdeaDiscoveryPhasesJob, ctx context.Context, step *entity.PaperOutputTopicStep, reason string, promptTokens, completionTokens int) {
 	papersvc.FailTopicStep(step, reason)
 	if err := j.steps.SaveStep(ctx, step); err != nil {
@@ -282,6 +291,7 @@ func noveltyCheckMarkFailed(j *IdeaDiscoveryPhasesJob, ctx context.Context, step
 	noveltyCheckNotify(j, ctx, step, papersvc.TopicStepOutcomeFailed, reason, promptTokens, completionTokens)
 }
 
+// noveltyCheckNotify 推送本 step 执行结果（成功/失败/检查点）。
 func noveltyCheckNotify(j *IdeaDiscoveryPhasesJob, ctx context.Context, step *entity.PaperOutputTopicStep, outcome, detail string, promptTokens, completionTokens int) {
 	if step == nil {
 		return

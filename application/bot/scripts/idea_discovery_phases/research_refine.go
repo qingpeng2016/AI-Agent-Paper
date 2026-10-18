@@ -46,6 +46,7 @@ func (j *IdeaDiscoveryPhasesJob) RunResearchRefine(ctx context.Context) (scanned
 	return scanned, invoked, skipped, failed
 }
 
+// researchRefineQueueStep 是否为本段待 bot 处理的 running 行（stage=research_refine 且 async_llm）。
 func researchRefineQueueStep(step *entity.PaperOutputTopicStep) bool {
 	if step == nil || strings.TrimSpace(step.Status) != "running" {
 		return false
@@ -58,6 +59,7 @@ func researchRefineQueueStep(step *entity.PaperOutputTopicStep) bool {
 	return ok && async
 }
 
+// researchRefinePriorCompleted 前序四段是否均已 completed。
 func (j *IdeaDiscoveryPhasesJob) researchRefinePriorCompleted(ctx context.Context, userID uint, runVersion int) (bool, error) {
 	for _, code := range researchRefinePriorStages {
 		step, err := j.steps.GetStep(ctx, uint64(userID), runVersion, code)
@@ -71,6 +73,7 @@ func (j *IdeaDiscoveryPhasesJob) researchRefinePriorCompleted(ctx context.Contex
 	return true, nil
 }
 
+// researchRefinePrepareInvoke 本 tick 是否允许调 ARIS（async_llm、前序、状态、非人工暂停）。
 func (j *IdeaDiscoveryPhasesJob) researchRefinePrepareInvoke(ctx context.Context, userID uint, runVersion int, step *entity.PaperOutputTopicStep) (bool, error) {
 	meta := paperstep.LoadStepExtra(step)
 	if v, ok := meta["async_llm"].(bool); !ok || !v {
@@ -98,6 +101,7 @@ func (j *IdeaDiscoveryPhasesJob) researchRefinePrepareInvoke(ctx context.Context
 	return true, nil
 }
 
+// processResearchRefineStep 处理单条 research_refine：invoke、通知，返回 completed/failed/skipped。
 func (j *IdeaDiscoveryPhasesJob) processResearchRefineStep(ctx context.Context, step *entity.PaperOutputTopicStep) string {
 	if step == nil || j.runs == nil {
 		return "skipped"
@@ -163,6 +167,7 @@ func (j *IdeaDiscoveryPhasesJob) processResearchRefineStep(ctx context.Context, 
 	return "skipped"
 }
 
+// runResearchRefineTick 组装工作区与 /research-refine-pipeline 请求，执行一次 ARIS 并写回 step。
 func (j *IdeaDiscoveryPhasesJob) runResearchRefineTick(ctx context.Context, userID uint, runVersion int, step *entity.PaperOutputTopicStep) error {
 	input, err := j.runs.LoadRunInputForUser(ctx, userID, runVersion)
 	if err != nil {
@@ -212,6 +217,7 @@ func (j *IdeaDiscoveryPhasesJob) runResearchRefineTick(ctx context.Context, user
 	return j.advanceResearchRefineAfterInvoke(ctx, step, userID, runVersion, route, paperRoot, runID, cfg)
 }
 
+// advanceResearchRefineAfterInvoke 校验 refine 产物；成功则走 idea_discovery gate 收尾（topic_confirm）。
 func (j *IdeaDiscoveryPhasesJob) advanceResearchRefineAfterInvoke(
 	ctx context.Context,
 	step *entity.PaperOutputTopicStep,
@@ -242,6 +248,7 @@ func (j *IdeaDiscoveryPhasesJob) advanceResearchRefineAfterInvoke(
 	return svc.PhasedBotFinishAfterGate(ctx, step, userID, runVersion, route, paperRoot, runID, cfg)
 }
 
+// researchRefineIntMeta 从 step meta 读取 int（兼容 JSON float64）。
 func researchRefineIntMeta(v any) int {
 	switch t := v.(type) {
 	case float64:
@@ -255,6 +262,7 @@ func researchRefineIntMeta(v any) int {
 	}
 }
 
+// researchRefineMarkFailed 落库 failed 并推送失败通知。
 func researchRefineMarkFailed(j *IdeaDiscoveryPhasesJob, ctx context.Context, step *entity.PaperOutputTopicStep, reason string, promptTokens, completionTokens int) {
 	papersvc.FailTopicStep(step, reason)
 	if err := j.steps.SaveStep(ctx, step); err != nil {
@@ -264,6 +272,7 @@ func researchRefineMarkFailed(j *IdeaDiscoveryPhasesJob, ctx context.Context, st
 	researchRefineNotify(j, ctx, step, papersvc.TopicStepOutcomeFailed, reason, promptTokens, completionTokens)
 }
 
+// researchRefineNotify 推送本 step 执行结果（成功/失败/检查点）。
 func researchRefineNotify(j *IdeaDiscoveryPhasesJob, ctx context.Context, step *entity.PaperOutputTopicStep, outcome, detail string, promptTokens, completionTokens int) {
 	if step == nil {
 		return

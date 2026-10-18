@@ -48,6 +48,7 @@ func (j *IdeaDiscoveryPhasesJob) RunResearchReview(ctx context.Context) (scanned
 	return scanned, invoked, skipped, failed
 }
 
+// researchReviewQueueStep 是否为本段待 bot 处理的 running 行（stage=research_review 且 async_llm）。
 func researchReviewQueueStep(step *entity.PaperOutputTopicStep) bool {
 	if step == nil || strings.TrimSpace(step.Status) != "running" {
 		return false
@@ -60,6 +61,7 @@ func researchReviewQueueStep(step *entity.PaperOutputTopicStep) bool {
 	return ok && async
 }
 
+// researchReviewPriorCompleted 前序三段是否均已 completed。
 func (j *IdeaDiscoveryPhasesJob) researchReviewPriorCompleted(ctx context.Context, userID uint, runVersion int) (bool, error) {
 	for _, code := range researchReviewPriorStages {
 		step, err := j.steps.GetStep(ctx, uint64(userID), runVersion, code)
@@ -73,6 +75,7 @@ func (j *IdeaDiscoveryPhasesJob) researchReviewPriorCompleted(ctx context.Contex
 	return true, nil
 }
 
+// researchReviewPrepareInvoke 本 tick 是否允许调 ARIS（async_llm、前序、状态、非人工暂停）。
 func (j *IdeaDiscoveryPhasesJob) researchReviewPrepareInvoke(ctx context.Context, userID uint, runVersion int, step *entity.PaperOutputTopicStep) (bool, error) {
 	meta := paperstep.LoadStepExtra(step)
 	if v, ok := meta["async_llm"].(bool); !ok || !v {
@@ -100,6 +103,7 @@ func (j *IdeaDiscoveryPhasesJob) researchReviewPrepareInvoke(ctx context.Context
 	return true, nil
 }
 
+// processResearchReviewStep 处理单条 research_review：invoke、通知，返回 completed/failed/skipped。
 func (j *IdeaDiscoveryPhasesJob) processResearchReviewStep(ctx context.Context, step *entity.PaperOutputTopicStep) string {
 	if step == nil || j.runs == nil {
 		return "skipped"
@@ -165,6 +169,7 @@ func (j *IdeaDiscoveryPhasesJob) processResearchReviewStep(ctx context.Context, 
 	return "skipped"
 }
 
+// runResearchReviewTick 组装工作区与 /research-review 请求，执行一次 ARIS 并写回 step。
 func (j *IdeaDiscoveryPhasesJob) runResearchReviewTick(ctx context.Context, userID uint, runVersion int, step *entity.PaperOutputTopicStep) error {
 	input, err := j.runs.LoadRunInputForUser(ctx, userID, runVersion)
 	if err != nil {
@@ -214,6 +219,7 @@ func (j *IdeaDiscoveryPhasesJob) runResearchReviewTick(ctx context.Context, user
 	return j.advanceResearchReviewAfterInvoke(ctx, step, userID, runVersion, route, paperRoot, runID, cfg)
 }
 
+// advanceResearchReviewAfterInvoke 校验外部审查产物，completed 本段或失败，并按配置开 research_refine。
 func (j *IdeaDiscoveryPhasesJob) advanceResearchReviewAfterInvoke(
 	ctx context.Context,
 	step *entity.PaperOutputTopicStep,
@@ -249,6 +255,7 @@ func (j *IdeaDiscoveryPhasesJob) advanceResearchReviewAfterInvoke(
 	return svc.PhasedBotBeginNextStageAsync(ctx, userID, runVersion, researchReviewNextStage)
 }
 
+// researchReviewCompleteStep 将 research_review 标为 completed（100%）。
 func researchReviewCompleteStep(j *IdeaDiscoveryPhasesJob, ctx context.Context, step *entity.PaperOutputTopicStep) error {
 	if step == nil {
 		return nil
@@ -260,6 +267,7 @@ func researchReviewCompleteStep(j *IdeaDiscoveryPhasesJob, ctx context.Context, 
 	return j.steps.SaveStep(ctx, step)
 }
 
+// researchReviewIntMeta 从 step meta 读取 int（兼容 JSON float64）。
 func researchReviewIntMeta(v any) int {
 	switch t := v.(type) {
 	case float64:
@@ -273,6 +281,7 @@ func researchReviewIntMeta(v any) int {
 	}
 }
 
+// researchReviewMarkFailed 落库 failed 并推送失败通知。
 func researchReviewMarkFailed(j *IdeaDiscoveryPhasesJob, ctx context.Context, step *entity.PaperOutputTopicStep, reason string, promptTokens, completionTokens int) {
 	papersvc.FailTopicStep(step, reason)
 	if err := j.steps.SaveStep(ctx, step); err != nil {
@@ -282,6 +291,7 @@ func researchReviewMarkFailed(j *IdeaDiscoveryPhasesJob, ctx context.Context, st
 	researchReviewNotify(j, ctx, step, papersvc.TopicStepOutcomeFailed, reason, promptTokens, completionTokens)
 }
 
+// researchReviewNotify 推送本 step 执行结果（成功/失败/检查点）。
 func researchReviewNotify(j *IdeaDiscoveryPhasesJob, ctx context.Context, step *entity.PaperOutputTopicStep, outcome, detail string, promptTokens, completionTokens int) {
 	if step == nil {
 		return

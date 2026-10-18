@@ -48,6 +48,7 @@ func (j *IdeaDiscoveryPhasesJob) RunIdeaCreator(ctx context.Context) (scanned, i
 	return scanned, invoked, skipped, failed
 }
 
+// ideaCreatorQueueStep 是否为本段待 bot 处理的 running 行（stage=idea_creator 且 async_llm）。
 func ideaCreatorQueueStep(step *entity.PaperOutputTopicStep) bool {
 	if step == nil || strings.TrimSpace(step.Status) != "running" {
 		return false
@@ -60,6 +61,7 @@ func ideaCreatorQueueStep(step *entity.PaperOutputTopicStep) bool {
 	return ok && async
 }
 
+// ideaCreatorPriorCompleted 前序 research_lit 是否均已 completed。
 func (j *IdeaDiscoveryPhasesJob) ideaCreatorPriorCompleted(ctx context.Context, userID uint, runVersion int) (bool, error) {
 	for _, code := range ideaCreatorPriorStages {
 		step, err := j.steps.GetStep(ctx, uint64(userID), runVersion, code)
@@ -73,6 +75,7 @@ func (j *IdeaDiscoveryPhasesJob) ideaCreatorPriorCompleted(ctx context.Context, 
 	return true, nil
 }
 
+// ideaCreatorPrepareInvoke 本 tick 是否允许调 ARIS（async_llm、前序、状态、非人工暂停）。
 func (j *IdeaDiscoveryPhasesJob) ideaCreatorPrepareInvoke(ctx context.Context, userID uint, runVersion int, step *entity.PaperOutputTopicStep) (bool, error) {
 	meta := paperstep.LoadStepExtra(step)
 	if v, ok := meta["async_llm"].(bool); !ok || !v {
@@ -100,6 +103,7 @@ func (j *IdeaDiscoveryPhasesJob) ideaCreatorPrepareInvoke(ctx context.Context, u
 	return true, nil
 }
 
+// processIdeaCreatorStep 处理单条 idea_creator：invoke、通知，返回 completed/failed/skipped。
 func (j *IdeaDiscoveryPhasesJob) processIdeaCreatorStep(ctx context.Context, step *entity.PaperOutputTopicStep) string {
 	if step == nil || j.runs == nil {
 		return "skipped"
@@ -165,6 +169,7 @@ func (j *IdeaDiscoveryPhasesJob) processIdeaCreatorStep(ctx context.Context, ste
 	return "skipped"
 }
 
+// runIdeaCreatorTick 组装工作区与 /idea-creator 请求，执行一次 ARIS 并写回 step。
 func (j *IdeaDiscoveryPhasesJob) runIdeaCreatorTick(ctx context.Context, userID uint, runVersion int, step *entity.PaperOutputTopicStep) error {
 	input, err := j.runs.LoadRunInputForUser(ctx, userID, runVersion)
 	if err != nil {
@@ -214,6 +219,7 @@ func (j *IdeaDiscoveryPhasesJob) runIdeaCreatorTick(ctx context.Context, userID 
 	return j.advanceIdeaCreatorAfterInvoke(ctx, step, userID, runVersion, route, paperRoot, runID, cfg)
 }
 
+// advanceIdeaCreatorAfterInvoke 校验选题大纲产物，completed 本段或失败，并按配置开 novelty_check。
 func (j *IdeaDiscoveryPhasesJob) advanceIdeaCreatorAfterInvoke(
 	ctx context.Context,
 	step *entity.PaperOutputTopicStep,
@@ -249,6 +255,7 @@ func (j *IdeaDiscoveryPhasesJob) advanceIdeaCreatorAfterInvoke(
 	return svc.PhasedBotBeginNextStageAsync(ctx, userID, runVersion, ideaCreatorNextStage)
 }
 
+// ideaCreatorCompleteStep 将 idea_creator 标为 completed（100%）。
 func ideaCreatorCompleteStep(j *IdeaDiscoveryPhasesJob, ctx context.Context, step *entity.PaperOutputTopicStep) error {
 	if step == nil {
 		return nil
@@ -260,6 +267,7 @@ func ideaCreatorCompleteStep(j *IdeaDiscoveryPhasesJob, ctx context.Context, ste
 	return j.steps.SaveStep(ctx, step)
 }
 
+// ideaCreatorIntMeta 从 step meta 读取 int（兼容 JSON float64）。
 func ideaCreatorIntMeta(v any) int {
 	switch t := v.(type) {
 	case float64:
@@ -273,6 +281,7 @@ func ideaCreatorIntMeta(v any) int {
 	}
 }
 
+// ideaCreatorMarkFailed 落库 failed 并推送失败通知。
 func ideaCreatorMarkFailed(j *IdeaDiscoveryPhasesJob, ctx context.Context, step *entity.PaperOutputTopicStep, reason string, promptTokens, completionTokens int) {
 	papersvc.FailTopicStep(step, reason)
 	if err := j.steps.SaveStep(ctx, step); err != nil {
@@ -282,6 +291,7 @@ func ideaCreatorMarkFailed(j *IdeaDiscoveryPhasesJob, ctx context.Context, step 
 	ideaCreatorNotify(j, ctx, step, papersvc.TopicStepOutcomeFailed, reason, promptTokens, completionTokens)
 }
 
+// ideaCreatorNotify 推送本 step 执行结果（成功/失败/检查点）。
 func ideaCreatorNotify(j *IdeaDiscoveryPhasesJob, ctx context.Context, step *entity.PaperOutputTopicStep, outcome, detail string, promptTokens, completionTokens int) {
 	if step == nil {
 		return
