@@ -31,6 +31,7 @@ chmod +x deploy-service.sh deploy-api.sh deploy-backend.sh
 2. **Go 1.22+**（`PAPER_GO_ROOT=/usr/local/go` 可选）
 3. `conf/local.conf.yaml` 由本机上传
 4. 原生选题 **只调 `aris` CLI**（`PAPER_ARIS_CLI` / `PAPER_ARIS_EXECUTOR=aris`）；服务器需 **`aris` 在 PATH** 且已 `aris setup`，**不要**依赖仓库内 `libs/aris` 源码
+5. **`conf/aris_idea_discovery.yaml` → `workspace.inout_root`**：ARIS 工作区须在 **Git 仓库外**（默认 `/www/wwwroot/AI-Agent-Paper-runtime/inout`）；进程启动时会 **自动创建** 该目录。旧数据在仓库内 `inout/` 时需迁移或新建 run。`PAPER_INOUT_ROOT` 可覆盖 yaml。
 
 **本机调试 ARIS 输出**：终端里 `go run main.go --run_conf=local --run_bot=true` 且 stderr/stdout 为 TTY 时，会自动 `--output-format text` 并把子进程 stdout/stderr 实时打到屏幕（与 `.paper/invoke/logs/*` 一致）。nohup 无 TTY 时用 `json`、不刷屏。`PAPER_ARIS_CLI_CONSOLE=1|0` 强制开/关 mirror；`PAPER_ARIS_CLI_OUTPUT_FORMAT=text|json` 覆盖输出格式（json 模式下运行中常无中间 stdout，只有 30s 心跳）。
 

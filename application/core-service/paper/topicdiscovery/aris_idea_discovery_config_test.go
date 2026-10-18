@@ -54,6 +54,18 @@ func TestDefaultARISIdeaDiscoveryConfig(t *testing.T) {
 	}
 }
 
+func TestInoutRootAbs_fromWorkspace(t *testing.T) {
+	root := t.TempDir()
+	outside := filepath.Join(root, "runtime-inout")
+	cfg := defaultARISIdeaDiscoveryConfig()
+	cfg.Workspace.InoutRoot = outside
+	got := cfg.InoutRootAbs()
+	want, _ := filepath.Abs(outside)
+	if got != want {
+		t.Fatalf("InoutRootAbs %q want %q", got, want)
+	}
+}
+
 func TestFormatIdeaDiscoveryArgsLine_autoProceedTrue(t *testing.T) {
 	cfg := defaultARISIdeaDiscoveryConfig()
 	cfg.Platform.AutoProceed = true

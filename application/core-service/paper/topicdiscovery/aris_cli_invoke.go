@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/llm"
-	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/storage"
 	"github.com/qingpeng2016/ai-agent-paper/common/dederi/logger"
 	"go.uber.org/zap"
 )
@@ -397,7 +396,7 @@ func arisInvokeSessionDir(req StrategyInvokeRequest) (sessionDir string, cleanup
 
 // arisRunSessionDir inout/user_*/manuscript_*/run_*。
 func arisRunSessionDir(userID uint64, manuscriptID uint64, runVersion int) string {
-	base := storage.ArisInvokeWorkRoot()
+	base := mustIdeaDiscoveryConfig().InoutRootAbs()
 	return filepath.Join(
 		base,
 		fmt.Sprintf("user_%d", userID),

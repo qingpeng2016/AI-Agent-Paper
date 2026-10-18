@@ -1,6 +1,7 @@
 package topicdiscovery
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +10,8 @@ import (
 
 	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/lang"
 	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/storage"
+	"github.com/qingpeng2016/ai-agent-paper/common/dederi/logger"
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
 )
 
@@ -81,6 +84,8 @@ type ideaDiscoveryPlatform struct {
 }
 
 type ideaDiscoveryWorkspace struct {
+	// InoutRoot ARIS 会话根（user_*/manuscript_*/run_*）；须在 Git 仓库外，见 conf/aris_idea_discovery.yaml。
+	InoutRoot     string `yaml:"inout_root"`
 	InvokeDir     string `yaml:"invoke_dir"`
 	InvokeLogsDir string `yaml:"invoke_logs_dir"`
 	RunStateDir   string `yaml:"run_state_dir"`
@@ -169,6 +174,43 @@ func (c ARISIdeaDiscoveryConfig) invokeDirRel() string {
 		return defaultIdeaDiscoveryWorkspace().InvokeDir
 	}
 	return filepath.ToSlash(rel)
+}
+
+// InoutRootAbs 配置项 workspace.inout_root（绝对路径）；空则 storage.PaperInoutRoot()。
+func (c ARISIdeaDiscoveryConfig) InoutRootAbs() string {
+	if v := strings.TrimSpace(os.Getenv("PAPER_ARIS_WORK_ROOT")); v != "" {
+		return absEnsureDir(v)
+	}
+	if v := strings.TrimSpace(os.Getenv("PAPER_INOUT_ROOT")); v != "" {
+		return absEnsureDir(v)
+	}
+	rel := strings.TrimSpace(c.Workspace.InoutRoot)
+	if rel == "" {
+		return storage.PaperInoutRoot()
+	}
+	return absEnsureDir(expandConfigPath(rel))
+}
+
+func absEnsureDir(root string) string {
+	root = strings.TrimSpace(root)
+	if root == "" {
+		return storage.PaperInoutRoot()
+	}
+	abs, err := filepath.Abs(root)
+	if err != nil {
+		abs = root
+	}
+	_, statErr := os.Stat(abs)
+	missing := os.IsNotExist(statErr)
+	if err := os.MkdirAll(abs, 0o755); err != nil {
+		logger.ErrorZ(context.Background(), "idea-discovery-inout-root-mkdir",
+			zap.String("path", abs),
+			zap.Error(err))
+	} else if missing {
+		logger.InfoZ(context.Background(), "idea-discovery-inout-root-ready",
+			zap.String("path", abs))
+	}
+	return abs
 }
 
 func defaultARISIdeaDiscoveryConfig() ARISIdeaDiscoveryConfig {
@@ -331,6 +373,8 @@ func normalizeIdeaDiscoveryConfig(c *ARISIdeaDiscoveryConfig) {
 	}
 	c.CheckpointPhases = normalizeIdeaDiscoveryCheckpointPhases(c.CheckpointPhases)
 	normalizeCLISessionCleanup(&c.CLISessionCleanup)
+	// 启动时创建 workspace.inout_root（含 /www/.../AI-Agent-Paper-runtime/inout），无需手工 mkdir。
+	_ = c.InoutRootAbs()
 }
 
 func ideaDiscoveryRunStatePhasesCSV() string {

@@ -20,9 +20,13 @@ artifacts:
   # 语料索引路径（/research-lit 可写入；ingest 时可选读标题/URL）
   corpus_json: .paper/corpus.json
 
-# 相对 inout/user_*/manuscript_*/run_*/paper/ 的平台路径（主根 = paperRoot，后续 ARIS skill 共用）
+# workspace.inout_root：ARIS 工作区根（其下仍为 user_*/manuscript_*/run_*/paper/）。
+# 必须落在 Git 仓库外：cwd 在 AI-Agent-Paper 仓内时 aris 会索引整仓，首包易 >200k token。
+# 环境变量 PAPER_INOUT_ROOT / PAPER_ARIS_WORK_ROOT 未设置时以本项为准；仍为空则用仓库下 inout/。
+# 目录不存在时 API/bot 加载本配置会自动 mkdir -p（日志 idea-discovery-inout-root-ready）。
 workspace:
-  # ARIS invoke 元数据：request.json、platform_user_prompt.txt、contract 等
+  inout_root: /www/wwwroot/AI-Agent-Paper-runtime/inout
+  # 相对 paperRoot 的平台路径（主根 = …/run_*/paper/）
   invoke_dir: .paper/invoke
   # Claude/ARIS CLI 流式日志、latest_aris_cli.log、invoke_errors.log
   invoke_logs_dir: .paper/invoke/logs
