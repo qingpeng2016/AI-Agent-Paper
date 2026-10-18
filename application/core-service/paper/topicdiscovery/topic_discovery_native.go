@@ -186,6 +186,14 @@ func (s *TopicDiscoveryRunService) handleIdeaDiscoveryInvokeFailure(
 	invokeErr error,
 ) error {
 	meta := paperstep.LoadStepExtra(step)
+	if StepUsesRuntimeStagePhasedInvoke(step) || strings.TrimSpace(fmt.Sprint(meta["idea_discovery_invoke_mode"])) == "phased" {
+		phase := executingIdeaDiscoveryPhaseFromMeta(meta)
+		reason := ideaDiscoveryPhasedStepFailureReason(meta, phase, invokeErr)
+		if err := s.persistIdeaDiscoveryPhasedStepFailed(ctx, step, reason); err != nil {
+			return err
+		}
+		return invokeErr
+	}
 	retries := 0
 	if n, ok := meta["aris_invoke_retries"].(float64); ok {
 		retries = int(n)

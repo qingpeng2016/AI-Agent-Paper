@@ -2,6 +2,7 @@ package topicdiscovery
 
 import (
 	"context"
+	"fmt"
 
 	paperstep "github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/step"
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
@@ -53,6 +54,26 @@ func (s *TopicDiscoveryRunService) PrepareIdeaDiscoveryPhasedBotInvoke(
 		paperstep.PersistStepExtra(step, meta)
 		_ = s.steps.SaveStep(ctx, step)
 		return false, nil
+	}
+
+	if ideaDiscoveryPhasedPhaseSucceeded(paperRoot, runID, phase, cfg) {
+		stageCode := ideaDiscoveryPhaseIDToStageCode(phase)
+		route, routeErr := s.requireTopicStrategyRoute(ctx, topicStageBehaviorKey(stageCode))
+		if routeErr != nil {
+			return false, routeErr
+		}
+		if err := s.advanceIdeaDiscoveryPhasedAfterInvoke(ctx, step, userID, runVersion, route, paperRoot, runID, phase, cfg); err != nil {
+			return false, err
+		}
+		return false, nil
+	}
+
+	if ideaDiscoveryPhasedInvokeCount(meta, phase) >= 1 {
+		reason := ideaDiscoveryPhasedStepFailureReason(meta, phase, nil)
+		if err := s.persistIdeaDiscoveryPhasedStepFailed(ctx, step, reason); err != nil {
+			return false, err
+		}
+		return false, fmt.Errorf("%s", reason)
 	}
 
 	paperstep.PersistStepExtra(step, meta)

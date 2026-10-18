@@ -1,17 +1,23 @@
 package topicdiscovery
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/qingpeng2016/ai-agent-paper/common/dederi/logger"
 	"go.uber.org/zap"
+)
+
+const (
+	arisCLILogLineMaxBytes = 8192
+	arisCLIHeartbeatEvery  = 30 * time.Second
 )
 
 func arisCLILogEnabled() bool {
@@ -44,37 +50,81 @@ func fileIsTerminal(f *os.File) bool {
 	return fi.Mode()&os.ModeCharDevice != 0
 }
 
-func mirrorARISCLILine(stream, line string) {
+func arisCLIStreamMirrorWriter(stream string) io.Writer {
 	if !arisCLIConsoleMirrorEnabled() {
-		return
+		return nil
 	}
-	out := os.Stdout
 	if stream == "stderr" {
-		out = os.Stderr
+		return os.Stderr
 	}
-	_, _ = fmt.Fprintln(out, line)
+	return os.Stdout
 }
 
-// streamARISCLIOutput 按行写入 info.log（stdout/warn 级 stderr）或 error.log（stderr），并经由 zap 打到控制台。
+func truncateARISCLILogLine(line string) (logged string, fullLen int, truncated bool) {
+	fullLen = len(line)
+	if fullLen <= arisCLILogLineMaxBytes {
+		return line, fullLen, false
+	}
+	return line[:arisCLILogLineMaxBytes] + "…[truncated]", fullLen, true
+}
+
+func writeARISCLILogLine(ctx context.Context, stream, line string, file *os.File) {
+	line = strings.TrimRight(line, "\r")
+	if line == "" {
+		return
+	}
+	if file != nil {
+		_, _ = fmt.Fprintf(file, "[%s] %s\n", stream, line)
+	}
+	if arisCLILogEnabled() {
+		logARISCLILine(ctx, stream, line)
+	}
+}
+
+func flushARISCLILogLines(ctx context.Context, stream string, pending *strings.Builder, file *os.File) {
+	for {
+		s := pending.String()
+		idx := strings.IndexByte(s, '\n')
+		if idx < 0 {
+			return
+		}
+		line := s[:idx]
+		rest := s[idx+1:]
+		pending.Reset()
+		pending.WriteString(rest)
+		writeARISCLILogLine(ctx, stream, line, file)
+	}
+}
+
+// streamARISCLIOutput 读取子进程流：按块即时 mirror 到终端；按行写入 workspace log 与 zap（超长行截断）。
 func streamARISCLIOutput(ctx context.Context, r io.Reader, stream string, acc *strings.Builder, file *os.File) {
 	if acc == nil {
 		discard := strings.Builder{}
 		acc = &discard
 	}
-	sc := bufio.NewScanner(r)
-	buf := make([]byte, 0, 64*1024)
-	sc.Buffer(buf, 1024*1024)
-	for sc.Scan() {
-		line := strings.TrimRight(sc.Text(), "\r")
-		acc.WriteString(line)
-		acc.WriteByte('\n')
-		if file != nil {
-			_, _ = fmt.Fprintf(file, "[%s] %s\n", stream, line)
+	mirror := arisCLIStreamMirrorWriter(stream)
+	var pending strings.Builder
+	buf := make([]byte, 32*1024)
+	for {
+		n, err := r.Read(buf)
+		if n > 0 {
+			chunk := buf[:n]
+			acc.Write(chunk)
+			if mirror != nil {
+				_, _ = mirror.Write(chunk)
+			}
+			pending.Write(chunk)
+			flushARISCLILogLines(ctx, stream, &pending, file)
 		}
-		mirrorARISCLILine(stream, line)
-		if arisCLILogEnabled() {
-			logARISCLILine(ctx, stream, line)
+		if err == io.EOF {
+			break
 		}
+		if err != nil {
+			break
+		}
+	}
+	if pending.Len() > 0 {
+		writeARISCLILogLine(ctx, stream, pending.String(), file)
 	}
 }
 
@@ -82,9 +132,14 @@ func logARISCLILine(ctx context.Context, stream, line string) {
 	if strings.TrimSpace(line) == "" {
 		return
 	}
+	logged, fullLen, truncated := truncateARISCLILogLine(line)
 	fields := []zap.Field{
 		zap.String("stream", stream),
-		zap.String("line", line),
+		zap.String("line", logged),
+		zap.Int("line_len", fullLen),
+	}
+	if truncated {
+		fields = append(fields, zap.Bool("line_truncated", true))
 	}
 	switch stream {
 	case "stderr":
@@ -94,7 +149,59 @@ func logARISCLILine(ctx context.Context, stream, line string) {
 	}
 }
 
-func runARISCLIWithStream(ctx context.Context, cmd *exec.Cmd, logFile *os.File) (stdout, stderr string, err error) {
+func arisCLIHeartbeatEnabled() bool {
+	v := strings.TrimSpace(os.Getenv("PAPER_ARIS_CLI_HEARTBEAT"))
+	switch {
+	case v == "0" || strings.EqualFold(v, "false"):
+		return false
+	case v == "1" || strings.EqualFold(v, "true"):
+		return true
+	default:
+		return arisCLIConsoleMirrorEnabled()
+	}
+}
+
+func arisCLIWorkspaceArtifactHint(workspace string) string {
+	workspace = strings.TrimSpace(workspace)
+	if workspace == "" {
+		return ""
+	}
+	names := []string{"RESEARCH_LIT_REPORT.md", "REFERENCE_INDEX.md", "EXECUTIVE_SUMMARY.md", "PROJECT_SUMMARY.txt", "RESEARCH_BRIEF.md"}
+	var parts []string
+	for _, name := range names {
+		p := filepath.Join(workspace, name)
+		fi, err := os.Stat(p)
+		if err != nil || fi.IsDir() {
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("%s(%dB)", name, fi.Size()))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return " artifacts: " + strings.Join(parts, ", ")
+}
+
+// arisCLIRunHeartbeat 在长耗时 json 模式下仍向终端提示进程存活（ARIS 常在结束时才输出整段 JSON）。
+func arisCLIRunHeartbeat(ctx context.Context, workspace string) {
+	ticker := time.NewTicker(arisCLIHeartbeatEvery)
+	defer ticker.Stop()
+	start := time.Now()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			elapsed := time.Since(start).Round(time.Second)
+			hint := arisCLIWorkspaceArtifactHint(workspace)
+			_, _ = fmt.Fprintf(os.Stderr,
+				"[aris] still running (%s) — json mode may stay quiet until finish; watch paper/ files%s\n",
+				elapsed, hint)
+		}
+	}
+}
+
+func runARISCLIWithStream(ctx context.Context, cmd *exec.Cmd, logFile *os.File, workspace string) (stdout, stderr string, err error) {
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
 		return "", "", err
@@ -102,6 +209,11 @@ func runARISCLIWithStream(ctx context.Context, cmd *exec.Cmd, logFile *os.File) 
 	stderrPipe, err := cmd.StderrPipe()
 	if err != nil {
 		return "", "", err
+	}
+	hbCtx, hbCancel := context.WithCancel(ctx)
+	defer hbCancel()
+	if arisCLIHeartbeatEnabled() {
+		go arisCLIRunHeartbeat(hbCtx, workspace)
 	}
 	var outBuf, errBuf strings.Builder
 	var wg sync.WaitGroup

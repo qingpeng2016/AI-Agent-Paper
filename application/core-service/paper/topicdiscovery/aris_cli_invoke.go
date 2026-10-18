@@ -314,6 +314,9 @@ func runARISCLI(ctx context.Context, workspace, prompt string) (stdout, stderr, 
 	if arisCLIConsoleMirrorEnabled() {
 		_, _ = fmt.Fprintf(os.Stderr, "\n=== ARIS CLI (%s) workspace: %s ===\n", cli, workspace)
 		_, _ = fmt.Fprintf(os.Stderr, "command: %s %s\n--- stream ---\n", cli, strings.Join(args, " "))
+		if strings.Contains(strings.Join(args, " "), "--output-format json") {
+			_, _ = fmt.Fprintln(os.Stderr, "note: --output-format json 通常只在结束时输出一整段 JSON；运行中会每 30s 打印 [aris] still running…，并随文件生成显示 artifacts。")
+		}
 	}
 	if logFile != nil {
 		defer func() {
@@ -322,7 +325,7 @@ func runARISCLI(ctx context.Context, workspace, prompt string) (stdout, stderr, 
 		}()
 	}
 
-	outStr, errStr, runErr := runARISCLIWithStream(ctx, cmd, logFile)
+	outStr, errStr, runErr := runARISCLIWithStream(ctx, cmd, logFile, workspace)
 	if runErr != nil {
 		msg := strings.TrimSpace(errStr)
 		if msg == "" {

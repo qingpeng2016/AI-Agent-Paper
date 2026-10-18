@@ -123,6 +123,60 @@ func literaturePDFCountUnder(paperRoot, litDirRel string) int {
 	return n
 }
 
+// researchLitStandaloneDeliverablesPresent：/research-lit 在不同 ARIS 版本下文件名不一致，任一达标即视为本段完成。
+func researchLitStandaloneDeliverablesPresent(paperRoot string, cfg ARISIdeaDiscoveryConfig) bool {
+	type fileMin struct {
+		rel string
+		min int64
+	}
+	candidates := []fileMin{
+		{"LITERATURE_REVIEW.md", 256},
+		{"LITERATURE_REVIEW_SUMMARY.txt", 128},
+		{"RESEARCH_LIT_REPORT.md", 256},
+		{"REFERENCE_INDEX.md", 256},
+		{"EXECUTIVE_SUMMARY.md", 256},
+		{"PROJECT_SUMMARY.txt", 128},
+		{"references.bib", 64},
+	}
+	if brief := strings.TrimSpace(cfg.Artifacts.ResearchBrief); brief != "" {
+		candidates = append(candidates, fileMin{brief, 128})
+	} else {
+		candidates = append(candidates, fileMin{"RESEARCH_BRIEF.md", 128})
+	}
+	for _, c := range candidates {
+		if workspaceFileMinSize(paperRoot, c.rel, c.min) {
+			return true
+		}
+	}
+	return false
+}
+
+func ideaDiscoveryPhasedInvokeMetaKey(phase string) string {
+	phase = strings.TrimSpace(phase)
+	return "phased_invoke_" + strings.ReplaceAll(phase, "-", "_")
+}
+
+func ideaDiscoveryPhasedInvokeCount(meta map[string]any, phase string) int {
+	if meta == nil {
+		return 0
+	}
+	k := ideaDiscoveryPhasedInvokeMetaKey(phase)
+	if n, ok := meta[k].(float64); ok {
+		return int(n)
+	}
+	if n, ok := meta[k].(int); ok {
+		return n
+	}
+	return 0
+}
+
+func bumpIdeaDiscoveryPhasedInvokeCount(meta map[string]any, phase string) {
+	if meta == nil {
+		return
+	}
+	meta[ideaDiscoveryPhasedInvokeMetaKey(phase)] = ideaDiscoveryPhasedInvokeCount(meta, phase) + 1
+}
+
 func ideaDiscoveryPhasedPhaseSucceeded(paperRoot, runID, phase string, cfg ARISIdeaDiscoveryConfig) bool {
 	phase = strings.TrimSpace(phase)
 	if phase == "" {
@@ -136,11 +190,7 @@ func ideaDiscoveryPhasedPhaseSucceeded(paperRoot, runID, phase string, cfg ARISI
 		if isResearchLitPhaseDone(paperRoot, runID) {
 			return true
 		}
-		// Standalone /research-lit writes these at paperRoot (not idea-stage/IDEA_REPORT.md).
-		if workspaceFileMinSize(paperRoot, "LITERATURE_REVIEW.md", 256) {
-			return true
-		}
-		if workspaceFileMinSize(paperRoot, "references.bib", 64) {
+		if researchLitStandaloneDeliverablesPresent(paperRoot, cfg) {
 			return true
 		}
 		if workspaceFileMinSize(paperRoot, cfg.Artifacts.CorpusJSON, 64) {
@@ -167,6 +217,23 @@ func ideaDiscoveryPhasedPhaseSucceeded(paperRoot, runID, phase string, cfg ARISI
 func IdeaDiscoveryPhasedBotMayRetryPhase(cfg ARISIdeaDiscoveryConfig) bool {
 	_ = cfg
 	return false
+}
+
+// ideaDiscoveryPhasedStepFailureReason 写入 step.error_msg 的文案（CLI 错误或缺产物）。
+func ideaDiscoveryPhasedStepFailureReason(meta map[string]any, phase string, invokeErr error) string {
+	phase = strings.TrimSpace(phase)
+	if phase == "" {
+		phase = executingIdeaDiscoveryPhaseFromMeta(meta)
+	}
+	if invokeErr != nil {
+		return fmt.Sprintf("Idea Discovery 阶段 /%s 失败: %s", phase, strings.TrimSpace(invokeErr.Error()))
+	}
+	if meta != nil {
+		if le, ok := meta["aris_invoke_last_error"].(string); ok && strings.TrimSpace(le) != "" {
+			return fmt.Sprintf("Idea Discovery 阶段 /%s 失败: %s", phase, strings.TrimSpace(le))
+		}
+	}
+	return fmt.Sprintf("Idea Discovery 阶段 /%s 已执行 ARIS 但未产出必需产物", phase)
 }
 
 func syncIdeaDiscoveryPhasedProgressMeta(meta map[string]any) {

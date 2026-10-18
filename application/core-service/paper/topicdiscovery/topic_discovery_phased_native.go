@@ -38,6 +38,7 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryPhaseLLM(
 	runID := resolveIdeaDiscoveryRunID(paperRoot, step, input)
 	meta["aris_run_id"] = runID
 	meta["native_run_id"] = runID
+	bumpIdeaDiscoveryPhasedInvokeCount(meta, phase)
 	syncIdeaDiscoveryPhasedProgressMeta(meta)
 	paperstep.PersistStepExtra(step, meta)
 	step.ExecProgressPct = ideaDiscoveryPhasedProgressPct(meta)
@@ -99,13 +100,11 @@ func (s *TopicDiscoveryRunService) advanceIdeaDiscoveryPhasedAfterInvoke(
 			step.ExecProgressPct = ideaDiscoveryPhasedProgressPct(meta)
 			return s.steps.SaveStep(ctx, step)
 		}
-		delete(meta, "async_llm")
-		meta["async_llm_done"] = false
-		meta["aris_pending_phase"] = phase
-		paperstep.PersistStepExtra(step, meta)
-		step.Status = "running"
-		step.ExecProgressPct = ideaDiscoveryPhasedProgressPct(meta)
-		return s.steps.SaveStep(ctx, step)
+		reason := ideaDiscoveryPhasedStepFailureReason(meta, phase, nil)
+		if err := s.persistIdeaDiscoveryPhasedStepFailed(ctx, step, reason); err != nil {
+			return err
+		}
+		return fmt.Errorf("%s", reason)
 	}
 
 	setPhaseStatusInMeta(meta, phase, IdeaDiscoveryPhaseCompleted)
@@ -133,6 +132,17 @@ func (s *TopicDiscoveryRunService) advanceIdeaDiscoveryPhasedAfterInvoke(
 	syncIdeaDiscoveryPhasedProgressMeta(meta)
 	paperstep.PersistStepExtra(step, meta)
 	step.Status = "running"
+	step.ExecProgressPct = ideaDiscoveryPhasedProgressPct(meta)
+	return s.steps.SaveStep(ctx, step)
+}
+
+func (s *TopicDiscoveryRunService) persistIdeaDiscoveryPhasedStepFailed(
+	ctx context.Context,
+	step *entity.PaperOutputTopicStep,
+	reason string,
+) error {
+	paperstep.FailTopicStep(step, reason)
+	meta := paperstep.LoadStepExtra(step)
 	step.ExecProgressPct = ideaDiscoveryPhasedProgressPct(meta)
 	return s.steps.SaveStep(ctx, step)
 }
