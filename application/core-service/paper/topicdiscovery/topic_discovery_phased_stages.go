@@ -157,7 +157,7 @@ func PhasedTopicStageQueueStep(step *entity.PaperOutputTopicStep) bool {
 	return ok && async
 }
 
-// PhasedPauseAfterStage 段间人工检查点：已完成段后一条仍为 pending 时，pause 在完成段 stage_code。
+// PhasedPauseAfterStage 段间人工检查点：上一段 completed、下一段 pending 时，返回待用户确认后启动的 stage_code（下一段）。
 func PhasedPauseAfterStage(rows []entity.PaperOutputTopicStep, humanCheckpoint bool) string {
 	if !humanCheckpoint {
 		return ""
@@ -172,13 +172,13 @@ func PhasedPauseAfterStage(rows []entity.PaperOutputTopicStep, humanCheckpoint b
 	for i := 0; i < len(phased)-1; i++ {
 		if strings.TrimSpace(phased[i].Status) == "completed" &&
 			strings.TrimSpace(phased[i+1].Status) == "pending" {
-			return phased[i].StageCode
+			return phased[i+1].StageCode
 		}
 	}
 	if len(phased) > 0 && strings.TrimSpace(phased[len(phased)-1].Status) == "completed" {
 		for _, r := range ordered {
 			if r.StageCode == "topic_confirm" && strings.TrimSpace(r.Status) == "pending" {
-				return phased[len(phased)-1].StageCode
+				return "topic_confirm"
 			}
 		}
 	}

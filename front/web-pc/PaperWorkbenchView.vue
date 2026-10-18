@@ -930,7 +930,7 @@ function topicPauseStageFromApi(data: TopicDiscoveryRunResponse): string {
   })
   for (let i = 0; i < ordered.length - 1; i++) {
     if (ordered[i] === 'completed' && ordered[i + 1] === 'pending') {
-      return flow[i].stageCode
+      return flow[i + 1].stageCode
     }
   }
   return ''
@@ -1144,6 +1144,11 @@ const topicIdeaDiscoveryUiGroupLabels = computed(() =>
   ),
 )
 
+/** 分 step 五段时主列表已是各 stage，不再嵌套旧版 4 段 UI groups */
+const topicUsesBundledIdeaDiscoverySubphases = computed(
+  () => !currentTopicRun.value.steps.some((s) => s.stageCode === 'research_lit'),
+)
+
 const topicCheckpointPanel = computed((): TopicCheckpointView | null => {
   if (!topicShowCheckpointPanel.value) return null
   if (currentTopicRun.value.checkpoint) return currentTopicRun.value.checkpoint
@@ -1168,7 +1173,7 @@ const topicCheckpointHeadingSuffix = computed((): string => {
   if (phaseLabel) return phaseLabel
   const pause = raw?.pause_after_stage?.trim()
   if (pause) {
-    const def = TOPIC_DISCOVERY_FLOW_STEPS.find((s) => s.stageCode === pause)
+    const def = resolveTopicDiscoveryFlowSteps(raw?.steps).find((s) => s.stageCode === pause)
     if (def?.label) return def.label
   }
   const title = topicCheckpointPanel.value?.title?.trim()
@@ -1317,6 +1322,11 @@ const TOPIC_STEP_RUNNING_HINT: Record<string, string> = {
   retrieve: '文献 PDF 下载与入库中…',
   idea_discovery: 'Idea Discovery…',
   topic_discovery: 'Idea Discovery…',
+  research_lit: 'AI 模型运行中…',
+  idea_creator: 'AI 模型运行中…',
+  novelty_check: 'AI 模型运行中…',
+  research_review: 'AI 模型运行中…',
+  research_refine: 'AI 模型运行中…',
   topic_confirm: '等待确认并入库…',
   generate_ideas: 'AI 脑暴选题与新颖性分析中…',
   audit: 'AI 审查结论与文献综述生成中…',
@@ -1532,8 +1542,36 @@ function linesFromApiStep(step?: TopicDiscoveryStepDTO): string[] {
     if (lines.length) return lines.slice(0, 12)
   }
 
+  const phasedStages = new Set([
+    'research_lit',
+    'idea_creator',
+    'novelty_check',
+    'research_review',
+    'research_refine',
+  ])
+  if (step.stage_code && phasedStages.has(step.stage_code)) {
+    const err = step.error_msg?.trim()
+    if (err && step.status === 'failed') return [err]
+    return []
+  }
+
+  const internal = new Set([
+    'async_llm',
+    'async_llm_done',
+    'idea_discovery_invoke_mode',
+    'phase_id',
+    'aris_run_id',
+    'native_run_id',
+    'last_phased_invoke',
+    'last_invoke_preview',
+    'aris_pending_phase',
+    'tokens_prompt',
+    'tokens_completion',
+  ])
+  const publicEntries = Object.entries(result).filter(([k]) => !internal.has(k))
+  if (publicEntries.length === 0) return []
   try {
-    return [JSON.stringify(result).slice(0, 500)]
+    return [JSON.stringify(Object.fromEntries(publicEntries)).slice(0, 500)]
   } catch {
     return ['（已返回结构化结果）']
   }
@@ -1734,7 +1772,8 @@ async function invokeTopicDiscoveryRun(action: 'start' | 'continue', token: numb
 
 /** 新开 run：第一步立刻标 running，避免 POST 返回前只有「提交中」无转圈 */
 function optimisticMarkFirstStepRunning(msId: string) {
-  const steps = TOPIC_DISCOVERY_FLOW_STEPS.map((def, i) => ({
+  const flow = TOPIC_DISCOVERY_PHASED_FLOW_STEPS
+  const steps = flow.map((def, i) => ({
     stageCode: def.stageCode,
     label: def.label,
     checkpointKey: def.checkpointKey,
@@ -2889,7 +2928,14 @@ watch(
           >
             <span class="paper-flow-step-icon" aria-hidden="true">
               <span
-                v-if="step.status === 'running' && !(step.stageCode === 'idea_discovery' && topicAtHumanPause)"
+                v-if="
+                  step.status === 'running' &&
+                  !(
+                    topicUsesBundledIdeaDiscoverySubphases &&
+                    step.stageCode === 'idea_discovery' &&
+                    topicAtHumanPause
+                  )
+                "
                 class="paper-flow-step-spinner"
               />
               <template v-else>{{ topicStepIcon(step.status) }}</template>
@@ -2897,14 +2943,24 @@ watch(
             <div class="paper-flow-step-body">
               <span class="paper-flow-step-label">{{ step.label }}</span>
               <span
-                v-if="step.status === 'running' && !(step.stageCode === 'idea_discovery' && topicAtHumanPause)"
+                v-if="
+                  step.status === 'running' &&
+                  !(
+                    topicUsesBundledIdeaDiscoverySubphases &&
+                    step.stageCode === 'idea_discovery' &&
+                    topicAtHumanPause
+                  )
+                "
                 class="paper-flow-step-running"
                 role="status"
               >
                 {{ topicStepRunningHint(step.stageCode) }}
               </span>
               <ul
-                v-if="step.stageCode === 'idea_discovery' || step.stageCode === 'topic_discovery'"
+                v-if="
+                  topicUsesBundledIdeaDiscoverySubphases &&
+                  (step.stageCode === 'idea_discovery' || step.stageCode === 'topic_discovery')
+                "
                 class="paper-flow-subphases"
                 aria-label="Idea Discovery 分段进度"
               >

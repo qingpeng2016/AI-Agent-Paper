@@ -271,7 +271,7 @@ function arisPhasedPerStepRows(steps: TopicDiscoveryStepDTO[] | undefined): Aris
       ordered[i].status?.trim().toLowerCase() === 'completed' &&
       ordered[i + 1].status?.trim().toLowerCase() === 'pending'
     ) {
-      waitingIdx = i
+      waitingIdx = i + 1
       break
     }
   }

@@ -40,19 +40,43 @@ const topicStepRuntimeOtherKey = "other"
 const topicStepRuntimeStageKey = "stage"
 
 var topicStepRuntimeResultKeys = map[string]struct{}{
-	"async_llm":                  {},
-	"async_llm_done":             {},
-	"aris_invoke_retries":        {},
-	"aris_invoke_last_error":     {},
-	"aris_invoke_count":          {},
-	"last_invoke_result":         {},
-	"native_run_id":              {},
-	"exec_progress_planned_calls": {},
-	"exec_progress_completed_calls": {},
-	"exec_progress_planned_downloads": {},
+	"async_llm":                         {},
+	"async_llm_done":                    {},
+	"aris_invoke_retries":               {},
+	"aris_invoke_last_error":            {},
+	"aris_invoke_count":                 {},
+	"last_invoke_result":                {},
+	"last_invoke_preview":               {},
+	"last_phased_invoke":                {},
+	"native_run_id":                     {},
+	"aris_run_id":                       {},
+	"aris_pending_phase":                {},
+	"idea_discovery_invoke_mode":        {},
+	"phase_id":                          {},
+	"tokens_prompt":                     {},
+	"tokens_completion":                 {},
+	"exec_progress_planned_calls":       {},
+	"exec_progress_completed_calls":     {},
+	"exec_progress_planned_downloads":   {},
 	"exec_progress_completed_downloads": {},
-	"awaiting_user_confirm":      {},
-	"error":                      {},
+	"awaiting_user_confirm":             {},
+	"error":                             {},
+}
+
+var topicDiscoveryPhasedStageCodes = map[string]struct{}{
+	"research_lit":    {},
+	"idea_creator":    {},
+	"novelty_check":   {},
+	"research_review": {},
+	"research_refine": {},
+}
+
+func isPhasedTopicDiscoveryStage(step *entity.PaperOutputTopicStep) bool {
+	if step == nil {
+		return false
+	}
+	_, ok := topicDiscoveryPhasedStageCodes[strings.TrimSpace(step.StageCode)]
+	return ok
 }
 
 // StepFileEntry 步骤关联文件（PDF 等），files 列 JSON 数组，只追加。
@@ -99,6 +123,31 @@ func FailTopicStep(step *entity.PaperOutputTopicStep, reason string) {
 	if step.CompletedAt == nil {
 		step.CompletedAt = &now
 	}
+}
+
+// StepResultForAPI 返回可给前端的 step 业务结果（去掉 bot/CLI 运行态）。
+func StepResultForAPI(step *entity.PaperOutputTopicStep) map[string]any {
+	if step == nil {
+		return map[string]any{}
+	}
+	out := map[string]any{}
+	for k, v := range LoadStepResultMap(step) {
+		if isTopicStepRuntimeKey(k) {
+			continue
+		}
+		out[k] = v
+	}
+	if len(out) > 0 {
+		return out
+	}
+	extra := LoadStepExtra(step)
+	for k, v := range extra {
+		if isTopicStepRuntimeKey(k) {
+			continue
+		}
+		out[k] = v
+	}
+	return out
 }
 
 // LoadStepResultMap 解析 step.result JSON 对象。
@@ -265,7 +314,7 @@ func PersistStepExtra(step *entity.PaperOutputTopicStep, meta map[string]any) {
 			res[k] = v
 		}
 	}
-	if isIdeaDiscoveryTopicStep(step) {
+	if isIdeaDiscoveryTopicStep(step) || isPhasedTopicDiscoveryStage(step) {
 		compactIdeaDiscoveryRuntimeStage(rt)
 		compactIdeaDiscoveryRuntimeOther(rt)
 	}

@@ -750,14 +750,8 @@ func (s *TopicDiscoveryRunService) buildRunView(manuscriptID uint64, runVersion 
 			}
 		}
 		if phasedRun && isPhasedTopicStage(r.StageCode) {
-			merged := paperstep.LoadStepExtra(&r)
-			if len(r.Result) > 0 {
-				for k, v := range paperstep.LoadStepResultMap(&r) {
-					merged[k] = v
-				}
-			}
-			if len(merged) > 0 {
-				sv.Result = json.RawMessage(jsonx.MustJSON(merged))
+			if pub := paperstep.StepResultForAPI(&r); len(pub) > 0 {
+				sv.Result = json.RawMessage(jsonx.MustJSON(pub))
 			}
 		} else if r.StageCode == "idea_discovery" || r.StageCode == "topic_discovery" {
 			merged := paperstep.LoadStepResultMap(&r)
