@@ -412,7 +412,7 @@ func (s *TopicDiscoveryRunService) CommitManuscript(ctx context.Context, userID 
 }
 
 // LoadRunInputForUser 供 bot 等读取选题 run 表单快照（idea_discovery.input_params）。
-func (s *TopicDiscoveryRunService) LoadRunInputForUser(ctx context.Context, userID uint, runVersion int) (topicRunInput, error) {
+func (s *TopicDiscoveryRunService) LoadRunInputForUser(ctx context.Context, userID uint, runVersion int) (TopicRunInput, error) {
 	return s.loadRunInput(ctx, userID, runVersion)
 }
 

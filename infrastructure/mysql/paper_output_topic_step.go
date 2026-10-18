@@ -178,19 +178,45 @@ func (r *PaperOutputTopicStepImpl) SaveStep(ctx context.Context, step *entity.Pa
 	return r.db.WithContext(ctx).Save(step).Error
 }
 
+func maxRunVersionPerManuscriptWhere(db *gorm.DB) *gorm.DB {
+	return db.Where(`(user_id, manuscript_id, run_version) IN (
+		SELECT user_id, manuscript_id, MAX(run_version)
+		FROM paper_output_topic_step
+		GROUP BY user_id, manuscript_id
+	)`)
+}
+
+func (r *PaperOutputTopicStepImpl) ListByStatusOnMaxRunPerManuscript(ctx context.Context, status string) ([]entity.PaperOutputTopicStep, error) {
+	var rows []entity.PaperOutputTopicStep
+	q := r.db.WithContext(ctx).Where("status = ?", status)
+	err := maxRunVersionPerManuscriptWhere(q).
+		Order("updated_at ASC").
+		Find(&rows).Error
+	return rows, err
+}
+
+func (r *PaperOutputTopicStepImpl) ListByStatusAndStageOnMaxRunPerManuscript(ctx context.Context, status, stageCode string) ([]entity.PaperOutputTopicStep, error) {
+	var rows []entity.PaperOutputTopicStep
+	q := r.db.WithContext(ctx).
+		Where("status = ? AND stage_code = ?", status, stageCode)
+	err := maxRunVersionPerManuscriptWhere(q).
+		Order("updated_at ASC").
+		Find(&rows).Error
+	return rows, err
+}
+
 func (r *PaperOutputTopicStepImpl) ListByStatusAndStage(ctx context.Context, status, stageCode string, limit int) ([]entity.PaperOutputTopicStep, error) {
-	if limit <= 0 {
-		limit = 50
-	}
-	if limit > 200 {
-		limit = 200
+	q := r.db.WithContext(ctx).
+		Where("status = ? AND stage_code = ?", status, stageCode).
+		Order("updated_at ASC")
+	if limit > 0 {
+		if limit > 200 {
+			limit = 200
+		}
+		q = q.Limit(limit)
 	}
 	var rows []entity.PaperOutputTopicStep
-	err := r.db.WithContext(ctx).
-		Where("status = ? AND stage_code = ?", status, stageCode).
-		Order("updated_at ASC").
-		Limit(limit).
-		Find(&rows).Error
+	err := q.Find(&rows).Error
 	return rows, err
 }
 

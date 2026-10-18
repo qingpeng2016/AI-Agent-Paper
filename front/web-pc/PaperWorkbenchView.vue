@@ -2152,18 +2152,6 @@ async function rejectFailedTopicRun() {
   )
 }
 
-async function cancelTopicRun() {
-  const msId = activeManuscriptId.value
-  if (!msId) return
-  try {
-    await abandonCurrentTopicRun(msId)
-    ElMessage.info('已取消运行')
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : '取消失败'
-    ElMessage.error(msg)
-  }
-}
-
 function topicStepIcon(status: TopicFlowStepStatus) {
   if (status === 'completed') return '✓'
   if (status === 'running') return '…'
@@ -2909,15 +2897,6 @@ watch(
                           : ''
             }}
           </span>
-          <button
-            v-if="topicAtHumanPause || topicRunBusy || currentTopicRun.status === 'checkpoint'"
-            type="button"
-            class="paper-flow-cancel"
-            :disabled="topicTerminateLoading || topicContinueLoading"
-            @click="cancelTopicRun"
-          >
-            取消
-          </button>
         </div>
         <ol class="paper-flow-steps">
           <li
@@ -3633,27 +3612,6 @@ watch(
 .paper-flow-badge--failed {
   color: #b91c1c;
   background: #fee2e2;
-}
-
-.paper-flow-cancel {
-  margin-left: auto;
-  padding: 6px 12px;
-  font-size: 13px;
-  color: var(--atm-text-muted, #64748b);
-  background: transparent;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-.paper-flow-cancel:hover:not(:disabled) {
-  border-color: #cbd5e1;
-  color: var(--atm-text, #1e1b4b);
-}
-
-.paper-flow-cancel:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
 }
 
 .paper-flow-steps {

@@ -14,6 +14,9 @@ type PaperOutputTopicStepRepo interface {
 	GetLatestRunByManuscript(ctx context.Context, userID, manuscriptID uint64) (runVersion int, steps []entity.PaperOutputTopicStep, err error)
 	GetStep(ctx context.Context, userID uint64, runVersion int, stageCode string) (*entity.PaperOutputTopicStep, error)
 	SaveStep(ctx context.Context, step *entity.PaperOutputTopicStep) error
+	// ListByStatusOnMaxRunPerManuscript 每个 user+manuscript 先取全表 MAX(run_version)，再在其中筛 status。
+	ListByStatusOnMaxRunPerManuscript(ctx context.Context, status string) ([]entity.PaperOutputTopicStep, error)
+	ListByStatusAndStageOnMaxRunPerManuscript(ctx context.Context, status, stageCode string) ([]entity.PaperOutputTopicStep, error)
 	ListByStatusAndStage(ctx context.Context, status, stageCode string, limit int) ([]entity.PaperOutputTopicStep, error)
 	CancelRun(ctx context.Context, userID uint64, runVersion int) error
 	BindManuscript(ctx context.Context, userID uint64, runVersion int, manuscriptID uint64) error
