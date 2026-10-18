@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	papersvc "github.com/qingpeng2016/ai-agent-paper/application/core-service/paper"
+	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/lang"
 	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/topicdiscovery"
 	"github.com/qingpeng2016/ai-agent-paper/common/dederi/logger"
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
@@ -78,6 +79,16 @@ func (j *IdeaDiscoveryPhasesJob) researchRefinePriorCompleted(ctx context.Contex
 	return true, nil
 }
 
+type researchRefineInvokePayload struct {
+	Req              topicdiscovery.StrategyInvokeRequest
+	PlatformArgsLine string
+	Sources          string
+	ArxivDownload    bool
+	ArxivMaxDownload int
+	Venue            string
+	Language         string
+}
+
 // invokeResearchRefine 本段固定 ARIS /research-refine-pipeline，一次 tick 走完四步（只改 step.status，不写 runtime_state/extra 编排字段）。
 func (j *IdeaDiscoveryPhasesJob) invokeResearchRefine(ctx context.Context, step *entity.PaperOutputTopicStep, phaseID string) error {
 	userID := uint(step.UserID)
@@ -89,22 +100,28 @@ func (j *IdeaDiscoveryPhasesJob) invokeResearchRefine(ctx context.Context, step 
 	if err != nil {
 		return err
 	}
+	behaviorKey := topicdiscovery.TopicStageBehaviorKey(researchRefineStageCode)
+	route, err := svc.PhasedBotRequireRoute(ctx, behaviorKey)
+	if err != nil {
+		return err
+	}
+	locale := svc.PhasedBotBuildInvokeContext(ctx, userID, runVersion, step, input).Language
+	payload := researchRefineBuildInvokePayload(step, userID, runVersion, input, route, cfg, locale)
+
 	paperRoot := topicdiscovery.ARISRunPaperRoot(uint64(userID), step.ManuscriptID, runVersion)
-	invokeCtx := svc.PhasedBotBuildInvokeContext(ctx, userID, runVersion, step, input)
 	runID := topicdiscovery.PhasedBotResolveRunID(paperRoot, step, input)
 
 	// 1. 准备 workspace：清 CLI session、落 RESEARCH_BRIEF/参数，供 /research-refine-pipeline 读取。
 	cfg.ClearCLIWorkspaceSessions(paperRoot)
-	if err = topicdiscovery.PrepareNativeIdeaDiscoveryWorkspace(paperRoot, input, invokeCtx.Language, cfg); err != nil {
+	if err = topicdiscovery.PrepareNativeIdeaDiscoveryWorkspace(paperRoot, input, payload.Req.Context.Language, cfg); err != nil {
 		return err
 	}
-	argsLine := cfg.FormatIdeaDiscoveryArgsLine(input, strings.TrimSpace(input.Venue), invokeCtx.Language)
-	if err = topicdiscovery.WriteNativePlatformArguments(paperRoot, argsLine); err != nil {
+	if err = topicdiscovery.WriteNativePlatformArguments(paperRoot, payload.PlatformArgsLine); err != nil {
 		return err
 	}
 
-	// 2. invoke：按 paper_llm_strategy_route 打一次 /research-refine-pipeline。
-	if err = j.researchRefineInvokeBehavior(ctx, step, svc, input, invokeCtx, paperRoot, cfg); err != nil {
+	// 2. invoke：req 与 platform 参数均来自 payload。
+	if err = j.researchRefineInvokeBehavior(ctx, step, svc, paperRoot, cfg, payload); err != nil {
 		return err
 	}
 
@@ -119,36 +136,87 @@ func (j *IdeaDiscoveryPhasesJob) invokeResearchRefine(ctx context.Context, step 
 	}
 
 	// 4. 更新 status：五段末段，走 idea_discovery gate（topic_confirm）收尾并标本段 completed。
-	behaviorKey := topicdiscovery.TopicStageBehaviorKey(researchRefineStageCode)
-	route, err := svc.PhasedBotRequireRoute(ctx, behaviorKey)
-	if err != nil {
-		return err
-	}
 	return svc.PhasedBotFinishAfterGate(ctx, step, userID, runVersion, route, paperRoot, runID, cfg)
 }
 
-// researchRefineInvokeBehavior 查 research_refine 的 strategy route，组装 Invoke 请求并走本地 ARIS CLI 一次。
 func (j *IdeaDiscoveryPhasesJob) researchRefineInvokeBehavior(
 	ctx context.Context,
 	step *entity.PaperOutputTopicStep,
 	svc *papersvc.TopicDiscoveryRunService,
-	input topicdiscovery.TopicRunInput,
-	invokeCtx topicdiscovery.StrategyInvokeContext,
 	paperRoot string,
 	cfg topicdiscovery.ARISIdeaDiscoveryConfig,
+	payload researchRefineInvokePayload,
 ) error {
-	behaviorKey := topicdiscovery.TopicStageBehaviorKey(researchRefineStageCode)
-	route, err := svc.PhasedBotRequireRoute(ctx, behaviorKey)
+	_, _, err := svc.PhasedBotInvokeBehavior(ctx, step, payload.Req, payload.PlatformArgsLine)
 	if err != nil {
-		return err
+		return svc.PhasedBotHandleInvokeFailure(ctx, step, paperRoot, cfg, err)
 	}
+	return nil
+}
+
+func researchRefineBuildInvokePayload(
+	step *entity.PaperOutputTopicStep,
+	userID uint,
+	runVersion int,
+	input topicdiscovery.TopicRunInput,
+	route *entity.PaperStrategyRoute,
+	cfg topicdiscovery.ARISIdeaDiscoveryConfig,
+	language string,
+) researchRefineInvokePayload {
+	behaviorKey := topicdiscovery.TopicStageBehaviorKey(researchRefineStageCode)
+
+	sources := strings.TrimSpace(cfg.Platform.Sources)
+	if sources == "" {
+		sources = "web"
+	}
+	arxivDownload := cfg.Platform.ArxivDownload
+	arxivDownloadCLI := "false"
+	if arxivDownload {
+		arxivDownloadCLI = "true"
+	}
+	arxivMaxDownload := cfg.Platform.ArxivMaxDownload
+	if arxivMaxDownload <= 0 {
+		arxivMaxDownload = 5
+	}
+	venue := strings.TrimSpace(input.Venue)
+	if venue == "" {
+		venue = "NeurIPS"
+	}
+	language = lang.NormalizeContentLanguage(language)
+	if language == "" {
+		language = "zh"
+	}
+
+	platformArgs := fmt.Sprintf(
+		`%s — venue: %s — sources: %s — ARXIV_DOWNLOAD: %s`,
+		researchRefineQuotedDirection(input),
+		venue,
+		sources,
+		arxivDownloadCLI,
+	)
+	if arxivDownload {
+		platformArgs += fmt.Sprintf(` — ARXIV_MAX_DOWNLOAD: %d`, arxivMaxDownload)
+	}
+	platformArgs += fmt.Sprintf(` — language: %s`, language)
+
 	req := topicdiscovery.StrategyInvokeRequest{
 		BehaviorKey:  behaviorKey,
 		CapabilityID: strings.TrimSpace(route.CapabilityID),
-		Context:      invokeCtx,
+		Context: topicdiscovery.StrategyInvokeContext{
+			ManuscriptID: step.ManuscriptID,
+			UserID:       uint64(userID),
+			RunVersion:   runVersion,
+			Language:     language,
+			Direction:    strings.TrimSpace(input.Direction),
+			Keywords:     input.Keywords,
+			VenueCodes:   input.VenueCodes,
+			VenueLabel:   strings.TrimSpace(input.Venue),
+			Round:        1,
+			MaxRounds:    1,
+		},
 		Options: topicdiscovery.StrategyInvokeOptions{
-			AuditLevelCode:   input.AuditLevel,
-			IntensityCode:    input.Intensity,
+			AuditLevelCode:   strings.TrimSpace(input.AuditLevel),
+			IntensityCode:    strings.TrimSpace(input.Intensity),
 			ExecRounds:       input.ExecRounds,
 			MaxIdeas:         input.MaxIdeas,
 			MaxPapers:        input.MaxPapers,
@@ -156,11 +224,32 @@ func (j *IdeaDiscoveryPhasesJob) researchRefineInvokeBehavior(
 			RandomReferences: input.RandomReferences,
 		},
 	}
-	_, _, err = svc.PhasedBotInvokeBehavior(ctx, step, req, "")
-	if err != nil {
-		return svc.PhasedBotHandleInvokeFailure(ctx, step, paperRoot, cfg, err)
+
+	return researchRefineInvokePayload{
+		Req:              req,
+		PlatformArgsLine: platformArgs,
+		Sources:          sources,
+		ArxivDownload:    arxivDownload,
+		ArxivMaxDownload: arxivMaxDownload,
+		Venue:            venue,
+		Language:         language,
 	}
-	return nil
+}
+
+func researchRefineQuotedDirection(input topicdiscovery.TopicRunInput) string {
+	inner := strings.TrimSpace(input.Description)
+	if inner == "" {
+		body := strings.TrimSpace(input.Direction)
+		kw := strings.Join(input.Keywords, ", ")
+		kw = strings.TrimSpace(kw)
+		if kw != "" {
+			inner = fmt.Sprintf("研究内容：%s + 关键词：%s", body, kw)
+		} else {
+			inner = body
+		}
+	}
+	inner = strings.ReplaceAll(inner, `"`, `\"`)
+	return `"` + inner + `"`
 }
 
 func researchRefineNotify(j *IdeaDiscoveryPhasesJob, ctx context.Context, step *entity.PaperOutputTopicStep, outcome, detail string, promptTokens, completionTokens int) {

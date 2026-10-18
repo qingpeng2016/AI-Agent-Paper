@@ -1342,20 +1342,9 @@ function topicStepRunningHint(stageCode: string) {
     if (running) return `当前段「${running.label}」运行中…`
     const chain = topicIdeaDiscoveryUiGroupLabels.value
     if (chain) return `Idea Discovery：${chain}…`
-    const dto = topicDiscoveryApiRun.value?.steps.find(
-      (s) => s.stage_code === 'idea_discovery' || s.stage_code === 'topic_discovery',
-    )
-    const pct = dto?.exec_progress_pct
-    if (typeof pct === 'number' && pct > 0) return `Idea Discovery 总进度约 ${pct}%`
     return TOPIC_STEP_RUNNING_HINT.idea_discovery
   }
-  const base = TOPIC_STEP_RUNNING_HINT[stageCode] ?? 'AI 模型运行中…'
-  const dto = topicDiscoveryApiRun.value?.steps.find((s) => s.stage_code === stageCode)
-  const pct = dto?.exec_progress_pct
-  if (typeof pct === 'number' && pct > 0) {
-    return `${base} ${pct}%`
-  }
-  return base
+  return TOPIC_STEP_RUNNING_HINT[stageCode] ?? 'AI 模型运行中…'
 }
 
 const TOPIC_RUN_POLL_MS = 1500
