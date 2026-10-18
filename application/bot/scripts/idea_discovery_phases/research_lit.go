@@ -104,8 +104,8 @@ func (j *IdeaDiscoveryPhasesJob) invokeResearchLit(ctx context.Context, step *en
 		return err
 	}
 
-	// 3. 校验产物：paper 目录下必须有 LITERATURE_REVIEW.md，否则本段 failed。
-	if err = researchLitRequireReviewMD(paperRoot); err != nil {
+	// 3. 校验产物：paperRoot/literature（见 yaml literature_dir）下至少有一个 PDF，否则本段 failed。
+	if err = researchLitRequireLiteraturePDF(paperRoot, cfg); err != nil {
 		papersvc.FailTopicStep(step, err.Error())
 		if saveErr := j.steps.SaveStep(ctx, step); saveErr != nil {
 			return saveErr
@@ -228,22 +228,30 @@ func researchLitQuotedDirection(input topicdiscovery.TopicRunInput) string {
 	return `"` + inner + `"`
 }
 
-const researchLitReviewFile = "LITERATURE_REVIEW.md"
-
-// researchLitRequireReviewMD 校验 ARIS paper 工作区（…/run_N/paper）下存在 LITERATURE_REVIEW.md。
-func researchLitRequireReviewMD(paperRoot string) error {
-	path := filepath.Join(strings.TrimSpace(paperRoot), researchLitReviewFile)
-	st, err := os.Stat(path)
+// researchLitRequireLiteraturePDF 校验 …/paper/<literature_dir>/ 下存在至少一个 .pdf 文件。
+func researchLitRequireLiteraturePDF(paperRoot string, cfg topicdiscovery.ARISIdeaDiscoveryConfig) error {
+	paperRoot = strings.TrimSpace(paperRoot)
+	litDir := strings.TrimSpace(cfg.Artifacts.LiteratureDir)
+	if litDir == "" {
+		litDir = "literature"
+	}
+	litPath := filepath.Join(paperRoot, litDir)
+	entries, err := os.ReadDir(litPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("Idea Discovery /research-lit 未产出 %s（期望: %s）", researchLitReviewFile, path)
+			return fmt.Errorf("Idea Discovery /research-lit 未产出文献 PDF（目录不存在: %s）", litPath)
 		}
-		return fmt.Errorf("校验 %s: %w", researchLitReviewFile, err)
+		return fmt.Errorf("校验文献目录 %s: %w", litPath, err)
 	}
-	if st.IsDir() {
-		return fmt.Errorf("Idea Discovery /research-lit 产物异常: %s 是目录而非文件", path)
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		if strings.HasSuffix(strings.ToLower(e.Name()), ".pdf") {
+			return nil
+		}
 	}
-	return nil
+	return fmt.Errorf("Idea Discovery /research-lit 未产出文献 PDF（%s 下无 .pdf 文件）", litPath)
 }
 
 // researchLitInvokeBehavior 使用 payload.Req 走本地 ARIS CLI（platform 行已在 payload.PlatformArgsLine）。
