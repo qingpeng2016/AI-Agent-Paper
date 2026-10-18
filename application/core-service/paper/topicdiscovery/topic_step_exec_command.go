@@ -171,11 +171,18 @@ func nextExecCommandIndex(stageMap map[string]any) string {
 }
 
 func appendTopicStepExecCommandLine(step *entity.PaperOutputTopicStep, commandLine string) {
+	appendTopicStepExecCommandLineForStage(step, "", commandLine)
+}
+
+func appendTopicStepExecCommandLineForStage(step *entity.PaperOutputTopicStep, execStage, commandLine string) {
 	commandLine = strings.TrimSpace(commandLine)
 	if step == nil || commandLine == "" {
 		return
 	}
-	stage := strings.TrimSpace(step.StageCode)
+	stage := strings.TrimSpace(execStage)
+	if stage == "" {
+		stage = strings.TrimSpace(step.StageCode)
+	}
 	if stage == "" {
 		stage = "unknown"
 	}
@@ -250,11 +257,36 @@ func trimOldestExecCommandInvoke(root map[string]any) bool {
 	return true
 }
 
+func execCommandStageKey(step *entity.PaperOutputTopicStep, behaviorKey string) string {
+	if strings.HasPrefix(strings.TrimSpace(behaviorKey), "topic.stage.") {
+		code := topicStageCodeFromBehaviorKey(behaviorKey)
+		if phase := topicStageCodeToPhaseID(code); phase != "" {
+			return phase
+		}
+	}
+	if step != nil && strings.TrimSpace(step.StageCode) != "" {
+		return strings.TrimSpace(step.StageCode)
+	}
+	return "unknown"
+}
+
 func (s *TopicDiscoveryRunService) persistTopicStepExecCommand(ctx context.Context, step *entity.PaperOutputTopicStep, record string) {
+	s.persistTopicStepExecCommandForStage(ctx, step, "", record)
+}
+
+func (s *TopicDiscoveryRunService) persistTopicStepExecCommandForStage(
+	ctx context.Context,
+	step *entity.PaperOutputTopicStep,
+	execStage, record string,
+) {
 	if s == nil || step == nil || strings.TrimSpace(record) == "" {
 		return
 	}
-	appendTopicStepExecCommandFromRecord(step, record)
+	line := execCommandLineFromPersistRecord(record)
+	if line == "" {
+		return
+	}
+	appendTopicStepExecCommandLineForStage(step, execStage, line)
 	if s.steps != nil {
 		_ = s.steps.SaveStep(ctx, step)
 	}

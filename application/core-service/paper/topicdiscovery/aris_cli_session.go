@@ -64,6 +64,8 @@ func clearCLIWorkspaceSessions(paperRoot string, cleanup IdeaDiscoveryCLISession
 	if paperRoot == "" {
 		return
 	}
+	// Project-local Claude session logs (e.g. …/paper/.claude/sessions) must not survive between invokes.
+	_ = os.RemoveAll(filepath.Join(paperRoot, ".claude", "sessions"))
 	for _, rel := range []string{".claude", ".codex"} {
 		_ = os.RemoveAll(filepath.Join(paperRoot, rel))
 	}

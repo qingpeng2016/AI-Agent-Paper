@@ -49,7 +49,7 @@ checkpoint_phases:
     pause: true
     label_zh: 文献综述与实验规划
 
-# 每条 run 第一次 invoke 前：清 paperRoot/.claude、.codex，并在下列目录删「内容含本 run 路径」的 session 文件
+# 每次 runARISCLI 前：删 paperRoot/.claude/sessions 与 .claude/.codex，并在下列目录删「内容含本 run 路径」的全局 session 文件
 cli_session_cleanup:
   claude: ~/.claude/sessions
   codex: ~/.codex/sessions

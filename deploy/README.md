@@ -32,6 +32,8 @@ chmod +x deploy-service.sh deploy-api.sh deploy-backend.sh
 3. `conf/local.conf.yaml` 由本机上传
 4. 原生选题 **只调 `aris` CLI**（`PAPER_ARIS_CLI` / `PAPER_ARIS_EXECUTOR=aris`）；服务器需 **`aris` 在 PATH** 且已 `aris setup`，**不要**依赖仓库内 `libs/aris` 源码
 
+**本机调试 ARIS 输出**：仍使用 `aris --output-format json`，但在**终端**里 `go run main.go --run_conf=local --run_bot=true` 时会自动把子进程 stdout/stderr 打到屏幕（与 `.paper/invoke/logs/*` 一致）。nohup 后台无 TTY 时不刷屏。强制：`PAPER_ARIS_CLI_CONSOLE=1`；关闭：`PAPER_ARIS_CLI_CONSOLE=0`。
+
 ### 底层入口
 
 `./deploy-backend.sh <分支> [deploy|restart|stop|status] [user|bot]`

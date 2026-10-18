@@ -30,11 +30,11 @@ func (s *TopicDiscoveryRunService) invokeLocalARIS(
 	})
 
 	start := time.Now()
-	out, err := runLocalStrategyInvoke(ctx, req, userExtra)
+	execStage := execCommandStageKey(step, req.BehaviorKey)
+	out, err := runLocalStrategyInvoke(ctx, req, userExtra, func(execRecord string) {
+		s.persistTopicStepExecCommandForStage(ctx, step, execStage, execRecord)
+	})
 	latencyMs := int(time.Since(start).Milliseconds())
-	if out != nil && strings.TrimSpace(out.ExecRecord) != "" {
-		s.persistTopicStepExecCommand(ctx, step, out.ExecRecord)
-	}
 	if err != nil {
 		s.persistARISInvokeLog(ctx, step, route, req, string(reqJSON), "", latencyMs, llm.LLMUsage{}, out, err)
 		return nil, llm.LLMUsage{}, errorx.ErrLLMCallFailed.WithDetail(err.Error())

@@ -287,6 +287,10 @@ func resolveARISCLIInvocation(prompt string) (cli string, args []string) {
 }
 
 func runARISCLI(ctx context.Context, workspace, prompt string) (stdout, stderr, execRecord string, err error) {
+	workspace = filepath.Clean(strings.TrimSpace(workspace))
+	if workspace != "" {
+		mustIdeaDiscoveryConfig().ClearCLIWorkspaceSessions(workspace)
+	}
 	cli, args := resolveARISCLIInvocation(prompt)
 	execRecord = formatARISCLIExecCommandStored(workspace, cli, args)
 
@@ -306,6 +310,10 @@ func runARISCLI(ctx context.Context, workspace, prompt string) (stdout, stderr, 
 		} else {
 			logger.WarnZ(ctx, "aris-cli-workspace-log-open", zap.Error(logErr), zap.String("workspace", workspace))
 		}
+	}
+	if arisCLIConsoleMirrorEnabled() {
+		_, _ = fmt.Fprintf(os.Stderr, "\n=== ARIS CLI (%s) workspace: %s ===\n", cli, workspace)
+		_, _ = fmt.Fprintf(os.Stderr, "command: %s %s\n--- stream ---\n", cli, strings.Join(args, " "))
 	}
 	if logFile != nil {
 		defer func() {
@@ -387,7 +395,7 @@ func ARISRunPaperRoot(userID uint64, manuscriptID uint64, runVersion int) string
 	return filepath.Join(arisRunSessionDir(userID, manuscriptID, runVersion), arisRunWorkspaceDir)
 }
 
-func runLocalStrategyInvoke(ctx context.Context, req StrategyInvokeRequest, platformUser string) (*localARISInvokeResult, error) {
+func runLocalStrategyInvoke(ctx context.Context, req StrategyInvokeRequest, platformUser string, beforeExec func(execRecord string)) (*localARISInvokeResult, error) {
 	behavior := strings.TrimSpace(req.BehaviorKey)
 	capability := resolveCapability(req)
 	if capability == "" {
@@ -493,6 +501,11 @@ func runLocalStrategyInvoke(ctx context.Context, req StrategyInvokeRequest, plat
 	}
 	if strings.TrimSpace(cliPrompt) == "" {
 		return nil, fmt.Errorf("empty ARIS CLI prompt for behavior_key=%q", behavior)
+	}
+	cli, args := resolveARISCLIInvocation(cliPrompt)
+	execRecord := formatARISCLIExecCommandStored(paperRoot, cli, args)
+	if beforeExec != nil && strings.TrimSpace(execRecord) != "" {
+		beforeExec(execRecord)
 	}
 	stdout, _, execRecord, err := runARISCLI(runCtx, paperRoot, cliPrompt)
 	if err != nil {

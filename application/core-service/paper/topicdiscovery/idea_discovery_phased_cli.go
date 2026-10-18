@@ -136,6 +136,13 @@ func ideaDiscoveryPhasedPhaseSucceeded(paperRoot, runID, phase string, cfg ARISI
 		if isResearchLitPhaseDone(paperRoot, runID) {
 			return true
 		}
+		// Standalone /research-lit writes these at paperRoot (not idea-stage/IDEA_REPORT.md).
+		if workspaceFileMinSize(paperRoot, "LITERATURE_REVIEW.md", 256) {
+			return true
+		}
+		if workspaceFileMinSize(paperRoot, "references.bib", 64) {
+			return true
+		}
 		if workspaceFileMinSize(paperRoot, cfg.Artifacts.CorpusJSON, 64) {
 			return true
 		}
@@ -155,9 +162,11 @@ func ideaDiscoveryPhasedPhaseSucceeded(paperRoot, runID, phase string, cfg ARISI
 	}
 }
 
-// IdeaDiscoveryPhasedBotMayRetryPhase 同段 invoke 未产出可验收 artifact 时是否保留 async_llm 重试。
+// IdeaDiscoveryPhasedBotMayRetryPhase 分阶段 bot：每 tick 只打一次 ARIS，不因缺 artifact 在同段上连打。
+// （AutoProceed 只影响 skill 内行为；段间推进由 runtime_state.stage + 下轮 scheduler 负责。）
 func IdeaDiscoveryPhasedBotMayRetryPhase(cfg ARISIdeaDiscoveryConfig) bool {
-	return cfg.Platform.AutoProceed
+	_ = cfg
+	return false
 }
 
 func syncIdeaDiscoveryPhasedProgressMeta(meta map[string]any) {

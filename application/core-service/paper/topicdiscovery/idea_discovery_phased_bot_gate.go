@@ -48,7 +48,7 @@ func (s *TopicDiscoveryRunService) PrepareIdeaDiscoveryPhasedBotInvoke(
 		return false, s.saveIdeaDiscoveryAwaitingUserContinue(ctx, step, paperRoot, runID, phase)
 	}
 
-	if phaseStatusInMeta(meta, phase) != IdeaDiscoveryPhaseExecuting {
+	if phaseStatusFromRuntimeMeta(meta, phase) != IdeaDiscoveryPhaseExecuting {
 		delete(meta, "async_llm")
 		paperstep.PersistStepExtra(step, meta)
 		_ = s.steps.SaveStep(ctx, step)
