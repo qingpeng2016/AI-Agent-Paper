@@ -6,6 +6,8 @@ import type {
 import {
   ARIS_IDEA_DISCOVERY_PHASES,
   IDEA_DISCOVERY_PHASE_STATUS,
+  TOPIC_DISCOVERY_PHASED_FLOW_STEPS,
+  isPhasedPerStepTopicRun,
   type IdeaDiscoveryPhaseStatus,
 } from './types'
 
@@ -179,6 +181,13 @@ function uiGroupToRowStatus(
 export function isAnyIdeaDiscoveryPhaseExecuting(
   steps: TopicDiscoveryStepDTO[] | undefined,
 ): boolean {
+  if (isPhasedPerStepTopicRun(steps)) {
+    return TOPIC_DISCOVERY_PHASED_FLOW_STEPS.some((def) => {
+      if (def.stageCode === 'topic_confirm') return false
+      const st = steps?.find((s) => s.stage_code === def.stageCode)?.status?.trim().toLowerCase()
+      return st === 'running'
+    })
+  }
   const step = ideaDiscoveryStepDto(steps)
   if (!step) return false
   const result = (step.result ?? {}) as Record<string, unknown>
@@ -196,6 +205,10 @@ export function isIdeaDiscoveryArisCheckpoint(
   runStatus?: string,
 ): boolean {
   void runStatus
+  if (isPhasedPerStepTopicRun(steps)) {
+    if (isAnyIdeaDiscoveryPhaseExecuting(steps)) return false
+    return arisPhasedPerStepRows(steps).some((r) => r.status === 'waiting_confirm')
+  }
   const step = ideaDiscoveryStepDto(steps)
   if (!step) return false
   const result = (step.result ?? {}) as Record<string, unknown>
@@ -216,12 +229,76 @@ export function arisPhaseAwaitingConfirmLabel(
   return waiting?.label ?? null
 }
 
-/** 由 runtime_state 各 phase 四态 + UI 段推导展示行 */
+function phasedStepSort(a: TopicDiscoveryStepDTO, b: TopicDiscoveryStepDTO): number {
+  const sa = a.sort ?? 0
+  const sb = b.sort ?? 0
+  if (sa !== sb) return sa - sb
+  const ia = TOPIC_DISCOVERY_PHASED_FLOW_STEPS.findIndex((d) => d.stageCode === a.stage_code)
+  const ib = TOPIC_DISCOVERY_PHASED_FLOW_STEPS.findIndex((d) => d.stageCode === b.stage_code)
+  return ia - ib
+}
+
+function mapTopicStepStatusToArisUi(
+  status: string,
+  index: number,
+  ordered: TopicDiscoveryStepDTO[],
+): ArisPhaseUiStatus {
+  const st = status.trim().toLowerCase()
+  if (st === 'completed') return 'completed'
+  if (st === 'failed') return 'pending'
+  if (st === 'running') return 'running'
+  if (st === 'pending') {
+    if (index > 0 && ordered[index - 1]?.status?.trim().toLowerCase() === 'completed') {
+      return 'awaiting_continue'
+    }
+    return 'pending'
+  }
+  return 'pending'
+}
+
+/** 五段分 step：每段 status 来自 paper_output_topic_step，段间 pause 为 completed → pending */
+function arisPhasedPerStepRows(steps: TopicDiscoveryStepDTO[] | undefined): ArisPhaseUiRow[] {
+  if (!steps?.length) return []
+  const phased = TOPIC_DISCOVERY_PHASED_FLOW_STEPS.filter((d) => d.stageCode !== 'topic_confirm')
+  const ordered = phased
+    .map((def) => steps.find((s) => s.stage_code === def.stageCode))
+    .filter((s): s is TopicDiscoveryStepDTO => Boolean(s))
+    .sort(phasedStepSort)
+
+  let waitingIdx = -1
+  for (let i = 0; i < ordered.length - 1; i++) {
+    if (
+      ordered[i].status?.trim().toLowerCase() === 'completed' &&
+      ordered[i + 1].status?.trim().toLowerCase() === 'pending'
+    ) {
+      waitingIdx = i
+      break
+    }
+  }
+
+  return phased.map((def) => {
+    const dto = steps.find((s) => s.stage_code === def.stageCode)
+    const idx = ordered.findIndex((s) => s.stage_code === def.stageCode)
+    if (!dto) {
+      return { id: def.stageCode, label: def.label, status: 'pending' as const }
+    }
+    let status = mapTopicStepStatusToArisUi(dto.status, idx >= 0 ? idx : 0, ordered)
+    if (waitingIdx >= 0 && ordered[waitingIdx]?.stage_code === def.stageCode) {
+      status = 'waiting_confirm'
+    }
+    return { id: def.stageCode, label: def.label, status }
+  })
+}
+
+/** 由 runtime_state 各 phase 四态 + UI 段推导展示行；分 step run 则读各 stage status */
 export function arisIdeaDiscoveryPhaseRows(
   steps: TopicDiscoveryStepDTO[] | undefined,
   runStatus?: string,
   run?: TopicDiscoveryRunResponse | null,
 ): ArisPhaseUiRow[] {
+  if (isPhasedPerStepTopicRun(steps)) {
+    return arisPhasedPerStepRows(steps)
+  }
   const uiGroups = resolveIdeaDiscoveryUIGroups(run, steps)
   const step = ideaDiscoveryStepDto(steps)
 

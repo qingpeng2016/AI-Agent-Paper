@@ -39,6 +39,9 @@ import {
   PAPER_MODULES,
   appendOperationLog,
   TOPIC_DISCOVERY_FLOW_STEPS,
+  TOPIC_DISCOVERY_PHASED_FLOW_STEPS,
+  resolveTopicDiscoveryFlowSteps,
+  isPhasedPerStepTopicRun,
   getPaperModuleMeta,
   type EnvironmentPreferenceForm,
   type PaperManuscriptItem,
@@ -92,9 +95,10 @@ type TopicRunDemo = {
 }
 
 function createIdleTopicRun(): TopicRunDemo {
+  const flow = TOPIC_DISCOVERY_PHASED_FLOW_STEPS
   return {
     status: 'idle',
-    steps: TOPIC_DISCOVERY_FLOW_STEPS.map((s) => ({
+    steps: flow.map((s) => ({
       stageCode: s.stageCode,
       label: s.label,
       checkpointKey: s.checkpointKey,
@@ -853,7 +857,22 @@ watch(activeManuscriptId, (id, prev) => {
 
 function clampTopicConfirmWhileIdeaDiscoveryActive(
   steps: TopicFlowStepRuntime[],
+  apiSteps?: TopicDiscoveryRunResponse['steps'],
 ): TopicFlowStepRuntime[] {
+  const flow = resolveTopicDiscoveryFlowSteps(apiSteps)
+  const confirm = steps.find((s) => s.stageCode === 'topic_confirm')
+  if (!confirm || confirm.status !== 'running') return steps
+  if (isPhasedPerStepTopicRun(apiSteps)) {
+    const phasesDone = flow
+      .filter((d) => d.stageCode !== 'topic_confirm')
+      .every((def) => steps.find((s) => s.stageCode === def.stageCode)?.status === 'completed')
+    if (!phasesDone) {
+      return steps.map((s) =>
+        s.stageCode === 'topic_confirm' ? { ...s, status: 'pending' as TopicFlowStepStatus } : s,
+      )
+    }
+    return steps
+  }
   const idea = steps.find(
     (s) => s.stageCode === 'idea_discovery' || s.stageCode === 'topic_discovery',
   )
@@ -871,7 +890,10 @@ const currentTopicRun = computed((): TopicRunDemo => {
   const run = topicRunsByManuscript.value[id] ?? createIdleTopicRun()
   return {
     ...run,
-    steps: clampTopicConfirmWhileIdeaDiscoveryActive(run.steps),
+    steps: clampTopicConfirmWhileIdeaDiscoveryActive(
+      run.steps,
+      topicLastRunByMs.value[id]?.steps,
+    ),
   }
 })
 
@@ -901,13 +923,14 @@ function topicPauseStageFromApi(data: TopicDiscoveryRunResponse): string {
     return 'topic_confirm'
   }
   if (!data.human_checkpoint) return ''
-  const ordered = TOPIC_DISCOVERY_FLOW_STEPS.map((def) => {
+  const flow = resolveTopicDiscoveryFlowSteps(data.steps)
+  const ordered = flow.map((def) => {
     const st = data.steps.find((s) => s.stage_code === def.stageCode)
     return st ? stepStatusFromApi(st.status) : ('pending' as TopicFlowStepStatus)
   })
   for (let i = 0; i < ordered.length - 1; i++) {
     if (ordered[i] === 'completed' && ordered[i + 1] === 'pending') {
-      return TOPIC_DISCOVERY_FLOW_STEPS[i].stageCode
+      return flow[i].stageCode
     }
   }
   return ''
@@ -1047,10 +1070,11 @@ const topicShowCheckpointPanel = computed(() => {
   if (topicShowFailedPanel.value) return false
   if (topicAwaitingRoundConfirm.value) return false
   const raw = topicDiscoveryApiRun.value
+  const phased = isPhasedPerStepTopicRun(raw?.steps)
   const ideaDisc = raw?.steps.some(
     (s) => s.stage_code === 'idea_discovery' || s.stage_code === 'topic_discovery',
   )
-  if (ideaDisc) {
+  if (phased || ideaDisc) {
     if (!topicArisPhaseRows.value.some((r) => r.status === 'waiting_confirm')) return false
     if (isAnyIdeaDiscoveryPhaseExecuting(raw?.steps)) return false
     return true
@@ -1074,12 +1098,17 @@ function buildTopicCheckpointView(
   pauseStage: string,
   raw: TopicDiscoveryRunResponse | null,
 ): TopicCheckpointView | null {
-  const def = TOPIC_DISCOVERY_FLOW_STEPS.find((s) => s.stageCode === pauseStage)
+  const flow = resolveTopicDiscoveryFlowSteps(raw?.steps)
+  const def = flow.find((s) => s.stageCode === pauseStage)
   if (!def?.checkpointKey) return null
   const dto = raw?.steps.find((s) => s.stage_code === pauseStage)
   const lines = linesFromApiStep(dto)
   const base = lines.length ? lines : CHECKPOINT_COPY[def.checkpointKey].lines
-  if (pauseStage === 'idea_discovery' || pauseStage === 'topic_discovery') {
+  if (
+    pauseStage === 'idea_discovery' ||
+    pauseStage === 'topic_discovery' ||
+    isPhasedPerStepTopicRun(raw?.steps)
+  ) {
     const phaseLines = arisIdeaDiscoveryPhaseRows(raw?.steps, raw?.run_status, raw)
       .filter((r) => r.status === 'waiting_confirm' || r.status === 'completed')
       .map((r) => `${r.label}：${arisPhaseStatusLabel(r.status)}`)
@@ -1513,7 +1542,8 @@ function linesFromApiStep(step?: TopicDiscoveryStepDTO): string[] {
 /** 展示态：run_status + steps；人工暂停时统一为 checkpoint（后端可能仍标 running） */
 function topicRunFromApi(data: TopicDiscoveryRunResponse): TopicRunDemo {
   let status = runStatusFromApi(data.run_status)
-  let steps: TopicFlowStepRuntime[] = TOPIC_DISCOVERY_FLOW_STEPS.map((def) => {
+  const flow = resolveTopicDiscoveryFlowSteps(data.steps)
+  let steps: TopicFlowStepRuntime[] = flow.map((def) => {
     const st = data.steps.find((s) => s.stage_code === def.stageCode)
     return {
       stageCode: def.stageCode,
@@ -1522,7 +1552,7 @@ function topicRunFromApi(data: TopicDiscoveryRunResponse): TopicRunDemo {
       status: st ? stepStatusFromApi(st.status) : 'pending',
     }
   })
-  steps = clampTopicConfirmWhileIdeaDiscoveryActive(steps)
+  steps = clampTopicConfirmWhileIdeaDiscoveryActive(steps, data.steps)
 
   const pauseStage = topicPauseStageFromApi(data)
   const anyStepRunning = steps.some((s) => s.status === 'running')
@@ -1542,7 +1572,7 @@ function topicRunFromApi(data: TopicDiscoveryRunResponse): TopicRunDemo {
 
   let checkpoint: TopicCheckpointView | null = null
   if (status === 'checkpoint' && pauseStage) {
-    const def = TOPIC_DISCOVERY_FLOW_STEPS.find((s) => s.stageCode === pauseStage)
+    const def = flow.find((s) => s.stageCode === pauseStage)
     const step = data.steps.find((s) => s.stage_code === pauseStage)
     if (def && step) {
       const lines = linesFromApiStep(step)
@@ -1602,6 +1632,7 @@ function buildTopicRunRequest(action: 'start' | 'continue') {
     intensity: topicForm.intensity,
     audit_level: topicForm.auditLevel,
     human_checkpoint: topicForm.humanCheckpoint,
+    invoke_mode: 'phased',
     random_references: topicForm.randomReferences,
     user_literature_ids:
       topicForm.userLiteratureIds.length > 0 ? [...topicForm.userLiteratureIds] : undefined,

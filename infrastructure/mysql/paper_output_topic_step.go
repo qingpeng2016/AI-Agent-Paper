@@ -54,6 +54,7 @@ func (r *PaperOutputTopicStepImpl) BeginRun(ctx context.Context, userID, manuscr
 				UserID:       userID,
 				RunVersion:   next,
 				StageCode:    stage,
+				Sort:         i + 1,
 				Status:       "pending",
 				CreatedAt:    now,
 				UpdatedAt:    now,
@@ -95,6 +96,7 @@ func (r *PaperOutputTopicStepImpl) BeginPhasedRun(ctx context.Context, userID, m
 				UserID:       userID,
 				RunVersion:   next,
 				StageCode:    stage,
+				Sort:         i + 1,
 				Status:       "pending",
 				CreatedAt:    now,
 				UpdatedAt:    now,
@@ -116,7 +118,7 @@ func (r *PaperOutputTopicStepImpl) ListByUserRun(ctx context.Context, userID uin
 	var rows []entity.PaperOutputTopicStep
 	err := r.db.WithContext(ctx).
 		Where("user_id = ? AND run_version = ?", userID, runVersion).
-		Order("FIELD(stage_code, 'retrieve', 'idea_discovery', 'topic_confirm', 'topic_discovery', 'research_lit', 'idea_creator', 'novelty_check', 'research_review', 'research_refine', 'generate_ideas', 'audit', 'novelty')").
+		Order("sort ASC, id ASC").
 		Find(&rows).Error
 	return rows, err
 }

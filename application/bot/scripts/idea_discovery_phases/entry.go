@@ -1,18 +1,12 @@
-// idea_discovery_phases bot：只扫 paper_output_topic_step 典型队列行：
-// stage_code=idea_discovery（或 topic_discovery）、status=running、
-// runtime_state.other.async_llm=true、runtime_state.stage 内某段 status=executing。
-// 按 executing 段打 /research-lit → … → /research-refine-pipeline（非 bundled /idea-discovery）。
+// idea_discovery_phases bot：五段 ARIS 各一条 paper_output_topic_step，按 stage_code 分脚本扫 running+async_llm。
 package ideadiscoveryphases
 
 import (
 	"context"
-	"fmt"
-	"strings"
 
 	papersvc "github.com/qingpeng2016/ai-agent-paper/application/core-service/paper"
 	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/topicdiscovery"
 	"github.com/qingpeng2016/ai-agent-paper/common/dederi/logger"
-	"github.com/qingpeng2016/ai-agent-paper/common/notification"
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/repository"
 	"go.uber.org/zap"
@@ -23,8 +17,6 @@ const (
 	TaskIdeaDiscoveryPhasesLLM = "llm_idea_discovery_phases"
 	scanLimit                  = 20
 )
-
-var ideaDiscoveryQueueStageCodes = []string{"idea_discovery", "topic_discovery"}
 
 type IdeaDiscoveryPhasesJob struct {
 	steps       repository.PaperOutputTopicStepRepo
@@ -42,27 +34,12 @@ func NewIdeaDiscoveryPhasesJob(
 
 func (j *IdeaDiscoveryPhasesJob) Run(ctx context.Context) {
 	var scanned, invoked, skipped, failed int
-	for _, stageCode := range ideaDiscoveryQueueStageCodes {
-		rows, err := j.steps.ListByStatusAndStage(ctx, "running", stageCode, scanLimit)
-		if err != nil {
-			notification.SendErrorLog(ctx, "idea-discovery-phases-list-failed",
-				zap.String("stage_code", stageCode), zap.Error(err))
-			continue
-		}
-		for i := range rows {
-			if !topicdiscovery.IdeaDiscoveryRuntimeStageQueueStep(&rows[i]) {
-				continue
-			}
-			scanned++
-			switch j.processOne(ctx, &rows[i]) {
-			case "completed":
-				invoked++
-			case "failed":
-				failed++
-			default:
-				skipped++
-			}
-		}
+	for _, stageCode := range topicdiscovery.TopicDiscoveryPhasedStageCodes() {
+		s, i, sk, f := j.dispatchStage(ctx, stageCode)
+		scanned += s
+		invoked += i
+		skipped += sk
+		failed += f
 	}
 	if scanned > 0 {
 		logger.InfoZ(ctx, "idea-discovery-phases-finished",
@@ -73,77 +50,21 @@ func (j *IdeaDiscoveryPhasesJob) Run(ctx context.Context) {
 	}
 }
 
-func (j *IdeaDiscoveryPhasesJob) processOne(ctx context.Context, step *entity.PaperOutputTopicStep) string {
-	if step == nil || j.runs == nil {
-		return "skipped"
+func (j *IdeaDiscoveryPhasesJob) dispatchStage(ctx context.Context, stageCode string) (scanned, invoked, skipped, failed int) {
+	switch stageCode {
+	case stageResearchLit:
+		return j.scanStage(ctx, stageResearchLit)
+	case stageIdeaCreator:
+		return j.scanStage(ctx, stageIdeaCreator)
+	case stageNoveltyCheck:
+		return j.scanStage(ctx, stageNoveltyCheck)
+	case stageResearchReview:
+		return j.scanStage(ctx, stageResearchReview)
+	case stageResearchRefine:
+		return j.scanStage(ctx, stageResearchRefine)
+	default:
+		return 0, 0, 0, 0
 	}
-	if strings.TrimSpace(step.Status) == "failed" {
-		return "skipped"
-	}
-	if step.ErrorMsg != nil && strings.TrimSpace(*step.ErrorMsg) != "" {
-		if strings.TrimSpace(step.Status) != "failed" {
-			papersvc.FailTopicStep(step, *step.ErrorMsg)
-			_ = j.steps.SaveStep(ctx, step)
-		}
-		return "skipped"
-	}
-	if papersvc.TopicStepHasPersistedOutput(step) && strings.TrimSpace(step.Status) == "completed" {
-		return "completed"
-	}
-
-	meta := papersvc.LoadStepExtra(step)
-	if async, ok := meta["async_llm"].(bool); !ok || !async {
-		return "skipped"
-	}
-
-	input, err := j.runs.LoadRunInputForUser(ctx, uint(step.UserID), step.RunVersion)
-	if err != nil {
-		j.markFailed(ctx, step, "无法加载 run 入参: "+err.Error(), 0, 0)
-		return "failed"
-	}
-
-	invoke, err := j.runs.PrepareIdeaDiscoveryPhasedBotInvoke(ctx, uint(step.UserID), step.RunVersion, step, input)
-	if err != nil {
-		j.markFailed(ctx, step, err.Error(), 0, 0)
-		return "failed"
-	}
-	if !invoke {
-		return "skipped"
-	}
-
-	meta = papersvc.LoadStepExtra(step)
-	beforePrompt := intMeta(meta["tokens_prompt"])
-	beforeCompletion := intMeta(meta["tokens_completion"])
-
-	if err = j.runs.RunNativeIdeaDiscoveryPhaseLLM(ctx, uint(step.UserID), step.RunVersion, step, input); err != nil {
-		if strings.TrimSpace(step.Status) != "failed" {
-			j.markFailed(ctx, step, err.Error(), 0, 0)
-		} else {
-			meta = papersvc.LoadStepExtra(step)
-			j.notifyStep(ctx, step, papersvc.TopicStepOutcomeFailed, err.Error(),
-				intMeta(meta["tokens_prompt"])-beforePrompt, intMeta(meta["tokens_completion"])-beforeCompletion)
-		}
-		return "failed"
-	}
-
-	meta = papersvc.LoadStepExtra(step)
-	deltaPrompt := intMeta(meta["tokens_prompt"]) - beforePrompt
-	deltaCompletion := intMeta(meta["tokens_completion"]) - beforeCompletion
-
-	if strings.TrimSpace(step.Status) == "completed" {
-		j.notifyStep(ctx, step, papersvc.TopicStepOutcomeSuccess, "Idea Discovery 五段已完成", deltaPrompt, deltaCompletion)
-		return "completed"
-	}
-	if phase := strings.TrimSpace(fmt.Sprint(meta["aris_pending_phase"])); phase != "" &&
-		papersvc.IdeaDiscoveryNeedsUserConfirm(meta, phase) {
-		j.notifyStep(ctx, step, papersvc.TopicStepOutcomeCheckpoint,
-			papersvc.IdeaDiscoveryCheckpointDetail(phase), deltaPrompt, deltaCompletion)
-	}
-	logger.InfoZ(ctx, "idea-discovery-phases-invoke-tick",
-		zap.Uint64("step_id", step.ID),
-		zap.Uint64("manuscript_id", step.ManuscriptID),
-		zap.String("executing_phase", fmt.Sprint(meta["last_phased_invoke"])))
-	return "skipped"
 }
 
 func (j *IdeaDiscoveryPhasesJob) notifyStep(

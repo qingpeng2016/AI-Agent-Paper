@@ -442,6 +442,30 @@ export const TOPIC_DISCOVERY_FLOW_STEPS: TopicFlowStepDef[] = [
   { stageCode: 'topic_confirm', label: '确认并完成', checkpointKey: 'topic_confirm_ready' },
 ]
 
+/** 五段 ARIS 各一条 paper_output_topic_step（sort 1..5）+ topic_confirm */
+export const TOPIC_DISCOVERY_PHASED_FLOW_STEPS: TopicFlowStepDef[] = [
+  { stageCode: 'research_lit', label: '文献调研', checkpointKey: 'idea_discovery_ready' },
+  { stageCode: 'idea_creator', label: '选题大纲', checkpointKey: 'idea_discovery_ready' },
+  { stageCode: 'novelty_check', label: '新颖性检验', checkpointKey: 'idea_discovery_ready' },
+  { stageCode: 'research_review', label: '外部审查', checkpointKey: 'idea_discovery_ready' },
+  { stageCode: 'research_refine', label: '文献综述与实验规划', checkpointKey: 'idea_discovery_ready' },
+  { stageCode: 'topic_confirm', label: '确认并完成', checkpointKey: 'topic_confirm_ready' },
+]
+
+export function isPhasedPerStepTopicRun(
+  steps: Array<{ stage_code?: string }> | undefined,
+): boolean {
+  return Boolean(steps?.some((s) => s.stage_code === 'research_lit'))
+}
+
+export function resolveTopicDiscoveryFlowSteps(
+  steps: Array<{ stage_code?: string }> | undefined,
+): TopicFlowStepDef[] {
+  return isPhasedPerStepTopicRun(steps)
+    ? TOPIC_DISCOVERY_PHASED_FLOW_STEPS
+    : TOPIC_DISCOVERY_FLOW_STEPS
+}
+
 export type TopicFlowStepStatus =
   | 'pending'
   | 'running'

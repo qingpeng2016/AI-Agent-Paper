@@ -247,7 +247,11 @@ func (s *TopicDiscoveryRunService) Run(ctx context.Context, userID uint, req req
 				return nil, err
 			}
 			paramsBytes, _ := json.Marshal(input)
-			runVersion, err = s.steps.BeginRun(ctx, uint64(userID), req.ManuscriptID, paramsBytes)
+			if strings.EqualFold(strings.TrimSpace(input.InvokeMode), "phased") {
+				runVersion, err = s.steps.BeginPhasedRun(ctx, uint64(userID), req.ManuscriptID, paramsBytes)
+			} else {
+				runVersion, err = s.steps.BeginRun(ctx, uint64(userID), req.ManuscriptID, paramsBytes)
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -376,6 +380,9 @@ func (s *TopicDiscoveryRunService) prepareRun(ctx context.Context, userID uint, 
 		MaxIdeas:          int(intensity.MaxIdeas),
 		ExecRounds:        int(intensity.ExecRounds),
 		InvokeMode:        strings.TrimSpace(req.InvokeMode),
+	}
+	if strings.TrimSpace(input.InvokeMode) == "" {
+		input.InvokeMode = "phased"
 	}
 	return input, nil
 }
@@ -701,6 +708,8 @@ func (s *TopicDiscoveryRunService) reloadViewOrErr(ctx context.Context, userID u
 }
 
 func (s *TopicDiscoveryRunService) buildRunView(manuscriptID uint64, runVersion int, rows []entity.PaperOutputTopicStep) *response.TopicDiscoveryRunView {
+	rows = SortTopicSteps(rows)
+	phasedRun := isPhasedPerStepRun(rows)
 	view := &response.TopicDiscoveryRunView{
 		ManuscriptID: manuscriptID,
 		RunVersion:   runVersion,
@@ -720,6 +729,7 @@ func (s *TopicDiscoveryRunService) buildRunView(manuscriptID uint64, runVersion 
 		st := strings.TrimSpace(r.Status)
 		sv := response.TopicDiscoveryStepView{
 			StageCode:       r.StageCode,
+			Sort:            r.Sort,
 			Status:          st,
 			ExecProgressPct: r.ExecProgressPct,
 		}
@@ -739,7 +749,17 @@ func (s *TopicDiscoveryRunService) buildRunView(manuscriptID uint64, runVersion 
 				}
 			}
 		}
-		if r.StageCode == "idea_discovery" || r.StageCode == "topic_discovery" {
+		if phasedRun && isPhasedTopicStage(r.StageCode) {
+			merged := paperstep.LoadStepExtra(&r)
+			if len(r.Result) > 0 {
+				for k, v := range paperstep.LoadStepResultMap(&r) {
+					merged[k] = v
+				}
+			}
+			if len(merged) > 0 {
+				sv.Result = json.RawMessage(jsonx.MustJSON(merged))
+			}
+		} else if r.StageCode == "idea_discovery" || r.StageCode == "topic_discovery" {
 			merged := paperstep.LoadStepResultMap(&r)
 			var rt map[string]any
 			if len(r.RuntimeState) > 0 {
@@ -784,13 +804,20 @@ func (s *TopicDiscoveryRunService) buildRunView(manuscriptID uint64, runVersion 
 		}
 	}
 	if runStatus != "failed" {
-		for _, r := range rows {
-			if r.StageCode == "idea_discovery" && strings.TrimSpace(r.Status) == "running" {
-				meta := paperstep.LoadStepExtra(&r)
-				if IdeaDiscoveryRunAwaitingUserConfirm(meta) {
-					view.PauseAfterStage = "idea_discovery"
-					runStatus = "checkpoint"
-					break
+		if phasedRun {
+			if pause := PhasedPauseAfterStage(rows, view.HumanCheckpoint); pause != "" {
+				view.PauseAfterStage = pause
+				runStatus = "checkpoint"
+			}
+		} else {
+			for _, r := range rows {
+				if r.StageCode == "idea_discovery" && strings.TrimSpace(r.Status) == "running" {
+					meta := paperstep.LoadStepExtra(&r)
+					if IdeaDiscoveryRunAwaitingUserConfirm(meta) {
+						view.PauseAfterStage = "idea_discovery"
+						runStatus = "checkpoint"
+						break
+					}
 				}
 			}
 		}

@@ -130,11 +130,8 @@ func (s *TopicDiscoveryRunService) advanceTopicStageAfterInvoke(
 			step.Status = "running"
 			return s.steps.SaveStep(ctx, step)
 		}
-		delete(meta, "async_llm")
-		meta["aris_pending_phase"] = phaseID
-		paperstep.PersistStepExtra(step, meta)
-		step.Status = "running"
-		return s.steps.SaveStep(ctx, step)
+		reason := fmt.Sprintf("Idea Discovery 阶段 /%s 未产出约定产物", phaseID)
+		return s.persistIdeaDiscoveryPhasedStepFailed(ctx, step, reason)
 	}
 
 	delete(meta, "async_llm")

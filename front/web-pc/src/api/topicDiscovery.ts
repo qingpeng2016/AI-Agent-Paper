@@ -80,6 +80,8 @@ export type TopicDiscoveryRunRequest = {
   intensity: string
   audit_level: string
   human_checkpoint: boolean
+  /** phased：五段各一条 step；省略时后端默认 phased */
+  invoke_mode?: string
   random_references?: boolean
   user_literature_ids?: string[]
   /** start | continue | resume | run_all */
@@ -95,6 +97,8 @@ export type TopicDiscoveryLiteratureLink = {
 
 export type TopicDiscoveryStepDTO = {
   stage_code: string
+  /** run 内顺序，与后端 paper_output_topic_step.sort 一致 */
+  sort?: number
   status: string
   /** 0-100，retrieve PDF 下载 / topic_discovery 多轮 LLM */
   exec_progress_pct?: number

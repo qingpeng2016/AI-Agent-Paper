@@ -2,8 +2,11 @@ package topicdiscovery
 
 import (
 	"context"
+	"fmt"
+	"sort"
 	"strings"
 
+	paperstep "github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/step"
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
 )
 
@@ -55,6 +58,11 @@ func ideaDiscoveryPhaseIDToStageCode(phaseID string) string {
 	}
 }
 
+// TopicStageCodeToPhaseID 供 bot / API 展示。
+func TopicStageCodeToPhaseID(stageCode string) string {
+	return topicStageCodeToPhaseID(stageCode)
+}
+
 func topicStageCodeToPhaseID(stageCode string) string {
 	switch strings.TrimSpace(stageCode) {
 	case "research_lit":
@@ -93,6 +101,90 @@ func (s *TopicDiscoveryRunService) stagesForRun(ctx context.Context, userID uint
 	return topicDiscoveryStages
 }
 
+func fallbackStageSortOrder(stageCode string) int {
+	for i, s := range topicDiscoveryPhasedStages {
+		if s == stageCode {
+			return i + 1
+		}
+	}
+	for i, s := range topicDiscoveryStages {
+		if s == stageCode {
+			return i + 1
+		}
+	}
+	return 0
+}
+
+func topicStepSortKey(step entity.PaperOutputTopicStep) int {
+	if step.Sort > 0 {
+		return step.Sort
+	}
+	return fallbackStageSortOrder(step.StageCode)
+}
+
+// SortTopicSteps 按 sort 升序；sort=0 的旧行按 stage 默认顺序。
+func SortTopicSteps(rows []entity.PaperOutputTopicStep) []entity.PaperOutputTopicStep {
+	out := append([]entity.PaperOutputTopicStep(nil), rows...)
+	sort.SliceStable(out, func(i, j int) bool {
+		ki, kj := topicStepSortKey(out[i]), topicStepSortKey(out[j])
+		if ki != kj {
+			return ki < kj
+		}
+		return out[i].ID < out[j].ID
+	})
+	return out
+}
+
+func isPhasedPerStepRun(rows []entity.PaperOutputTopicStep) bool {
+	for _, r := range rows {
+		if r.StageCode == "research_lit" {
+			return true
+		}
+	}
+	return false
+}
+
+// PhasedTopicStageQueueStep 分 step 五段 bot：单条 ARIS phase step，status=running 且 result.async_llm。
+func PhasedTopicStageQueueStep(step *entity.PaperOutputTopicStep) bool {
+	if step == nil || strings.TrimSpace(step.Status) != "running" {
+		return false
+	}
+	if !isPhasedTopicStage(step.StageCode) {
+		return false
+	}
+	meta := paperstep.LoadStepExtra(step)
+	async, ok := meta["async_llm"].(bool)
+	return ok && async
+}
+
+// PhasedPauseAfterStage 段间人工检查点：已完成段后一条仍为 pending 时，pause 在完成段 stage_code。
+func PhasedPauseAfterStage(rows []entity.PaperOutputTopicStep, humanCheckpoint bool) string {
+	if !humanCheckpoint {
+		return ""
+	}
+	ordered := SortTopicSteps(rows)
+	var phased []entity.PaperOutputTopicStep
+	for _, r := range ordered {
+		if isPhasedTopicStage(r.StageCode) {
+			phased = append(phased, r)
+		}
+	}
+	for i := 0; i < len(phased)-1; i++ {
+		if strings.TrimSpace(phased[i].Status) == "completed" &&
+			strings.TrimSpace(phased[i+1].Status) == "pending" {
+			return phased[i].StageCode
+		}
+	}
+	if len(phased) > 0 && strings.TrimSpace(phased[len(phased)-1].Status) == "completed" {
+		for _, r := range ordered {
+			if r.StageCode == "topic_confirm" && strings.TrimSpace(r.Status) == "pending" {
+				return phased[len(phased)-1].StageCode
+			}
+		}
+	}
+	return ""
+}
+
 // IdeaDiscoveryRuntimeStageQueueStep bot 扫描：idea_discovery running，且 runtime_state 为
 // other.async_llm=true + stage 中有一段 status=executing（见 idea_discovery_runtime_state.go）。
 func IdeaDiscoveryRuntimeStageQueueStep(step *entity.PaperOutputTopicStep) bool {
@@ -121,6 +213,22 @@ func StepUsesRuntimeStagePhasedInvoke(step *entity.PaperOutputTopicStep) bool {
 		return false
 	}
 	return runtimeStateStageMap(step.RuntimeState) != nil
+}
+
+// TopicStageNeedsUserCheckpoint 该 ARIS phase 是否在 yaml 中 pause=true。
+func TopicStageNeedsUserCheckpoint(phaseID string) bool {
+	return mustIdeaDiscoveryConfig().PhaseNeedsUserCheckpoint(strings.TrimSpace(phaseID))
+}
+
+// TopicStageCheckpointDetail 通知文案。
+func TopicStageCheckpointDetail(phaseID string) string {
+	cfg := mustIdeaDiscoveryConfig()
+	phaseID = strings.TrimSpace(phaseID)
+	label := phaseID
+	if cp, ok := cfg.CheckpointPhases[phaseID]; ok && strings.TrimSpace(cp.LabelZh) != "" {
+		label = strings.TrimSpace(cp.LabelZh)
+	}
+	return fmt.Sprintf("Idea Discovery · %s 已完成，请确认后继续下一段", label)
 }
 
 func (s *TopicDiscoveryRunService) phasedStagesPriorCompleted(ctx context.Context, userID uint, runVersion int, stageCode string) (bool, error) {

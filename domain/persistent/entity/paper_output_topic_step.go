@@ -12,6 +12,7 @@ type PaperOutputTopicStep struct {
 	UserID        uint64         `gorm:"column:user_id;not null"`
 	RunVersion    int            `gorm:"column:run_version;not null;default:1"`
 	StageCode     string         `gorm:"column:stage_code;size:32;not null"`
+	Sort          int            `gorm:"column:sort;not null;default:0"`
 	Status          string         `gorm:"column:status;size:16;not null;default:pending"`
 	ExecProgressPct uint8          `gorm:"column:exec_progress_pct;not null;default:0"`
 	Result          datatypes.JSON `gorm:"column:result"`

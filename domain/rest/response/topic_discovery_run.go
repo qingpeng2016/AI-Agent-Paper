@@ -4,6 +4,7 @@ import "encoding/json"
 
 type TopicDiscoveryStepView struct {
 	StageCode        string          `json:"stage_code"`
+	Sort             int             `json:"sort,omitempty"`
 	Status           string          `json:"status"`
 	ExecProgressPct uint8  `json:"exec_progress_pct,omitempty"`
 	ErrorMsg        string `json:"error_msg,omitempty"`
