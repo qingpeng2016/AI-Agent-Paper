@@ -21,14 +21,21 @@ pnpm dev
 - 页面：`http://localhost:5173/workbench`（本机 Vite）
 - 接口：浏览器仍显示 `localhost:5173/api/...`，由 Vite **转发**到 **`https://216.195.208.199/api/...`**（需宝塔 443 反代到 Go `8886`）
 
-覆盖目标：`VITE_DEV_API_TARGET=http://127.0.0.1:8886 pnpm dev`
-
-`pnpm dev` 后面 **`--` 之后** 的参数会传给 Vite，例如：
+指定后端（`/api` 代理目标），任选其一：
 
 ```bash
-pnpm dev -- --host 0.0.0.0          # 局域网可访问 dev 页面
-pnpm dev -- --port 5174             # 改前端端口
-VITE_DEV_API_TARGET=http://216.195.208.199:8886 pnpm dev -- --host 0.0.0.0
+pnpm dev 127.0.0.1:8886
+pnpm dev http://216.195.208.199:8886
+VITE_DEV_API_TARGET=http://127.0.0.1:8886 pnpm dev   # 不写参数时仍可用环境变量
+```
+
+不写 IP/端口时，默认仍为 `http://216.195.208.199:8886`。
+
+Vite 自身参数用 **`--` 之后** 传递，例如：
+
+```bash
+pnpm dev 127.0.0.1:8886 -- --host 0.0.0.0
+pnpm dev -- --port 5174             # 仅改前端端口，后端仍用默认
 ```
 
 说明：工作台里大量 `fetch('/api/v1/...')` 走代理；登录等 shared 客户端在 **`VITE_API_BASE_URL` 为空** 时同样走 `/api` 代理。若设置 `VITE_API_BASE_URL=http://远程:8886` 会直连远程，需后端开 CORS，一般本地开发不必设。
