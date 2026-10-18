@@ -77,6 +77,24 @@ func TestClearCLIWorkspaceSessions_localWorkspaceDirs(t *testing.T) {
 	}
 }
 
+func TestRemoveSessionFilesReferencingWorkspace_pathTail(t *testing.T) {
+	home := t.TempDir()
+	paperRoot := filepath.Join(home, "inout", "user_1", "manuscript_1", "run_1", "paper")
+	sessionsDir := filepath.Join(home, ".claude", "sessions")
+	if err := os.MkdirAll(sessionsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	matchPath := filepath.Join(sessionsDir, "session-tail.json")
+	// 仅含 inout 相对尾路径（与线上 session 常见写法一致）
+	if err := os.WriteFile(matchPath, []byte(`{"cwd":"inout/user_1/manuscript_1/run_1/paper"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	clearGlobalSessionsClaude(paperRoot, sessionsDir)
+	if _, err := os.Stat(matchPath); !os.IsNotExist(err) {
+		t.Fatal("session with inout/ tail path should be removed")
+	}
+}
+
 func TestExpandConfigPath(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)

@@ -71,6 +71,7 @@ func clearCLIWorkspaceSessions(paperRoot string, cleanup IdeaDiscoveryCLISession
 	}
 	clearGlobalSessionsClaude(paperRoot, expandConfigPath(cleanup.Claude))
 	clearGlobalSessionsCodex(paperRoot, expandConfigPath(cleanup.Codex))
+	clearGlobalSessionsWalkDir(paperRoot, expandConfigPath("~/.config/aris/sessions"))
 }
 
 func clearGlobalSessionsClaude(paperRoot, sessionsDir string) {
@@ -85,7 +86,14 @@ func clearGlobalSessionsClaude(paperRoot, sessionsDir string) {
 }
 
 func clearGlobalSessionsCodex(paperRoot, sessionsDir string) {
+	clearGlobalSessionsWalkDir(paperRoot, sessionsDir)
+}
+
+func clearGlobalSessionsWalkDir(paperRoot, sessionsDir string) {
 	if sessionsDir == "" {
+		return
+	}
+	if st, err := os.Stat(sessionsDir); err != nil || !st.IsDir() {
 		return
 	}
 	var paths []string
@@ -100,18 +108,65 @@ func clearGlobalSessionsCodex(paperRoot, sessionsDir string) {
 }
 
 func removeSessionFilesReferencingWorkspace(paperRoot string, paths []string) {
-	absRoot, err := filepath.Abs(paperRoot)
-	if err != nil {
-		absRoot = paperRoot
-	}
+	needles := workspaceSessionMatchNeedles(paperRoot)
 	for _, path := range paths {
 		b, err := os.ReadFile(path)
 		if err != nil {
 			continue
 		}
 		text := string(b)
-		if strings.Contains(text, absRoot) || strings.Contains(text, paperRoot) {
+		if sessionTextReferencesWorkspace(text, needles) {
 			_ = os.Remove(path)
 		}
 	}
+}
+
+// workspaceSessionMatchNeedles 全局 session JSON 里 cwd/path 写法不一（绝对路径、inout/…、user_N/…），多片段匹配提高删除率。
+func workspaceSessionMatchNeedles(paperRoot string) []string {
+	paperRoot = filepath.Clean(strings.TrimSpace(paperRoot))
+	absRoot, err := filepath.Abs(paperRoot)
+	if err != nil {
+		absRoot = paperRoot
+	}
+	seen := map[string]struct{}{}
+	add := func(s string) {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			return
+		}
+		if _, ok := seen[s]; ok {
+			return
+		}
+		seen[s] = struct{}{}
+	}
+	for _, p := range []string{paperRoot, absRoot} {
+		add(p)
+		add(filepath.ToSlash(p))
+	}
+	slash := filepath.ToSlash(absRoot)
+	if i := strings.Index(slash, "/inout/"); i >= 0 {
+		add(slash[i+1:])
+		add(slash[i+len("/inout/"):])
+	}
+	parts := strings.Split(filepath.ToSlash(absRoot), "/")
+	for i := 0; i < len(parts); i++ {
+		if strings.HasPrefix(parts[i], "user_") {
+			add(strings.Join(parts[i:], "/"))
+			break
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for s := range seen {
+		out = append(out, s)
+	}
+	return out
+}
+
+func sessionTextReferencesWorkspace(text string, needles []string) bool {
+	for _, n := range needles {
+		if n != "" && strings.Contains(text, n) {
+			return true
+		}
+	}
+	return false
 }

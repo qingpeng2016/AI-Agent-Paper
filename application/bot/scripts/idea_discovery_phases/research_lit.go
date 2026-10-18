@@ -62,8 +62,6 @@ type researchLitInvokePayload struct {
 	// PlatformArgsLine 写入 .paper/invoke/platform_user_prompt.txt；CLI 为 `/research-lit` + 本行。
 	PlatformArgsLine string
 
-	AutoProceed      bool
-	Resumable        bool
 	Sources          string
 	ArxivDownload    bool
 	ArxivMaxDownload int
@@ -143,13 +141,6 @@ func researchLitBuildInvokePayload(
 ) researchLitInvokePayload {
 	behaviorKey := topicdiscovery.TopicStageBehaviorKey(researchLitStageCode)
 
-	/*autoProceed := cfg.Platform.AutoProceed
-	autoProceedCLI := "false"
-	if autoProceed {
-		autoProceedCLI = "true"
-	}*/
-	resumable := true
-	resumableCLI := "true"
 	sources := strings.TrimSpace(cfg.Platform.Sources)
 	if sources == "" {
 		sources = "web"
@@ -173,10 +164,9 @@ func researchLitBuildInvokePayload(
 	}
 
 	platformArgs := fmt.Sprintf(
-		`%s — venue: %s — RESUMABLE: %s — sources: %s — ARXIV_DOWNLOAD: %s`,
+		`%s — venue: %s — sources: %s — ARXIV_DOWNLOAD: %s`,
 		researchLitQuotedDirection(input),
 		venue,
-		resumableCLI,
 		sources,
 		arxivDownloadCLI,
 	)
@@ -214,7 +204,6 @@ func researchLitBuildInvokePayload(
 	return researchLitInvokePayload{
 		Req:              req,
 		PlatformArgsLine: platformArgs,
-		Resumable:        resumable,
 		Sources:          sources,
 		ArxivDownload:    arxivDownload,
 		ArxivMaxDownload: arxivMaxDownload,
