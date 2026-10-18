@@ -9,6 +9,7 @@ import (
 func TestClearGlobalSessionsClaude(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("PAPER_ARIS_NUKE_ALL_CLI_SESSIONS", "0")
 
 	paperRoot := filepath.Join(home, "inout", "user_1", "manuscript_1", "run_1", "paper")
 	sessionsDir := filepath.Join(home, ".claude", "sessions")
@@ -34,9 +35,36 @@ func TestClearGlobalSessionsClaude(t *testing.T) {
 	}
 }
 
+func TestNukeAllGlobalCLISessionStores(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("PAPER_ARIS_NUKE_ALL_CLI_SESSIONS", "1")
+
+	sessionsDir := filepath.Join(home, ".claude", "sessions")
+	if err := os.MkdirAll(sessionsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	a := filepath.Join(sessionsDir, "session-a.json")
+	b := filepath.Join(sessionsDir, "session-b.json")
+	for _, p := range []string{a, b} {
+		if err := os.WriteFile(p, []byte(`{"unrelated":true}`), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cfg := defaultCLISessionCleanup()
+	nukeAllGlobalCLISessionStores(cfg)
+	if _, err := os.Stat(a); !os.IsNotExist(err) {
+		t.Fatal("session-a should be removed when nuke-all enabled")
+	}
+	if _, err := os.Stat(b); !os.IsNotExist(err) {
+		t.Fatal("session-b should be removed when nuke-all enabled")
+	}
+}
+
 func TestClearGlobalSessionsCodexRecursive(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("PAPER_ARIS_NUKE_ALL_CLI_SESSIONS", "0")
 
 	paperRoot := filepath.Join(home, "inout", "user_1", "manuscript_1", "run_1", "paper")
 	nested := filepath.Join(home, ".codex", "sessions", "2026", "01")
@@ -79,6 +107,7 @@ func TestClearCLIWorkspaceSessions_localWorkspaceDirs(t *testing.T) {
 
 func TestRemoveSessionFilesReferencingWorkspace_pathTail(t *testing.T) {
 	home := t.TempDir()
+	t.Setenv("PAPER_ARIS_NUKE_ALL_CLI_SESSIONS", "0")
 	paperRoot := filepath.Join(home, "inout", "user_1", "manuscript_1", "run_1", "paper")
 	sessionsDir := filepath.Join(home, ".claude", "sessions")
 	if err := os.MkdirAll(sessionsDir, 0o755); err != nil {
