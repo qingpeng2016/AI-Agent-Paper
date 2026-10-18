@@ -1,6 +1,7 @@
 package topicdiscovery
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,6 +9,15 @@ import (
 )
 
 const BehaviorIdeaDiscoveryPhase = "topic.discovery.phase"
+
+// ideaDiscoveryPhasedResultJSONHint 分阶段 bot 以 ARIS 最终 JSON 的 result 字段判成败（不扫工作区文件）。
+const ideaDiscoveryPhasedResultJSONHint = `
+
+[AI-Agent-Paper phased invoke]
+When this skill finishes, your final assistant message MUST be exactly one JSON object (no markdown fences):
+- on success: {"result":"success"}
+- on failure: {"result":"false","reason":"brief explanation"}
+Platform treats only this JSON as pass/fail for this phase.`
 
 // buildIdeaDiscoveryPhaseCLIPrompt 单段 ARIS skill：/research-lit 等 + 平台 args；后续段追加 composed 指向 IDEA_REPORT。
 func buildIdeaDiscoveryPhaseCLIPrompt(phaseID, argsLine string, cfg ARISIdeaDiscoveryConfig) string {
@@ -26,7 +36,73 @@ func buildIdeaDiscoveryPhaseCLIPrompt(phaseID, argsLine string, cfg ARISIdeaDisc
 			line += fmt.Sprintf(` — composed: %s`, composed)
 		}
 	}
-	return line
+	return line + ideaDiscoveryPhasedResultJSONHint
+}
+
+func ideaDiscoveryPhasedStageBehavior(behavior string) bool {
+	behavior = strings.TrimSpace(behavior)
+	if !strings.HasPrefix(behavior, "topic.stage.") {
+		return false
+	}
+	code := strings.TrimPrefix(behavior, "topic.stage.")
+	return isPhasedTopicStage(code)
+}
+
+// parseIdeaDiscoveryPhasedInvokeResult 解析 invoke 返回 JSON；success 仅当 result=="success"。
+func parseIdeaDiscoveryPhasedInvokeResult(raw json.RawMessage) (success bool, reason string, err error) {
+	obj, err := ideaDiscoveryPhasedResultJSONObject(raw)
+	if err != nil {
+		return false, "", err
+	}
+	switch v := obj["result"].(type) {
+	case string:
+		switch strings.TrimSpace(strings.ToLower(v)) {
+		case "success":
+			return true, "", nil
+		case "false", "failed", "failure", "error":
+			return false, phasedInvokeResultReason(obj), nil
+		default:
+			return false, "", fmt.Errorf("ARIS 返回 JSON 中 result=%q 无法识别，需要 success 或 false", v)
+		}
+	case bool:
+		if v {
+			return true, "", nil
+		}
+		return false, phasedInvokeResultReason(obj), nil
+	default:
+		return false, "", fmt.Errorf("ARIS 返回 JSON 缺少 result 字段（需要 {\"result\":\"success\"} 或 {\"result\":\"false\"}）")
+	}
+}
+
+func phasedInvokeResultReason(obj map[string]any) string {
+	if obj == nil {
+		return "ARIS 报告失败"
+	}
+	for _, k := range []string{"reason", "error", "message", "summary"} {
+		if s := strings.TrimSpace(fmt.Sprint(obj[k])); s != "" && s != "<nil>" {
+			return s
+		}
+	}
+	return "ARIS 报告失败"
+}
+
+func ideaDiscoveryPhasedResultJSONObject(raw json.RawMessage) (map[string]any, error) {
+	text := strings.TrimSpace(string(raw))
+	if text == "" {
+		return nil, fmt.Errorf("ARIS 未返回可用于判定的 JSON")
+	}
+	obj, err := extractJSONObject(text)
+	if err != nil {
+		return nil, fmt.Errorf("ARIS 未返回可用于判定的 JSON: %w", err)
+	}
+	if s, ok := obj["raw"].(string); ok && strings.TrimSpace(s) != "" {
+		if inner, innerErr := extractJSONObject(s); innerErr == nil && len(inner) > 0 {
+			if _, has := inner["result"]; has {
+				return inner, nil
+			}
+		}
+	}
+	return obj, nil
 }
 
 func executingIdeaDiscoveryPhaseFromMeta(meta map[string]any) string {

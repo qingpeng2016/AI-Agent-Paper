@@ -71,7 +71,26 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryPhaseLLM(
 	syncIdeaDiscoveryPhasedProgressMeta(meta)
 	paperstep.PersistStepExtra(step, meta)
 
-	if phase == "research-lit" && (ideaDiscoveryPhasedPhaseSucceeded(paperRoot, runID, phase, cfg) || isResearchLitPhaseDone(paperRoot, runID)) {
+	ok, failReason, parseErr := parseIdeaDiscoveryPhasedInvokeResult(raw)
+	if parseErr != nil {
+		reason := ideaDiscoveryPhasedStepFailureReason(meta, phase, parseErr)
+		if err := s.persistIdeaDiscoveryPhasedStepFailed(ctx, step, reason); err != nil {
+			return err
+		}
+		return parseErr
+	}
+	if !ok {
+		reason := ideaDiscoveryPhasedStepFailureReason(meta, phase, fmt.Errorf("%s", failReason))
+		if failReason != "" {
+			reason = fmt.Sprintf("Idea Discovery 阶段 /%s 失败: %s", strings.TrimSpace(phase), failReason)
+		}
+		if err := s.persistIdeaDiscoveryPhasedStepFailed(ctx, step, reason); err != nil {
+			return err
+		}
+		return fmt.Errorf("%s", reason)
+	}
+
+	if phase == "research-lit" {
 		_, _ = s.ingestARISWorkspaceLiterature(ctx, userID, runVersion, step.ManuscriptID, paperRoot, cfg)
 	}
 
@@ -90,22 +109,6 @@ func (s *TopicDiscoveryRunService) advanceIdeaDiscoveryPhasedAfterInvoke(
 	meta := paperstep.LoadStepExtra(step)
 	normalizeIdeaDiscoveryRuntimeMeta(meta)
 	syncIdeaDiscoveryPhasedProgressMeta(meta)
-
-	if !ideaDiscoveryPhasedPhaseSucceeded(paperRoot, runID, phase, cfg) {
-		if IdeaDiscoveryPhasedBotMayRetryPhase(cfg) {
-			meta["async_llm"] = true
-			meta["async_llm_done"] = false
-			paperstep.PersistStepExtra(step, meta)
-			step.Status = "running"
-			step.ExecProgressPct = ideaDiscoveryPhasedProgressPct(meta)
-			return s.steps.SaveStep(ctx, step)
-		}
-		reason := ideaDiscoveryPhasedStepFailureReason(meta, phase, nil)
-		if err := s.persistIdeaDiscoveryPhasedStepFailed(ctx, step, reason); err != nil {
-			return err
-		}
-		return fmt.Errorf("%s", reason)
-	}
 
 	setPhaseStatusInMeta(meta, phase, IdeaDiscoveryPhaseCompleted)
 	meta["aris_pending_phase"] = phase

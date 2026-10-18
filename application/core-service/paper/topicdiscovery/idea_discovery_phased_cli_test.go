@@ -1,8 +1,10 @@
 package topicdiscovery
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -27,6 +29,28 @@ func TestIdeaDiscoveryPhasedPhaseSucceeded_researchLitReport(t *testing.T) {
 	cfg := defaultARISIdeaDiscoveryConfig()
 	if !ideaDiscoveryPhasedPhaseSucceeded(root, "any-run", "research-lit", cfg) {
 		t.Fatal("expected RESEARCH_LIT_REPORT.md to mark research-lit done")
+	}
+}
+
+func TestParseIdeaDiscoveryPhasedInvokeResult(t *testing.T) {
+	ok, _, err := parseIdeaDiscoveryPhasedInvokeResult(json.RawMessage(`{"result":"success"}`))
+	if err != nil || !ok {
+		t.Fatalf("success: ok=%v err=%v", ok, err)
+	}
+	ok, reason, err := parseIdeaDiscoveryPhasedInvokeResult(json.RawMessage(`{"result":"false","reason":"token limit"}`))
+	if err != nil || ok || reason != "token limit" {
+		t.Fatalf("false: ok=%v reason=%q err=%v", ok, reason, err)
+	}
+	_, _, err = parseIdeaDiscoveryPhasedInvokeResult(json.RawMessage(`{"ideas":[]}`))
+	if err == nil {
+		t.Fatal("expected error for missing result")
+	}
+}
+
+func TestBuildIdeaDiscoveryPhaseCLIPrompt_includesResultHint(t *testing.T) {
+	p := buildIdeaDiscoveryPhaseCLIPrompt("research-lit", "FOO: bar", defaultARISIdeaDiscoveryConfig())
+	if !strings.Contains(p, `"result":"success"`) || !strings.Contains(p, `"result":"false"`) {
+		t.Fatalf("prompt missing result JSON hint: %q", p)
 	}
 }
 

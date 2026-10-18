@@ -112,6 +112,11 @@ func platformSchemaJSON(behavior string) ([]byte, error) {
 			"artifact_paths":   []string{},
 			"blocked_reasons":  []string{},
 		}
+	} else if ideaDiscoveryPhasedStageBehavior(behavior) {
+		schema = map[string]any{
+			"result": "success",
+			"reason": "required when result is false",
+		}
 	} else if strings.Contains(behavior, "topic_audit") {
 		schema = map[string]any{
 			"audit": map[string]any{
