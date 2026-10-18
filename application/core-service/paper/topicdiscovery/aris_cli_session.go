@@ -74,8 +74,15 @@ func clearCLIWorkspaceSessions(paperRoot string, cleanup IdeaDiscoveryCLISession
 		_ = os.RemoveAll(filepath.Join(paperRoot, rel))
 	}
 	clearWorkspaceLocalSessionFiles(paperRoot)
+
+	// 必做：~/.claude/projects/<cwd>/*.jsonl 存整段对话，删 inout 无效；不删则首次 API 就 prompt too long。
+	projectsRemoved := nukeClaudeProjectsForPaperRoot(paperRoot)
+	logger.InfoZ(context.Background(), "aris-cli-clear-workspace-sessions",
+		zap.String("paper_root", paperRoot),
+		zap.Int("claude_project_dirs_removed", projectsRemoved))
+
 	if cliSessionNukeAllEnabled() {
-		nukeAllGlobalCLISessionStores(cleanup, paperRoot)
+		nukeAllGlobalCLISessionStores(cleanup)
 	} else {
 		clearGlobalSessionsClaude(paperRoot, expandConfigPath(cleanup.Claude))
 		clearGlobalSessionsCodex(paperRoot, expandConfigPath(cleanup.Codex))
@@ -98,7 +105,7 @@ func cliSessionNukeAllEnabled() bool {
 	}
 }
 
-func nukeAllGlobalCLISessionStores(cleanup IdeaDiscoveryCLISessionCleanup, paperRoot string) {
+func nukeAllGlobalCLISessionStores(cleanup IdeaDiscoveryCLISessionCleanup) {
 	dirs := []string{
 		expandConfigPath(cleanup.Claude),
 		expandConfigPath(cleanup.Codex),
@@ -109,11 +116,9 @@ func nukeAllGlobalCLISessionStores(cleanup IdeaDiscoveryCLISessionCleanup, paper
 	for _, dir := range dirs {
 		removed += nukeAllSessionJSONUnder(dir)
 	}
-	removed += nukeClaudeProjectsForPaperRoot(paperRoot)
 	if removed > 0 {
-		logger.InfoZ(context.Background(), "aris-cli-sessions-nuked",
-			zap.Int("files_removed", removed),
-			zap.String("paper_root", paperRoot))
+		logger.InfoZ(context.Background(), "aris-cli-global-session-files-nuked",
+			zap.Int("files_removed", removed))
 	}
 }
 
@@ -124,8 +129,8 @@ func nukeClaudeProjectsForPaperRoot(paperRoot string) int {
 	if err != nil || !st.IsDir() {
 		return 0
 	}
-	slug := claudeProjectDirMatchSlug(paperRoot)
-	if slug == "" {
+	tokens := claudeProjectDirMatchTokens(paperRoot)
+	if len(tokens) == 0 {
 		return 0
 	}
 	entries, err := os.ReadDir(projectsRoot)
@@ -138,7 +143,7 @@ func nukeClaudeProjectsForPaperRoot(paperRoot string) int {
 			continue
 		}
 		name := ent.Name()
-		if strings.Contains(name, slug) {
+		if claudeProjectDirNameMatches(name, tokens) {
 			if rmErr := os.RemoveAll(filepath.Join(projectsRoot, name)); rmErr == nil {
 				n++
 			}
@@ -147,19 +152,67 @@ func nukeClaudeProjectsForPaperRoot(paperRoot string) int {
 	return n
 }
 
-// claudeProjectDirMatchSlug 与 Claude Code 对 cwd 的目录编码一致：…/inout/user_1/…/paper → inout-user-1-manuscript-1-run-1-paper
-func claudeProjectDirMatchSlug(paperRoot string) string {
-	slash := filepath.ToSlash(filepath.Clean(strings.TrimSpace(paperRoot)))
+func claudeProjectDirNameMatches(name string, tokens []string) bool {
+	name = strings.ToLower(name)
+	for _, t := range tokens {
+		t = strings.ToLower(strings.TrimSpace(t))
+		if t != "" && strings.Contains(name, t) {
+			return true
+		}
+	}
+	return false
+}
+
+// claudeProjectDirMatchTokens Claude Code 项目目录名：绝对路径 / → -，且 user_1 → user-1。
+func claudeProjectDirMatchTokens(paperRoot string) []string {
+	paperRoot = filepath.Clean(strings.TrimSpace(paperRoot))
+	abs, err := filepath.Abs(paperRoot)
+	if err != nil {
+		abs = paperRoot
+	}
+	seen := map[string]struct{}{}
+	add := func(s string) {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			return
+		}
+		if _, ok := seen[s]; ok {
+			return
+		}
+		seen[s] = struct{}{}
+	}
+	slash := filepath.ToSlash(abs)
+	add(strings.ReplaceAll(slash, "/", "-"))
+	if strings.HasPrefix(slash, "/") {
+		add(strings.ReplaceAll(strings.TrimPrefix(slash, "/"), "/", "-"))
+	}
 	if i := strings.Index(slash, "/inout/"); i >= 0 {
-		slash = slash[i+len("/inout/"):]
+		tail := strings.TrimPrefix(slash[i+len("/inout/"):], "/")
+		add("inout-" + strings.ReplaceAll(strings.ReplaceAll(tail, "_", "-"), "/", "-"))
+		add(strings.ReplaceAll(strings.ReplaceAll(tail, "_", "-"), "/", "-"))
 	}
-	slash = strings.TrimPrefix(slash, "/")
-	if slash == "" {
-		return ""
+	for _, n := range workspaceSessionMatchNeedles(paperRoot) {
+		add(strings.ReplaceAll(strings.ReplaceAll(filepath.ToSlash(n), "_", "-"), "/", "-"))
 	}
-	s := strings.ReplaceAll(slash, "_", "-")
-	s = strings.ReplaceAll(s, "/", "-")
-	return s
+	out := make([]string, 0, len(seen))
+	for s := range seen {
+		out = append(out, s)
+	}
+	return out
+}
+
+// claudeProjectDirMatchSlug …/inout/user_1/manuscript_1/run_1/paper → user-1-manuscript-1-run-1-paper
+func claudeProjectDirMatchSlug(paperRoot string) string {
+	tokens := claudeProjectDirMatchTokens(paperRoot)
+	for _, t := range tokens {
+		if strings.HasPrefix(t, "user-") || strings.HasPrefix(t, "user_") {
+			return t
+		}
+	}
+	if len(tokens) > 0 {
+		return tokens[0]
+	}
+	return ""
 }
 
 // nukeAllSessionJSONUnder 删除目录树下全部 .json（aris/claude 会话文件命名不统一）。

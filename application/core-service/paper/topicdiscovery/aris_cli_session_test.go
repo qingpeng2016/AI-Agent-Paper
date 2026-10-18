@@ -52,7 +52,7 @@ func TestNukeAllGlobalCLISessionStores(t *testing.T) {
 		}
 	}
 	cfg := defaultCLISessionCleanup()
-	nukeAllGlobalCLISessionStores(cfg, filepath.Join(home, "inout", "user_1", "manuscript_1", "run_1", "paper"))
+	nukeAllGlobalCLISessionStores(cfg)
 	if _, err := os.Stat(a); !os.IsNotExist(err) {
 		t.Fatal("session-a should be removed when nuke-all enabled")
 	}
@@ -80,6 +80,21 @@ func TestClearGlobalSessionsCodexRecursive(t *testing.T) {
 
 	if _, err := os.Stat(matchPath); !os.IsNotExist(err) {
 		t.Fatal("codex nested session should be removed")
+	}
+}
+
+func TestClearCLIWorkspaceSessions_nukesClaudeProjects(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	paperRoot := filepath.Join(home, "inout", "user_1", "manuscript_1", "run_1", "paper")
+	proj := filepath.Join(home, ".claude", "projects", "-tmp-inout-user-1-manuscript-1-run-1-paper")
+	if err := os.MkdirAll(proj, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := defaultARISIdeaDiscoveryConfig()
+	cfg.ClearCLIWorkspaceSessions(paperRoot)
+	if _, err := os.Stat(proj); !os.IsNotExist(err) {
+		t.Fatal("ClearCLIWorkspaceSessions must remove matching ~/.claude/projects dir")
 	}
 }
 
