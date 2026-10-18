@@ -17,7 +17,7 @@ func (s *TopicDiscoveryRunService) runInputStep(
 	if s == nil || s.steps == nil {
 		return nil, nil
 	}
-	for _, code := range []string{topicDiscoveryInputStageCode, "retrieve"} {
+	for _, code := range []string{"research_lit", topicDiscoveryInputStageCode, "retrieve"} {
 		step, err := s.steps.GetStep(ctx, uint64(userID), runVersion, code)
 		if err != nil {
 			return nil, err
@@ -38,7 +38,7 @@ func (s *TopicDiscoveryRunService) literatureCorpusStep(
 	if s == nil || s.steps == nil {
 		return nil, nil
 	}
-	for _, code := range []string{topicDiscoveryInputStageCode, "retrieve"} {
+	for _, code := range []string{"research_lit", topicDiscoveryInputStageCode, "retrieve"} {
 		step, err := s.steps.GetStep(ctx, uint64(userID), runVersion, code)
 		if err != nil {
 			return nil, err

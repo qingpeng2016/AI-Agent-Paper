@@ -8,6 +8,7 @@ import (
 
 type PaperOutputTopicStepRepo interface {
 	BeginRun(ctx context.Context, userID, manuscriptID uint64, inputParams []byte) (runVersion int, err error)
+	BeginPhasedRun(ctx context.Context, userID, manuscriptID uint64, inputParams []byte) (runVersion int, err error)
 	ListByUserRun(ctx context.Context, userID uint64, runVersion int) ([]entity.PaperOutputTopicStep, error)
 	GetLatestRunByUser(ctx context.Context, userID uint64) (runVersion int, steps []entity.PaperOutputTopicStep, err error)
 	GetLatestRunByManuscript(ctx context.Context, userID, manuscriptID uint64) (runVersion int, steps []entity.PaperOutputTopicStep, err error)

@@ -17,6 +17,8 @@ type TopicDiscoveryRunRequest struct {
 	UserLiteratureIDs  []string `json:"user_literature_ids"`
 	// start | continue | resume | run_all — resume：原生 run_state 续跑 idea_discovery（超时/CLI 中断后）
 	Action string `json:"action"`
+	// phased：五段 ARIS（research_lit → … → research_refine）各一条 paper_output_topic_step；默认 bundled /idea-discovery
+	InvokeMode string `json:"invoke_mode"`
 }
 
 type TopicDiscoveryRunQuery struct {

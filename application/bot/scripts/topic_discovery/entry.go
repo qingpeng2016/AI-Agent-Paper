@@ -136,7 +136,7 @@ func (j *TopicDiscoveryJob) processOne(ctx context.Context, step *entity.PaperOu
 	deltaPrompt := intMeta(meta["tokens_prompt"]) - beforePrompt
 	deltaCompletion := intMeta(meta["tokens_completion"]) - beforeCompletion
 
-	// invoke 后：run_state pending 段在 conf 里需人工确认且 runtime_state 尚未 {phase:true}。
+	// invoke 后：平台段间 checkpoint，或 AUTO_PROCEED=false 时 skill 内停住（runtime_state=awaiting_confirm）。
 	if phase := strings.TrimSpace(fmt.Sprint(meta["aris_pending_phase"])); phase != "" &&
 		papersvc.IdeaDiscoveryNeedsUserConfirm(meta, phase) {
 		j.notifyStep(ctx, step, papersvc.TopicStepOutcomeCheckpoint, papersvc.IdeaDiscoveryCheckpointDetail(phase), deltaPrompt, deltaCompletion)

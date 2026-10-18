@@ -403,7 +403,8 @@ func runLocalStrategyInvoke(ctx context.Context, req StrategyInvokeRequest, plat
 	ideaCfg := mustIdeaDiscoveryConfig()
 	paperRoot := filepath.Join(sessionDir, arisRunWorkspaceDir)
 	var discoveryInput topicRunInput
-	if strings.Contains(behavior, "discovery.run") {
+	needsIdeaWorkspace := strings.Contains(behavior, "discovery.run") || strings.HasPrefix(behavior, "topic.stage.")
+	if needsIdeaWorkspace {
 		discoveryInput = topicRunInput{
 			Direction:   req.Context.Direction,
 			Description: req.Context.Direction,
@@ -413,8 +414,10 @@ func runLocalStrategyInvoke(ctx context.Context, req StrategyInvokeRequest, plat
 		if err := PrepareNativeIdeaDiscoveryWorkspace(paperRoot, discoveryInput, req.Context.Language, ideaCfg); err != nil {
 			return nil, err
 		}
-		if err := writeIdeaDiscoveryContractFile(paperRoot, ideaCfg); err != nil {
-			return nil, err
+		if strings.Contains(behavior, "discovery.run") {
+			if err := writeIdeaDiscoveryContractFile(paperRoot, ideaCfg); err != nil {
+				return nil, err
+			}
 		}
 	}
 	invokeDir := ideaCfg.InvokeDirAbs(paperRoot)
@@ -450,6 +453,17 @@ func runLocalStrategyInvoke(ctx context.Context, req StrategyInvokeRequest, plat
 				return nil, err
 			}
 		}
+	} else if strings.HasPrefix(behavior, "topic.stage.") {
+		argsLine := ""
+		if b, err := os.ReadFile(promptPath); err == nil {
+			argsLine = strings.TrimSpace(string(b))
+		}
+		if argsLine == "" {
+			argsLine = ideaCfg.FormatIdeaDiscoveryArgsLine(discoveryInput, req.Context.VenueLabel, req.Context.Language)
+			if err := os.WriteFile(promptPath, []byte(argsLine), 0o644); err != nil {
+				return nil, err
+			}
+		}
 	} else if platformUser != "" {
 		if err := os.WriteFile(filepath.Join(invokeDir, "platform_user_prompt.txt"), []byte(platformUser), 0o644); err != nil {
 			return nil, err
@@ -466,6 +480,16 @@ func runLocalStrategyInvoke(ctx context.Context, req StrategyInvokeRequest, plat
 			argsLine = strings.TrimSpace(string(b))
 		}
 		cliPrompt = buildIdeaDiscoveryCLIPrompt(argsLine)
+	} else if strings.HasPrefix(behavior, "topic.stage.") {
+		argsLine := ""
+		if b, err := os.ReadFile(promptPath); err == nil {
+			argsLine = strings.TrimSpace(string(b))
+		}
+		if argsLine == "" {
+			argsLine = ideaCfg.FormatIdeaDiscoveryArgsLine(discoveryInput, req.Context.VenueLabel, req.Context.Language)
+		}
+		phaseID := topicStageCodeToPhaseID(topicStageCodeFromBehaviorKey(behavior))
+		cliPrompt = buildIdeaDiscoveryPhaseCLIPrompt(phaseID, argsLine, ideaCfg)
 	}
 	if strings.TrimSpace(cliPrompt) == "" {
 		return nil, fmt.Errorf("empty ARIS CLI prompt for behavior_key=%q", behavior)

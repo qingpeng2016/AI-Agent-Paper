@@ -113,8 +113,9 @@ func setPhaseStatusInMeta(meta map[string]any, phase, status string) {
 }
 
 // IdeaDiscoveryBotMayInvokePending：只读工作区 run_state（ARIS 写入，平台不写）。
-// DB 该 pending 为 executing；无 JSON 则打一次 aris；有 JSON 则该段在 JSON 里未 done 才打 aris。
+// DB 该 pending 为 executing；有 JSON 且该段未 done 才打 aris（AUTO_PROCEED=true 时 drain）。
 func IdeaDiscoveryBotMayInvokePending(meta map[string]any, pendingPhase, paperRoot, runID string) bool {
+	cfg := mustIdeaDiscoveryConfig()
 	pendingPhase = strings.TrimSpace(pendingPhase)
 	if pendingPhase == "" {
 		return false
@@ -122,11 +123,14 @@ func IdeaDiscoveryBotMayInvokePending(meta map[string]any, pendingPhase, paperRo
 	if phaseStatusInMeta(meta, pendingPhase) != IdeaDiscoveryPhaseExecuting {
 		return false
 	}
-	if ideaDiscoveryNeedsUserConfirm(meta, pendingPhase, mustIdeaDiscoveryConfig()) {
+	if ideaDiscoveryNeedsUserConfirm(meta, pendingPhase, cfg) {
+		return false
+	}
+	if !cfg.Platform.AutoProceed {
 		return false
 	}
 	if !ideaDiscoveryRunStateFileExists(paperRoot, runID) {
-		return true
+		return false
 	}
 	return !isRunStatePhaseDone(paperRoot, runID, pendingPhase)
 }

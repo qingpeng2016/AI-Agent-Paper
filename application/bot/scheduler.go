@@ -8,6 +8,7 @@ import (
 	"time"
 
 	couponexpire "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/coupon_expire"
+	ideadiscoveryphases "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/idea_discovery_phases"
 	topicdiscovery "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/topic_discovery"
 	topicliteraturedownload "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/topic_literature_download"
 	viplevelsync "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/vip_level_sync"
@@ -28,6 +29,7 @@ type Scheduler struct {
 	couponExpireJob              *couponexpire.CouponExpireJob
 	topicLiteratureDownloadJob   *topicliteraturedownload.TopicLiteratureDownloadJob
 	topicDiscoveryJob            *topicdiscovery.TopicDiscoveryJob
+	ideaDiscoveryPhasesJob       *ideadiscoveryphases.IdeaDiscoveryPhasesJob
 	ns                       *gocron.Scheduler
 	jobMap                   map[string]*gocron.Job
 	configMap                map[string]float64
@@ -42,6 +44,7 @@ func NewScheduler(
 	couponExpireJob *couponexpire.CouponExpireJob,
 	topicLiteratureDownloadJob *topicliteraturedownload.TopicLiteratureDownloadJob,
 	topicDiscoveryJob *topicdiscovery.TopicDiscoveryJob,
+	ideaDiscoveryPhasesJob *ideadiscoveryphases.IdeaDiscoveryPhasesJob,
 ) *Scheduler {
 	return &Scheduler{
 		botScheduleConfigService:   botScheduleConfigService,
@@ -49,6 +52,7 @@ func NewScheduler(
 		couponExpireJob:            couponExpireJob,
 		topicLiteratureDownloadJob: topicLiteratureDownloadJob,
 		topicDiscoveryJob:          topicDiscoveryJob,
+		ideaDiscoveryPhasesJob:     ideaDiscoveryPhasesJob,
 		ns:                       gocron.NewScheduler(time.Local),
 		jobMap:                   make(map[string]*gocron.Job),
 		configMap:                make(map[string]float64),
@@ -244,6 +248,10 @@ func (s *Scheduler) getAIAgentPaperHandleFunc(taskName string) func() {
 	case topicdiscovery.TaskTopicDiscoveryLLM:
 		return func() {
 			s.topicDiscoveryJob.Run(context.Background())
+		}
+	case ideadiscoveryphases.TaskIdeaDiscoveryPhasesLLM:
+		return func() {
+			s.ideaDiscoveryPhasesJob.Run(context.Background())
 		}
 	default:
 		return nil

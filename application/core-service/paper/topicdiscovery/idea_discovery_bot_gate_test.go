@@ -9,8 +9,8 @@ import (
 
 func TestIdeaDiscoveryBotMayInvokePending_noJSONWhenExecuting(t *testing.T) {
 	meta := map[string]any{"research-lit": IdeaDiscoveryPhaseExecuting}
-	if !IdeaDiscoveryBotMayInvokePending(meta, "research-lit", t.TempDir(), "missing-run") {
-		t.Fatal("expected invoke when no run_state file and phase executing")
+	if IdeaDiscoveryBotMayInvokePending(meta, "research-lit", t.TempDir(), "missing-run") {
+		t.Fatal("AUTO_PROCEED=false: must not invoke without run_state drain")
 	}
 }
 
@@ -27,11 +27,11 @@ func TestIdeaDiscoveryBotMayInvokePending_jsonNotDoneWhenExecuting(t *testing.T)
 		t.Fatal(err)
 	}
 	meta := map[string]any{"research-lit": IdeaDiscoveryPhaseExecuting}
-	if !IdeaDiscoveryBotMayInvokePending(meta, "research-lit", dir, runID) {
-		t.Fatal("expected invoke when JSON not done and DB executing")
+	if IdeaDiscoveryBotMayInvokePending(meta, "research-lit", dir, runID) {
+		t.Fatal("AUTO_PROCEED=false: must not auto-drain while JSON pending")
 	}
-	if IdeaDiscoveryBotMayInvokePending(meta, "research-lit", dir, runID) && isRunStatePhaseDone(dir, runID, "research-lit") {
-		t.Fatal("sanity: should not be both invoke-eligible and done")
+	if isRunStatePhaseDone(dir, runID, "research-lit") {
+		t.Fatal("sanity: research-lit should not be done")
 	}
 }
 
@@ -48,7 +48,7 @@ func TestPrepareIdeaDiscoveryBotInvoke_requiresConfirmWhenJSONPending(t *testing
 		t.Fatal(err)
 	}
 	if isRunStatePhaseDone(dir, runID, "idea-creator") {
-	 t.Fatal("idea-creator should not be done")
+		t.Fatal("idea-creator should not be done")
 	}
 	pending, err := ideaDiscoveryResumePhase(dir, runID)
 	if err != nil || pending != "idea-creator" {

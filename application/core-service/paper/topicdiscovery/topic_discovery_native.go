@@ -109,8 +109,10 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 	normalizeIdeaDiscoveryRuntimeMeta(meta)
 	syncIdeaDiscoveryRunProgressToMeta(meta, paperRoot, runID)
 
-	// 仅当 ARIS 已落 run_state 且该段仍未 done 时续排队；invoke 后仍无 JSON 则停 bot，避免空转。
-	if ideaDiscoveryRunStateFileExists(paperRoot, runID) &&
+	// AUTO_PROCEED=true：run_state 已存在且该段未 done 时可 drain（同段内 bot 连 tick）。
+	// AUTO_PROCEED=false：skill 内 checkpoint 需真人/前端回复，禁止 bot 自动重打 /idea-discovery。
+	if cfg.Platform.AutoProceed &&
+		ideaDiscoveryRunStateFileExists(paperRoot, runID) &&
 		IdeaDiscoveryBotMayInvokePending(meta, pendingPhase, paperRoot, runID) {
 		meta["async_llm"] = true
 		meta["async_llm_done"] = false
@@ -120,7 +122,8 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 		return s.steps.SaveStep(ctx, step)
 	}
 
-	if ideaDiscoveryNeedsUserConfirm(meta, pendingPhase, cfg) {
+	if ideaDiscoveryNeedsUserConfirm(meta, pendingPhase, cfg) ||
+		(!cfg.Platform.AutoProceed && !isRunStatePhaseDone(paperRoot, runID, pendingPhase)) {
 		return s.saveIdeaDiscoveryAwaitingUserContinue(ctx, step, paperRoot, runID, pendingPhase)
 	}
 	delete(meta, "async_llm")

@@ -12,6 +12,15 @@ import (
 
 var topicDiscoveryStageOrder = []string{"idea_discovery", "topic_confirm"}
 
+var topicDiscoveryPhasedStageOrder = []string{
+	"research_lit",
+	"idea_creator",
+	"novelty_check",
+	"research_review",
+	"research_refine",
+	"topic_confirm",
+}
+
 type PaperOutputTopicStepImpl struct {
 	db *gorm.DB
 }
@@ -52,6 +61,48 @@ func (r *PaperOutputTopicStepImpl) BeginRun(ctx context.Context, userID, manuscr
 			if i == 0 && len(inputParams) > 0 {
 				row.InputParams = inputParams
 			}
+			if err := tx.Create(&row).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	return runVersion, err
+}
+
+func (r *PaperOutputTopicStepImpl) BeginPhasedRun(ctx context.Context, userID, manuscriptID uint64, inputParams []byte) (int, error) {
+	if manuscriptID == 0 {
+		return 0, errors.New("manuscript_id required")
+	}
+	var runVersion int
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var maxVer *int
+		if err := tx.Model(&entity.PaperOutputTopicStep{}).
+			Where("user_id = ? AND manuscript_id = ?", userID, manuscriptID).
+			Select("COALESCE(MAX(run_version), 0)").
+			Scan(&maxVer).Error; err != nil {
+			return err
+		}
+		next := 1
+		if maxVer != nil {
+			next = *maxVer + 1
+		}
+		runVersion = next
+		now := time.Now()
+		for i, stage := range topicDiscoveryPhasedStageOrder {
+			row := entity.PaperOutputTopicStep{
+				ManuscriptID: manuscriptID,
+				UserID:       userID,
+				RunVersion:   next,
+				StageCode:    stage,
+				Status:       "pending",
+				CreatedAt:    now,
+				UpdatedAt:    now,
+			}
+			if stage == "research_lit" && len(inputParams) > 0 {
+				row.InputParams = inputParams
+			}
+			_ = i
 			if err := tx.Create(&row).Error; err != nil {
 				return err
 			}

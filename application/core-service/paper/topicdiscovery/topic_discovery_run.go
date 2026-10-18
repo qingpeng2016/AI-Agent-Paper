@@ -38,6 +38,7 @@ type topicRunInput struct {
 	MaxPapers         int      `json:"max_papers"`
 	MaxIdeas        int      `json:"max_ideas"`
 	ExecRounds      int      `json:"exec_rounds"`
+	InvokeMode      string   `json:"invoke_mode,omitempty"`
 }
 
 type storedLiteratureHit = literature.StoredLiteratureHit
@@ -170,7 +171,11 @@ func (s *TopicDiscoveryRunService) Run(ctx context.Context, userID uint, req req
 			return nil, err
 		}
 		paramsBytes, _ := json.Marshal(input)
-		runVersion, err = s.steps.BeginRun(ctx, uint64(userID), req.ManuscriptID, paramsBytes)
+		if strings.EqualFold(strings.TrimSpace(input.InvokeMode), "phased") {
+			runVersion, err = s.steps.BeginPhasedRun(ctx, uint64(userID), req.ManuscriptID, paramsBytes)
+		} else {
+			runVersion, err = s.steps.BeginRun(ctx, uint64(userID), req.ManuscriptID, paramsBytes)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -258,7 +263,11 @@ func (s *TopicDiscoveryRunService) Run(ctx context.Context, userID uint, req req
 			if idx < 0 {
 				break
 			}
-			if err := s.executeStage(ctx, userID, runVersion, input, topicDiscoveryStages[idx]); err != nil {
+			stages := s.stagesForRun(ctx, userID, runVersion)
+			if idx >= len(stages) {
+				break
+			}
+			if err := s.executeStage(ctx, userID, runVersion, input, stages[idx]); err != nil {
 				return s.reloadViewOrErr(ctx, userID, runVersion, err)
 			}
 			if st, _ := s.runningStageCode(ctx, userID, runVersion); st != "" {
@@ -366,6 +375,7 @@ func (s *TopicDiscoveryRunService) prepareRun(ctx context.Context, userID uint, 
 		MaxPapers:         int(intensity.MaxPapers),
 		MaxIdeas:          int(intensity.MaxIdeas),
 		ExecRounds:        int(intensity.ExecRounds),
+		InvokeMode:        strings.TrimSpace(req.InvokeMode),
 	}
 	return input, nil
 }
@@ -420,7 +430,8 @@ func (s *TopicDiscoveryRunService) loadRunInput(ctx context.Context, userID uint
 }
 
 func (s *TopicDiscoveryRunService) nextPendingIndex(ctx context.Context, userID uint, runVersion int) int {
-	for i, stage := range topicDiscoveryStages {
+	stages := s.stagesForRun(ctx, userID, runVersion)
+	for i, stage := range stages {
 		if stage == "topic_confirm" {
 			continue
 		}
@@ -436,8 +447,9 @@ func (s *TopicDiscoveryRunService) nextPendingIndex(ctx context.Context, userID 
 }
 
 func (s *TopicDiscoveryRunService) executeFromStage(ctx context.Context, userID uint, runVersion int, input topicRunInput, fromIndex int) error {
-	for i := fromIndex; i < len(topicDiscoveryStages); i++ {
-		stage := topicDiscoveryStages[i]
+	stages := s.stagesForRun(ctx, userID, runVersion)
+	for i := fromIndex; i < len(stages); i++ {
+		stage := stages[i]
 		if err := s.executeStage(ctx, userID, runVersion, input, stage); err != nil {
 			return err
 		}
@@ -449,7 +461,8 @@ func (s *TopicDiscoveryRunService) executeFromStage(ctx context.Context, userID 
 }
 
 func (s *TopicDiscoveryRunService) runningStageCode(ctx context.Context, userID uint, runVersion int) (string, error) {
-	for _, stage := range topicDiscoveryStages {
+	stages := s.stagesForRun(ctx, userID, runVersion)
+	for _, stage := range stages {
 		step, err := s.steps.GetStep(ctx, uint64(userID), runVersion, stage)
 		if err != nil || step == nil {
 			continue
@@ -484,6 +497,8 @@ func (s *TopicDiscoveryRunService) executeStage(ctx context.Context, userID uint
 	switch stageCode {
 	case "idea_discovery":
 		execErr = s.stageBeginTopicDiscoveryAsync(ctx, userID, runVersion, step)
+	case "research_lit", "idea_creator", "novelty_check", "research_review", "research_refine":
+		execErr = s.stageBeginPhasedTopicStageAsync(ctx, userID, runVersion, step)
 	default:
 		execErr = errorx.ErrTopicStepInvalid
 	}
@@ -498,7 +513,7 @@ func (s *TopicDiscoveryRunService) executeStage(ctx context.Context, userID uint
 		}
 		return execErr
 	}
-	if stageCode == "idea_discovery" && strings.TrimSpace(step.Status) == "running" {
+	if (stageCode == "idea_discovery" || isPhasedTopicStage(stageCode)) && strings.TrimSpace(step.Status) == "running" {
 		if step.StartedAt == nil {
 			step.StartedAt = &stageStarted
 		}

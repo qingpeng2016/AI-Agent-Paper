@@ -3,6 +3,7 @@ package boot
 import (
 	bot "github.com/qingpeng2016/ai-agent-paper/application/bot"
 	couponexpire "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/coupon_expire"
+	ideadiscoveryphases "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/idea_discovery_phases"
 	topicdiscovery "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/topic_discovery"
 	topicliteraturedownload "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/topic_literature_download"
 	viplevelsync "github.com/qingpeng2016/ai-agent-paper/application/bot/scripts/vip_level_sync"
@@ -75,6 +76,7 @@ func BuildContainer() *dig.Container {
 	_ = c.Provide(couponexpire.NewCouponExpireJob)
 	_ = c.Provide(topicliteraturedownload.NewTopicLiteratureDownloadJob)
 	_ = c.Provide(topicdiscovery.NewTopicDiscoveryJob)
+	_ = c.Provide(ideadiscoveryphases.NewIdeaDiscoveryPhasesJob)
 	_ = c.Provide(bot.NewScheduler)
 	_ = c.Provide(bot.NewEntry)
 
