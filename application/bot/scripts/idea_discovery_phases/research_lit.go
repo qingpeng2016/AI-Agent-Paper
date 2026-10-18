@@ -7,7 +7,6 @@ import (
 	"time"
 
 	papersvc "github.com/qingpeng2016/ai-agent-paper/application/core-service/paper"
-	paperstep "github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/step"
 	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/topicdiscovery"
 	"github.com/qingpeng2016/ai-agent-paper/common/dederi/logger"
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
@@ -73,14 +72,6 @@ func (j *IdeaDiscoveryPhasesJob) invokeResearchLit(ctx context.Context, step *en
 	invokeCtx := svc.PhasedBotBuildInvokeContext(ctx, userID, runVersion, step, input)
 	runID := topicdiscovery.PhasedBotResolveRunID(paperRoot, step, input)
 
-	meta := paperstep.LoadStepExtra(step)
-	meta["aris_run_id"] = runID
-	meta["native_run_id"] = runID
-	meta["idea_discovery_invoke_mode"] = "phased_per_step"
-	meta["phase_id"] = phaseID
-	paperstep.PersistStepExtra(step, meta)
-	_ = j.steps.SaveStep(ctx, step)
-
 	cfg.ClearCLIWorkspaceSessions(paperRoot)
 	if err := topicdiscovery.PrepareNativeIdeaDiscoveryWorkspace(paperRoot, input, invokeCtx.Language, cfg); err != nil {
 		return err
@@ -92,20 +83,10 @@ func (j *IdeaDiscoveryPhasesJob) invokeResearchLit(ctx context.Context, step *en
 
 	req := topicdiscovery.BuildTopicDiscoveryInvokeRequest(
 		topicdiscovery.TopicStageBehaviorKey(researchLitStageCode), route.CapabilityID, input, invokeCtx)
-	raw, usage, err := svc.PhasedBotInvokeBehavior(ctx, step, req, "")
+	_, _, err = svc.PhasedBotInvokeBehavior(ctx, step, req, "")
 	if err != nil {
 		return svc.PhasedBotHandleInvokeFailure(ctx, step, paperRoot, cfg, err)
 	}
-
-	meta = paperstep.LoadStepExtra(step)
-	meta["aris_invoke_count"] = topicdiscovery.IdeaDiscoveryInvokeCount(meta) + 1
-	meta["last_phased_invoke"] = phaseID
-	meta["last_invoke_preview"] = topicdiscovery.TruncateUTF8(string(raw), 4096)
-	meta["tokens_prompt"] = usage.PromptTokens
-	meta["tokens_completion"] = usage.CompletionTokens
-	delete(meta, "aris_invoke_last_error")
-	delete(meta, "aris_invoke_retries")
-	paperstep.PersistStepExtra(step, meta)
 
 	if !topicdiscovery.IdeaDiscoveryPhasedPhaseSucceeded(paperRoot, runID, phaseID, cfg) {
 		if topicdiscovery.IdeaDiscoveryPhasedBotMayRetryPhase(cfg) {

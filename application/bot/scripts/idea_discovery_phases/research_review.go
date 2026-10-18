@@ -7,7 +7,6 @@ import (
 	"time"
 
 	papersvc "github.com/qingpeng2016/ai-agent-paper/application/core-service/paper"
-	paperstep "github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/step"
 	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/topicdiscovery"
 	"github.com/qingpeng2016/ai-agent-paper/common/dederi/logger"
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
@@ -63,34 +62,27 @@ func (j *IdeaDiscoveryPhasesJob) researchReviewPriorCompleted(ctx context.Contex
 func (j *IdeaDiscoveryPhasesJob) processResearchReviewStep(ctx context.Context, step *entity.PaperOutputTopicStep) string {
 	userID := uint(step.UserID)
 	runVersion := step.RunVersion
-	meta := paperstep.LoadStepExtra(step)
-	beforePrompt := researchReviewIntMeta(meta["tokens_prompt"])
-	beforeCompletion := researchReviewIntMeta(meta["tokens_completion"])
 	if err := j.runResearchReviewTick(ctx, userID, runVersion, step); err != nil {
 		if strings.TrimSpace(step.Status) != topicStepFailed {
 			researchReviewMarkFailed(j, ctx, step, err.Error(), 0, 0)
 		} else {
-			meta = paperstep.LoadStepExtra(step)
-			researchReviewNotify(j, ctx, step, papersvc.TopicStepOutcomeFailed, err.Error(),
-				researchReviewIntMeta(meta["tokens_prompt"])-beforePrompt, researchReviewIntMeta(meta["tokens_completion"])-beforeCompletion)
+			researchReviewNotify(j, ctx, step, papersvc.TopicStepOutcomeFailed, err.Error(), 0, 0)
 		}
 		return topicStepFailed
 	}
-	meta = paperstep.LoadStepExtra(step)
-	deltaPrompt := researchReviewIntMeta(meta["tokens_prompt"]) - beforePrompt
-	deltaCompletion := researchReviewIntMeta(meta["tokens_completion"]) - beforeCompletion
 	if strings.TrimSpace(step.Status) == topicStepCompleted {
+		phaseID := topicdiscovery.TopicStageCodeToPhaseID(researchReviewStageCode)
 		researchReviewNotify(j, ctx, step, papersvc.TopicStepOutcomeSuccess,
-			fmt.Sprintf("Idea Discovery · %s 已完成", topicdiscovery.TopicStageCodeToPhaseID(researchReviewStageCode)), deltaPrompt, deltaCompletion)
-		if topicdiscovery.TopicStageNeedsUserCheckpoint(topicdiscovery.TopicStageCodeToPhaseID(researchReviewStageCode)) {
+			fmt.Sprintf("Idea Discovery · %s 已完成", phaseID), 0, 0)
+		if topicdiscovery.TopicStageNeedsUserCheckpoint(phaseID) {
 			researchReviewNotify(j, ctx, step, papersvc.TopicStepOutcomeCheckpoint,
-				topicdiscovery.TopicStageCheckpointDetail(topicdiscovery.TopicStageCodeToPhaseID(researchReviewStageCode)), deltaPrompt, deltaCompletion)
+				topicdiscovery.TopicStageCheckpointDetail(phaseID), 0, 0)
 		}
 		return topicStepCompleted
 	}
 	if strings.TrimSpace(step.Status) == topicStepFailed {
 		researchReviewNotify(j, ctx, step, papersvc.TopicStepOutcomeFailed,
-			fmt.Sprintf("Idea Discovery · %s 失败", topicdiscovery.TopicStageCodeToPhaseID(researchReviewStageCode)), deltaPrompt, deltaCompletion)
+			fmt.Sprintf("Idea Discovery · %s 失败", topicdiscovery.TopicStageCodeToPhaseID(researchReviewStageCode)), 0, 0)
 		return topicStepFailed
 	}
 	logger.InfoZ(ctx, "idea-discovery-phases-invoke-tick",
@@ -117,14 +109,7 @@ func (j *IdeaDiscoveryPhasesJob) runResearchReviewTick(ctx context.Context, user
 	}
 	paperRoot := topicdiscovery.ARISRunPaperRoot(uint64(userID), step.ManuscriptID, runVersion)
 	invokeCtx := svc.PhasedBotBuildInvokeContext(ctx, userID, runVersion, step, input)
-	meta := paperstep.LoadStepExtra(step)
 	runID := topicdiscovery.PhasedBotResolveRunID(paperRoot, step, input)
-	meta["aris_run_id"] = runID
-	meta["native_run_id"] = runID
-	meta["idea_discovery_invoke_mode"] = "phased_per_step"
-	meta["phase_id"] = topicdiscovery.TopicStageCodeToPhaseID(researchReviewStageCode)
-	paperstep.PersistStepExtra(step, meta)
-	_ = j.steps.SaveStep(ctx, step)
 	cfg.ClearCLIWorkspaceSessions(paperRoot)
 	if err := topicdiscovery.PrepareNativeIdeaDiscoveryWorkspace(paperRoot, input, invokeCtx.Language, cfg); err != nil {
 		return err
@@ -134,19 +119,10 @@ func (j *IdeaDiscoveryPhasesJob) runResearchReviewTick(ctx context.Context, user
 		return err
 	}
 	req := topicdiscovery.BuildTopicDiscoveryInvokeRequest(topicdiscovery.TopicStageBehaviorKey(researchReviewStageCode), route.CapabilityID, input, invokeCtx)
-	raw, usage, err := svc.PhasedBotInvokeBehavior(ctx, step, req, "")
+	_, _, err = svc.PhasedBotInvokeBehavior(ctx, step, req, "")
 	if err != nil {
 		return svc.PhasedBotHandleInvokeFailure(ctx, step, paperRoot, cfg, err)
 	}
-	meta = paperstep.LoadStepExtra(step)
-	meta["aris_invoke_count"] = topicdiscovery.IdeaDiscoveryInvokeCount(meta) + 1
-	meta["last_phased_invoke"] = topicdiscovery.TopicStageCodeToPhaseID(researchReviewStageCode)
-	meta["last_invoke_preview"] = topicdiscovery.TruncateUTF8(string(raw), 4096)
-	meta["tokens_prompt"] = usage.PromptTokens
-	meta["tokens_completion"] = usage.CompletionTokens
-	delete(meta, "aris_invoke_last_error")
-	delete(meta, "aris_invoke_retries")
-	paperstep.PersistStepExtra(step, meta)
 	return j.advanceResearchReviewAfterInvoke(ctx, step, userID, runVersion, route, paperRoot, runID, cfg)
 }
 
@@ -188,20 +164,6 @@ func researchReviewCompleteStep(j *IdeaDiscoveryPhasesJob, ctx context.Context, 
 	step.ExecProgressPct = 100
 	step.CompletedAt = &now
 	return j.steps.SaveStep(ctx, step)
-}
-
-// researchReviewIntMeta 从 step meta 读取 int（兼容 JSON float64）。
-func researchReviewIntMeta(v any) int {
-	switch t := v.(type) {
-	case float64:
-		return int(t)
-	case int:
-		return t
-	case int64:
-		return int(t)
-	default:
-		return 0
-	}
 }
 
 // researchReviewMarkFailed 落库 failed 并推送失败通知。

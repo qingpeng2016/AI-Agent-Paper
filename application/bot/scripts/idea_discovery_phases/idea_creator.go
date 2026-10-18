@@ -7,7 +7,6 @@ import (
 	"time"
 
 	papersvc "github.com/qingpeng2016/ai-agent-paper/application/core-service/paper"
-	paperstep "github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/step"
 	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/topicdiscovery"
 	"github.com/qingpeng2016/ai-agent-paper/common/dederi/logger"
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
@@ -63,34 +62,27 @@ func (j *IdeaDiscoveryPhasesJob) ideaCreatorPriorCompleted(ctx context.Context, 
 func (j *IdeaDiscoveryPhasesJob) processIdeaCreatorStep(ctx context.Context, step *entity.PaperOutputTopicStep) string {
 	userID := uint(step.UserID)
 	runVersion := step.RunVersion
-	meta := paperstep.LoadStepExtra(step)
-	beforePrompt := ideaCreatorIntMeta(meta["tokens_prompt"])
-	beforeCompletion := ideaCreatorIntMeta(meta["tokens_completion"])
 	if err := j.runIdeaCreatorTick(ctx, userID, runVersion, step); err != nil {
 		if strings.TrimSpace(step.Status) != topicStepFailed {
 			ideaCreatorMarkFailed(j, ctx, step, err.Error(), 0, 0)
 		} else {
-			meta = paperstep.LoadStepExtra(step)
-			ideaCreatorNotify(j, ctx, step, papersvc.TopicStepOutcomeFailed, err.Error(),
-				ideaCreatorIntMeta(meta["tokens_prompt"])-beforePrompt, ideaCreatorIntMeta(meta["tokens_completion"])-beforeCompletion)
+			ideaCreatorNotify(j, ctx, step, papersvc.TopicStepOutcomeFailed, err.Error(), 0, 0)
 		}
 		return topicStepFailed
 	}
-	meta = paperstep.LoadStepExtra(step)
-	deltaPrompt := ideaCreatorIntMeta(meta["tokens_prompt"]) - beforePrompt
-	deltaCompletion := ideaCreatorIntMeta(meta["tokens_completion"]) - beforeCompletion
 	if strings.TrimSpace(step.Status) == topicStepCompleted {
+		phaseID := topicdiscovery.TopicStageCodeToPhaseID(ideaCreatorStageCode)
 		ideaCreatorNotify(j, ctx, step, papersvc.TopicStepOutcomeSuccess,
-			fmt.Sprintf("Idea Discovery · %s 已完成", topicdiscovery.TopicStageCodeToPhaseID(ideaCreatorStageCode)), deltaPrompt, deltaCompletion)
-		if topicdiscovery.TopicStageNeedsUserCheckpoint(topicdiscovery.TopicStageCodeToPhaseID(ideaCreatorStageCode)) {
+			fmt.Sprintf("Idea Discovery · %s 已完成", phaseID), 0, 0)
+		if topicdiscovery.TopicStageNeedsUserCheckpoint(phaseID) {
 			ideaCreatorNotify(j, ctx, step, papersvc.TopicStepOutcomeCheckpoint,
-				topicdiscovery.TopicStageCheckpointDetail(topicdiscovery.TopicStageCodeToPhaseID(ideaCreatorStageCode)), deltaPrompt, deltaCompletion)
+				topicdiscovery.TopicStageCheckpointDetail(phaseID), 0, 0)
 		}
 		return topicStepCompleted
 	}
 	if strings.TrimSpace(step.Status) == topicStepFailed {
 		ideaCreatorNotify(j, ctx, step, papersvc.TopicStepOutcomeFailed,
-			fmt.Sprintf("Idea Discovery · %s 失败", topicdiscovery.TopicStageCodeToPhaseID(ideaCreatorStageCode)), deltaPrompt, deltaCompletion)
+			fmt.Sprintf("Idea Discovery · %s 失败", topicdiscovery.TopicStageCodeToPhaseID(ideaCreatorStageCode)), 0, 0)
 		return topicStepFailed
 	}
 	logger.InfoZ(ctx, "idea-discovery-phases-invoke-tick",
@@ -117,14 +109,7 @@ func (j *IdeaDiscoveryPhasesJob) runIdeaCreatorTick(ctx context.Context, userID 
 	}
 	paperRoot := topicdiscovery.ARISRunPaperRoot(uint64(userID), step.ManuscriptID, runVersion)
 	invokeCtx := svc.PhasedBotBuildInvokeContext(ctx, userID, runVersion, step, input)
-	meta := paperstep.LoadStepExtra(step)
 	runID := topicdiscovery.PhasedBotResolveRunID(paperRoot, step, input)
-	meta["aris_run_id"] = runID
-	meta["native_run_id"] = runID
-	meta["idea_discovery_invoke_mode"] = "phased_per_step"
-	meta["phase_id"] = topicdiscovery.TopicStageCodeToPhaseID(ideaCreatorStageCode)
-	paperstep.PersistStepExtra(step, meta)
-	_ = j.steps.SaveStep(ctx, step)
 	cfg.ClearCLIWorkspaceSessions(paperRoot)
 	if err := topicdiscovery.PrepareNativeIdeaDiscoveryWorkspace(paperRoot, input, invokeCtx.Language, cfg); err != nil {
 		return err
@@ -134,19 +119,10 @@ func (j *IdeaDiscoveryPhasesJob) runIdeaCreatorTick(ctx context.Context, userID 
 		return err
 	}
 	req := topicdiscovery.BuildTopicDiscoveryInvokeRequest(topicdiscovery.TopicStageBehaviorKey(ideaCreatorStageCode), route.CapabilityID, input, invokeCtx)
-	raw, usage, err := svc.PhasedBotInvokeBehavior(ctx, step, req, "")
+	_, _, err = svc.PhasedBotInvokeBehavior(ctx, step, req, "")
 	if err != nil {
 		return svc.PhasedBotHandleInvokeFailure(ctx, step, paperRoot, cfg, err)
 	}
-	meta = paperstep.LoadStepExtra(step)
-	meta["aris_invoke_count"] = topicdiscovery.IdeaDiscoveryInvokeCount(meta) + 1
-	meta["last_phased_invoke"] = topicdiscovery.TopicStageCodeToPhaseID(ideaCreatorStageCode)
-	meta["last_invoke_preview"] = topicdiscovery.TruncateUTF8(string(raw), 4096)
-	meta["tokens_prompt"] = usage.PromptTokens
-	meta["tokens_completion"] = usage.CompletionTokens
-	delete(meta, "aris_invoke_last_error")
-	delete(meta, "aris_invoke_retries")
-	paperstep.PersistStepExtra(step, meta)
 	return j.advanceIdeaCreatorAfterInvoke(ctx, step, userID, runVersion, route, paperRoot, runID, cfg)
 }
 
@@ -188,20 +164,6 @@ func ideaCreatorCompleteStep(j *IdeaDiscoveryPhasesJob, ctx context.Context, ste
 	step.ExecProgressPct = 100
 	step.CompletedAt = &now
 	return j.steps.SaveStep(ctx, step)
-}
-
-// ideaCreatorIntMeta 从 step meta 读取 int（兼容 JSON float64）。
-func ideaCreatorIntMeta(v any) int {
-	switch t := v.(type) {
-	case float64:
-		return int(t)
-	case int:
-		return t
-	case int64:
-		return int(t)
-	default:
-		return 0
-	}
 }
 
 // ideaCreatorMarkFailed 落库 failed 并推送失败通知。
