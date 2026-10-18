@@ -9,6 +9,7 @@ import (
 	"time"
 
 	papersvc "github.com/qingpeng2016/ai-agent-paper/application/core-service/paper"
+	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/lang"
 	"github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/topicdiscovery"
 	"github.com/qingpeng2016/ai-agent-paper/common/dederi/logger"
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
@@ -54,6 +55,22 @@ func (j *IdeaDiscoveryPhasesJob) RunResearchLit(ctx context.Context, step *entit
 	}
 }
 
+// researchLitInvokePayload research_lit 单次 ARIS：StrategyInvokeRequest + CLI 参数字符串（本段所有开关在此显式赋值）。
+type researchLitInvokePayload struct {
+	Req topicdiscovery.StrategyInvokeRequest
+
+	// PlatformArgsLine 写入 .paper/invoke/platform_user_prompt.txt；CLI 为 `/research-lit` + 本行。
+	PlatformArgsLine string
+
+	AutoProceed      bool
+	Resumable        bool
+	Sources          string
+	ArxivDownload    bool
+	ArxivMaxDownload int
+	Venue            string
+	Language         string
+}
+
 // invokeResearchLit 本段固定 ARIS /research-lit，一次 tick 走完四步（只改 step.status，不写 runtime_state/extra 编排字段）。
 func (j *IdeaDiscoveryPhasesJob) invokeResearchLit(ctx context.Context, step *entity.PaperOutputTopicStep, phaseID string) error {
 	userID := uint(step.UserID)
@@ -65,21 +82,27 @@ func (j *IdeaDiscoveryPhasesJob) invokeResearchLit(ctx context.Context, step *en
 	if err != nil {
 		return err
 	}
+	behaviorKey := topicdiscovery.TopicStageBehaviorKey(researchLitStageCode)
+	route, err := svc.PhasedBotRequireRoute(ctx, behaviorKey)
+	if err != nil {
+		return err
+	}
+	locale := svc.PhasedBotBuildInvokeContext(ctx, userID, runVersion, step, input).Language
+	payload := researchLitBuildInvokePayload(step, userID, runVersion, input, route, cfg, locale)
+
 	paperRoot := topicdiscovery.ARISRunPaperRoot(uint64(userID), step.ManuscriptID, runVersion)
-	invokeCtx := svc.PhasedBotBuildInvokeContext(ctx, userID, runVersion, step, input)
 
 	// 1. 准备 workspace：清 CLI session、落 RESEARCH_BRIEF/参数，供 /research-lit 读取。
 	cfg.ClearCLIWorkspaceSessions(paperRoot)
-	if err = topicdiscovery.PrepareNativeIdeaDiscoveryWorkspace(paperRoot, input, invokeCtx.Language, cfg); err != nil {
+	if err = topicdiscovery.PrepareNativeIdeaDiscoveryWorkspace(paperRoot, input, payload.Req.Context.Language, cfg); err != nil {
 		return err
 	}
-	argsLine := cfg.FormatIdeaDiscoveryArgsLine(input, strings.TrimSpace(input.Venue), invokeCtx.Language)
-	if err = topicdiscovery.WriteNativePlatformArguments(paperRoot, argsLine); err != nil {
+	if err = topicdiscovery.WriteNativePlatformArguments(paperRoot, payload.PlatformArgsLine); err != nil {
 		return err
 	}
 
-	// 2. invoke：按 paper_llm_strategy_route 打一次 /research-lit。
-	if err = j.researchLitInvokeBehavior(ctx, step, svc, input, invokeCtx, paperRoot, cfg); err != nil {
+	// 2. invoke：req 与 platform 参数均来自 payload（见 researchLitBuildInvokePayload）。
+	if err = j.researchLitInvokeBehavior(ctx, step, svc, paperRoot, cfg, payload); err != nil {
 		return err
 	}
 
@@ -108,6 +131,114 @@ func (j *IdeaDiscoveryPhasesJob) invokeResearchLit(ctx context.Context, step *en
 	return svc.PhasedBotBeginNextStageAsync(ctx, userID, runVersion, topicdiscovery.NextPhasedTopicStageCode(researchLitStageCode))
 }
 
+// researchLitBuildInvokePayload 在本文件内显式组装 req 与 /research-lit CLI 参数（默认值来自 conf/aris_idea_discovery.yaml，赋值处可见）。
+func researchLitBuildInvokePayload(
+	step *entity.PaperOutputTopicStep,
+	userID uint,
+	runVersion int,
+	input topicdiscovery.TopicRunInput,
+	route *entity.PaperStrategyRoute,
+	cfg topicdiscovery.ARISIdeaDiscoveryConfig,
+	language string,
+) researchLitInvokePayload {
+	behaviorKey := topicdiscovery.TopicStageBehaviorKey(researchLitStageCode)
+
+	/*autoProceed := cfg.Platform.AutoProceed
+	autoProceedCLI := "false"
+	if autoProceed {
+		autoProceedCLI = "true"
+	}*/
+	resumable := true
+	resumableCLI := "true"
+	sources := strings.TrimSpace(cfg.Platform.Sources)
+	if sources == "" {
+		sources = "web"
+	}
+	arxivDownload := cfg.Platform.ArxivDownload
+	arxivDownloadCLI := "false"
+	if arxivDownload {
+		arxivDownloadCLI = "true"
+	}
+	arxivMaxDownload := cfg.Platform.ArxivMaxDownload
+	if arxivMaxDownload <= 0 {
+		arxivMaxDownload = 5
+	}
+	venue := strings.TrimSpace(input.Venue)
+	if venue == "" {
+		venue = "NeurIPS"
+	}
+	language = lang.NormalizeContentLanguage(language)
+	if language == "" {
+		language = "zh"
+	}
+
+	platformArgs := fmt.Sprintf(
+		`%s — venue: %s — RESUMABLE: %s — sources: %s — ARXIV_DOWNLOAD: %s`,
+		researchLitQuotedDirection(input),
+		venue,
+		resumableCLI,
+		sources,
+		arxivDownloadCLI,
+	)
+	if arxivDownload {
+		platformArgs += fmt.Sprintf(` — ARXIV_MAX_DOWNLOAD: %d`, arxivMaxDownload)
+	}
+	platformArgs += fmt.Sprintf(` — language: %s`, language)
+
+	req := topicdiscovery.StrategyInvokeRequest{
+		BehaviorKey:  behaviorKey,
+		CapabilityID: strings.TrimSpace(route.CapabilityID),
+		Context: topicdiscovery.StrategyInvokeContext{
+			ManuscriptID: step.ManuscriptID,
+			UserID:       uint64(userID),
+			RunVersion:   runVersion,
+			Language:     language,
+			Direction:    strings.TrimSpace(input.Direction),
+			Keywords:     input.Keywords,
+			VenueCodes:   input.VenueCodes,
+			VenueLabel:   strings.TrimSpace(input.Venue),
+			Round:        1,
+			MaxRounds:    1,
+		},
+		Options: topicdiscovery.StrategyInvokeOptions{
+			AuditLevelCode:   strings.TrimSpace(input.AuditLevel),
+			IntensityCode:    strings.TrimSpace(input.Intensity),
+			ExecRounds:       input.ExecRounds,
+			MaxIdeas:         input.MaxIdeas,
+			MaxPapers:        input.MaxPapers,
+			SourceCodes:      input.SourceCodes,
+			RandomReferences: input.RandomReferences,
+		},
+	}
+
+	return researchLitInvokePayload{
+		Req:              req,
+		PlatformArgsLine: platformArgs,
+		Resumable:        resumable,
+		Sources:          sources,
+		ArxivDownload:    arxivDownload,
+		ArxivMaxDownload: arxivMaxDownload,
+		Venue:            venue,
+		Language:         language,
+	}
+}
+
+func researchLitQuotedDirection(input topicdiscovery.TopicRunInput) string {
+	inner := strings.TrimSpace(input.Description)
+	if inner == "" {
+		body := strings.TrimSpace(input.Direction)
+		kw := strings.Join(input.Keywords, ", ")
+		kw = strings.TrimSpace(kw)
+		if kw != "" {
+			inner = fmt.Sprintf("研究内容：%s + 关键词：%s", body, kw)
+		} else {
+			inner = body
+		}
+	}
+	inner = strings.ReplaceAll(inner, `"`, `\"`)
+	return `"` + inner + `"`
+}
+
 const researchLitLandscapeFile = "LITERATURE_LANDSCAPE.md"
 
 // researchLitRequireLandscapeMD 校验 ARIS paper 工作区（…/run_N/paper）下存在 LITERATURE_LANDSCAPE.md。
@@ -126,36 +257,16 @@ func researchLitRequireLandscapeMD(paperRoot string) error {
 	return nil
 }
 
-// researchLitInvokeBehavior 查 research_lit 的 strategy route，组装 Invoke 请求并走本地 ARIS CLI 一次。
+// researchLitInvokeBehavior 使用 payload.Req 走本地 ARIS CLI（platform 行已在 payload.PlatformArgsLine）。
 func (j *IdeaDiscoveryPhasesJob) researchLitInvokeBehavior(
 	ctx context.Context,
 	step *entity.PaperOutputTopicStep,
 	svc *papersvc.TopicDiscoveryRunService,
-	input topicdiscovery.TopicRunInput,
-	invokeCtx topicdiscovery.StrategyInvokeContext,
 	paperRoot string,
 	cfg topicdiscovery.ARISIdeaDiscoveryConfig,
+	payload researchLitInvokePayload,
 ) error {
-	behaviorKey := topicdiscovery.TopicStageBehaviorKey(researchLitStageCode)
-	route, err := svc.PhasedBotRequireRoute(ctx, behaviorKey)
-	if err != nil {
-		return err
-	}
-	req := topicdiscovery.StrategyInvokeRequest{
-		BehaviorKey:  behaviorKey,
-		CapabilityID: strings.TrimSpace(route.CapabilityID),
-		Context:      invokeCtx,
-		Options: topicdiscovery.StrategyInvokeOptions{
-			AuditLevelCode:   input.AuditLevel,
-			IntensityCode:    input.Intensity,
-			ExecRounds:       input.ExecRounds,
-			MaxIdeas:         input.MaxIdeas,
-			MaxPapers:        input.MaxPapers,
-			SourceCodes:      input.SourceCodes,
-			RandomReferences: input.RandomReferences,
-		},
-	}
-	_, _, err = svc.PhasedBotInvokeBehavior(ctx, step, req, "")
+	_, _, err := svc.PhasedBotInvokeBehavior(ctx, step, payload.Req, payload.PlatformArgsLine)
 	if err != nil {
 		return svc.PhasedBotHandleInvokeFailure(ctx, step, paperRoot, cfg, err)
 	}
