@@ -75,7 +75,7 @@ func clearCLIWorkspaceSessions(paperRoot string, cleanup IdeaDiscoveryCLISession
 	}
 	clearWorkspaceLocalSessionFiles(paperRoot)
 	if cliSessionNukeAllEnabled() {
-		nukeAllGlobalCLISessionStores(cleanup)
+		nukeAllGlobalCLISessionStores(cleanup, paperRoot)
 	} else {
 		clearGlobalSessionsClaude(paperRoot, expandConfigPath(cleanup.Claude))
 		clearGlobalSessionsCodex(paperRoot, expandConfigPath(cleanup.Codex))
@@ -98,7 +98,7 @@ func cliSessionNukeAllEnabled() bool {
 	}
 }
 
-func nukeAllGlobalCLISessionStores(cleanup IdeaDiscoveryCLISessionCleanup) {
+func nukeAllGlobalCLISessionStores(cleanup IdeaDiscoveryCLISessionCleanup, paperRoot string) {
 	dirs := []string{
 		expandConfigPath(cleanup.Claude),
 		expandConfigPath(cleanup.Codex),
@@ -107,11 +107,64 @@ func nukeAllGlobalCLISessionStores(cleanup IdeaDiscoveryCLISessionCleanup) {
 	}
 	var removed int
 	for _, dir := range dirs {
-		removed += nukeSessionFilesUnder(dir)
+		removed += nukeAllSessionJSONUnder(dir)
 	}
+	removed += nukeClaudeProjectsForPaperRoot(paperRoot)
 	if removed > 0 {
-		logger.InfoZ(context.Background(), "aris-cli-sessions-nuked", zap.Int("files_removed", removed))
+		logger.InfoZ(context.Background(), "aris-cli-sessions-nuked",
+			zap.Int("files_removed", removed),
+			zap.String("paper_root", paperRoot))
 	}
+}
+
+// nukeClaudeProjectsForPaperRoot 删除 ~/.claude/projects 下对应该 paper 工作区的目录（内含 *.jsonl 对话，删 inout 不会清这里）。
+func nukeClaudeProjectsForPaperRoot(paperRoot string) int {
+	projectsRoot := expandConfigPath("~/.claude/projects")
+	st, err := os.Stat(projectsRoot)
+	if err != nil || !st.IsDir() {
+		return 0
+	}
+	slug := claudeProjectDirMatchSlug(paperRoot)
+	if slug == "" {
+		return 0
+	}
+	entries, err := os.ReadDir(projectsRoot)
+	if err != nil {
+		return 0
+	}
+	var n int
+	for _, ent := range entries {
+		if !ent.IsDir() {
+			continue
+		}
+		name := ent.Name()
+		if strings.Contains(name, slug) {
+			if rmErr := os.RemoveAll(filepath.Join(projectsRoot, name)); rmErr == nil {
+				n++
+			}
+		}
+	}
+	return n
+}
+
+// claudeProjectDirMatchSlug 与 Claude Code 对 cwd 的目录编码一致：…/inout/user_1/…/paper → inout-user-1-manuscript-1-run-1-paper
+func claudeProjectDirMatchSlug(paperRoot string) string {
+	slash := filepath.ToSlash(filepath.Clean(strings.TrimSpace(paperRoot)))
+	if i := strings.Index(slash, "/inout/"); i >= 0 {
+		slash = slash[i+len("/inout/"):]
+	}
+	slash = strings.TrimPrefix(slash, "/")
+	if slash == "" {
+		return ""
+	}
+	s := strings.ReplaceAll(slash, "_", "-")
+	s = strings.ReplaceAll(s, "/", "-")
+	return s
+}
+
+// nukeAllSessionJSONUnder 删除目录树下全部 .json（aris/claude 会话文件命名不统一）。
+func nukeAllSessionJSONUnder(root string) int {
+	return nukeSessionFilesUnder(root, true)
 }
 
 func clearWorkspaceLocalSessionFiles(paperRoot string) {
@@ -133,8 +186,8 @@ func clearWorkspaceLocalSessionFiles(paperRoot string) {
 	}
 }
 
-// nukeSessionFilesUnder 删除目录树下所有疑似 session 的 json（不读 cwd 匹配，避免 path 写法不一致导致删不掉）。
-func nukeSessionFilesUnder(root string) int {
+// nukeSessionFilesUnder 删除目录树下 session 相关 json；allJSON 为 true 时删所有 .json/.jsonl。
+func nukeSessionFilesUnder(root string, allJSON bool) int {
 	root = strings.TrimSpace(root)
 	if root == "" {
 		return 0
@@ -149,6 +202,14 @@ func nukeSessionFilesUnder(root string) int {
 			return nil
 		}
 		name := strings.ToLower(d.Name())
+		if allJSON {
+			if strings.HasSuffix(name, ".json") || strings.HasSuffix(name, ".jsonl") {
+				if rmErr := os.Remove(path); rmErr == nil {
+					n++
+				}
+			}
+			return nil
+		}
 		if !strings.HasSuffix(name, ".json") {
 			return nil
 		}

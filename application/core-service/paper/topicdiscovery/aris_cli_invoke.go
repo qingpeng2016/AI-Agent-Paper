@@ -299,6 +299,11 @@ func runARISCLI(ctx context.Context, workspace, prompt string) (stdout, stderr, 
 	cli, args := resolveARISCLIInvocation(prompt)
 	execRecord = formatARISCLIExecCommandStored(workspace, cli, args)
 
+	logger.InfoZ(ctx, "aris-cli-invoke-start",
+		zap.String("workspace", workspace),
+		zap.Int("cli_prompt_bytes", len(prompt)),
+		zap.String("cli", cli))
+
 	env := os.Environ()
 
 	cmd := exec.CommandContext(ctx, cli, args...)

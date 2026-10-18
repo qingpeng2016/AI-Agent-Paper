@@ -52,7 +52,7 @@ func TestNukeAllGlobalCLISessionStores(t *testing.T) {
 		}
 	}
 	cfg := defaultCLISessionCleanup()
-	nukeAllGlobalCLISessionStores(cfg)
+	nukeAllGlobalCLISessionStores(cfg, filepath.Join(home, "inout", "user_1", "manuscript_1", "run_1", "paper"))
 	if _, err := os.Stat(a); !os.IsNotExist(err) {
 		t.Fatal("session-a should be removed when nuke-all enabled")
 	}
