@@ -104,8 +104,8 @@ func (j *IdeaDiscoveryPhasesJob) invokeResearchLit(ctx context.Context, step *en
 		return err
 	}
 
-	// 3. 校验产物：paper 目录下必须有 LITERATURE_LANDSCAPE.md，否则本段 failed。
-	if err = researchLitRequireLandscapeMD(paperRoot); err != nil {
+	// 3. 校验产物：paper 目录下必须有 LITERATURE_REVIEW.md，否则本段 failed。
+	if err = researchLitRequireReviewMD(paperRoot); err != nil {
 		papersvc.FailTopicStep(step, err.Error())
 		if saveErr := j.steps.SaveStep(ctx, step); saveErr != nil {
 			return saveErr
@@ -228,17 +228,17 @@ func researchLitQuotedDirection(input topicdiscovery.TopicRunInput) string {
 	return `"` + inner + `"`
 }
 
-const researchLitLandscapeFile = "LITERATURE_LANDSCAPE.md"
+const researchLitReviewFile = "LITERATURE_REVIEW.md"
 
-// researchLitRequireLandscapeMD 校验 ARIS paper 工作区（…/run_N/paper）下存在 LITERATURE_LANDSCAPE.md。
-func researchLitRequireLandscapeMD(paperRoot string) error {
-	path := filepath.Join(strings.TrimSpace(paperRoot), researchLitLandscapeFile)
+// researchLitRequireReviewMD 校验 ARIS paper 工作区（…/run_N/paper）下存在 LITERATURE_REVIEW.md。
+func researchLitRequireReviewMD(paperRoot string) error {
+	path := filepath.Join(strings.TrimSpace(paperRoot), researchLitReviewFile)
 	st, err := os.Stat(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return fmt.Errorf("Idea Discovery /research-lit 未产出 %s（期望: %s）", researchLitLandscapeFile, path)
+			return fmt.Errorf("Idea Discovery /research-lit 未产出 %s（期望: %s）", researchLitReviewFile, path)
 		}
-		return fmt.Errorf("校验 %s: %w", researchLitLandscapeFile, err)
+		return fmt.Errorf("校验 %s: %w", researchLitReviewFile, err)
 	}
 	if st.IsDir() {
 		return fmt.Errorf("Idea Discovery /research-lit 产物异常: %s 是目录而非文件", path)
