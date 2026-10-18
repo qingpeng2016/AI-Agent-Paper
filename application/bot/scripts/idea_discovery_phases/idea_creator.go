@@ -14,51 +14,27 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	ideaCreatorStageCode   = "idea_creator"
-	ideaCreatorPhaseID     = "idea-creator"
-	ideaCreatorBehaviorKey = "topic.stage.idea_creator"
-	ideaCreatorNextStage   = "novelty_check"
-)
-
-var ideaCreatorPriorStages = []string{"research_lit"}
-
-// RunIdeaCreator 扫 idea_creator running 行，组装 /idea-creator 命令并 invoke ARIS。
-func (j *IdeaDiscoveryPhasesJob) RunIdeaCreator(ctx context.Context) (scanned, invoked, skipped, failed int) {
-	rows, err := j.steps.ListByStatusAndStageOnMaxRunPerManuscript(ctx, "running", ideaCreatorStageCode)
-	if err != nil {
-		logger.ErrorZ(ctx, "idea-discovery-phases-list-failed",
-			zap.String("stage_code", ideaCreatorStageCode), zap.Error(err))
+// RunIdeaCreator 处理 entry 传入的 idea_creator step：组装 /idea-creator 并 invoke ARIS。
+func (j *IdeaDiscoveryPhasesJob) RunIdeaCreator(ctx context.Context, step *entity.PaperOutputTopicStep) (scanned, invoked, skipped, failed int) {
+	if step == nil || strings.TrimSpace(step.Status) != topicStepRunning ||
+		strings.TrimSpace(step.StageCode) != ideaCreatorStageCode {
 		return 0, 0, 0, 0
-	}
-	for i := range rows {
-		if !ideaCreatorQueueStep(&rows[i]) {
-			continue
-		}
-		scanned++
-		switch j.processIdeaCreatorStep(ctx, &rows[i]) {
-		case "completed":
-			invoked++
-		case "failed":
-			failed++
-		default:
-			skipped++
-		}
-	}
-	return scanned, invoked, skipped, failed
-}
-
-// ideaCreatorQueueStep 是否为本段待 bot 处理的 running 行（stage=idea_creator 且 async_llm）。
-func ideaCreatorQueueStep(step *entity.PaperOutputTopicStep) bool {
-	if step == nil || strings.TrimSpace(step.Status) != "running" {
-		return false
-	}
-	if strings.TrimSpace(step.StageCode) != ideaCreatorStageCode {
-		return false
 	}
 	meta := paperstep.LoadStepExtra(step)
 	async, ok := meta["async_llm"].(bool)
-	return ok && async
+	if !ok || !async {
+		return 0, 0, 0, 0
+	}
+	scanned = 1
+	switch j.processIdeaCreatorStep(ctx, step) {
+	case topicStepCompleted:
+		invoked++
+	case topicStepFailed:
+		failed++
+	default:
+		skipped++
+	}
+	return scanned, invoked, skipped, failed
 }
 
 // ideaCreatorPriorCompleted 前序 research_lit 是否均已 completed。
@@ -68,7 +44,7 @@ func (j *IdeaDiscoveryPhasesJob) ideaCreatorPriorCompleted(ctx context.Context, 
 		if err != nil {
 			return false, err
 		}
-		if step == nil || strings.TrimSpace(step.Status) != "completed" {
+		if step == nil || strings.TrimSpace(step.Status) != topicStepCompleted {
 			return false, nil
 		}
 	}
@@ -81,7 +57,7 @@ func (j *IdeaDiscoveryPhasesJob) ideaCreatorPrepareInvoke(ctx context.Context, u
 	if v, ok := meta["async_llm"].(bool); !ok || !v {
 		return false, nil
 	}
-	if strings.TrimSpace(step.Status) != "running" {
+	if strings.TrimSpace(step.Status) != topicStepRunning {
 		delete(meta, "async_llm")
 		paperstep.PersistStepExtra(step, meta)
 		_ = j.steps.SaveStep(ctx, step)
@@ -106,67 +82,67 @@ func (j *IdeaDiscoveryPhasesJob) ideaCreatorPrepareInvoke(ctx context.Context, u
 // processIdeaCreatorStep 处理单条 idea_creator：invoke、通知，返回 completed/failed/skipped。
 func (j *IdeaDiscoveryPhasesJob) processIdeaCreatorStep(ctx context.Context, step *entity.PaperOutputTopicStep) string {
 	if step == nil || j.runs == nil {
-		return "skipped"
+		return topicStepSkipped
 	}
-	if strings.TrimSpace(step.Status) == "failed" {
-		return "skipped"
+	if strings.TrimSpace(step.Status) == topicStepFailed {
+		return topicStepSkipped
 	}
 	if step.ErrorMsg != nil && strings.TrimSpace(*step.ErrorMsg) != "" {
-		if strings.TrimSpace(step.Status) != "failed" {
+		if strings.TrimSpace(step.Status) != topicStepFailed {
 			papersvc.FailTopicStep(step, *step.ErrorMsg)
 			_ = j.steps.SaveStep(ctx, step)
 		}
-		return "skipped"
+		return topicStepSkipped
 	}
 	meta := paperstep.LoadStepExtra(step)
 	if async, ok := meta["async_llm"].(bool); !ok || !async {
-		return "skipped"
+		return topicStepSkipped
 	}
 	userID := uint(step.UserID)
 	runVersion := step.RunVersion
 	invoke, err := j.ideaCreatorPrepareInvoke(ctx, userID, runVersion, step)
 	if err != nil {
 		ideaCreatorMarkFailed(j, ctx, step, err.Error(), 0, 0)
-		return "failed"
+		return topicStepFailed
 	}
 	if !invoke {
-		return "skipped"
+		return topicStepSkipped
 	}
 	meta = paperstep.LoadStepExtra(step)
 	beforePrompt := ideaCreatorIntMeta(meta["tokens_prompt"])
 	beforeCompletion := ideaCreatorIntMeta(meta["tokens_completion"])
 	if err = j.runIdeaCreatorTick(ctx, userID, runVersion, step); err != nil {
-		if strings.TrimSpace(step.Status) != "failed" {
+		if strings.TrimSpace(step.Status) != topicStepFailed {
 			ideaCreatorMarkFailed(j, ctx, step, err.Error(), 0, 0)
 		} else {
 			meta = paperstep.LoadStepExtra(step)
 			ideaCreatorNotify(j, ctx, step, papersvc.TopicStepOutcomeFailed, err.Error(),
 				ideaCreatorIntMeta(meta["tokens_prompt"])-beforePrompt, ideaCreatorIntMeta(meta["tokens_completion"])-beforeCompletion)
 		}
-		return "failed"
+		return topicStepFailed
 	}
 	meta = paperstep.LoadStepExtra(step)
 	deltaPrompt := ideaCreatorIntMeta(meta["tokens_prompt"]) - beforePrompt
 	deltaCompletion := ideaCreatorIntMeta(meta["tokens_completion"]) - beforeCompletion
-	if strings.TrimSpace(step.Status) == "completed" {
+	if strings.TrimSpace(step.Status) == topicStepCompleted {
 		ideaCreatorNotify(j, ctx, step, papersvc.TopicStepOutcomeSuccess,
-			fmt.Sprintf("Idea Discovery · %s 已完成", ideaCreatorPhaseID), deltaPrompt, deltaCompletion)
-		if topicdiscovery.TopicStageNeedsUserCheckpoint(ideaCreatorPhaseID) {
+			fmt.Sprintf("Idea Discovery · %s 已完成", topicdiscovery.TopicStageCodeToPhaseID(ideaCreatorStageCode)), deltaPrompt, deltaCompletion)
+		if topicdiscovery.TopicStageNeedsUserCheckpoint(topicdiscovery.TopicStageCodeToPhaseID(ideaCreatorStageCode)) {
 			ideaCreatorNotify(j, ctx, step, papersvc.TopicStepOutcomeCheckpoint,
-				topicdiscovery.TopicStageCheckpointDetail(ideaCreatorPhaseID), deltaPrompt, deltaCompletion)
+				topicdiscovery.TopicStageCheckpointDetail(topicdiscovery.TopicStageCodeToPhaseID(ideaCreatorStageCode)), deltaPrompt, deltaCompletion)
 		}
-		return "completed"
+		return topicStepCompleted
 	}
-	if strings.TrimSpace(step.Status) == "failed" {
+	if strings.TrimSpace(step.Status) == topicStepFailed {
 		ideaCreatorNotify(j, ctx, step, papersvc.TopicStepOutcomeFailed,
-			fmt.Sprintf("Idea Discovery · %s 失败", ideaCreatorPhaseID), deltaPrompt, deltaCompletion)
-		return "failed"
+			fmt.Sprintf("Idea Discovery · %s 失败", topicdiscovery.TopicStageCodeToPhaseID(ideaCreatorStageCode)), deltaPrompt, deltaCompletion)
+		return topicStepFailed
 	}
 	logger.InfoZ(ctx, "idea-discovery-phases-invoke-tick",
 		zap.Uint64("step_id", step.ID),
 		zap.String("stage_code", ideaCreatorStageCode),
-		zap.String("phase_id", ideaCreatorPhaseID))
-	return "skipped"
+		zap.String("phase_id", topicdiscovery.TopicStageCodeToPhaseID(ideaCreatorStageCode)))
+	return topicStepSkipped
 }
 
 // runIdeaCreatorTick 组装工作区与 /idea-creator 请求，执行一次 ARIS 并写回 step。
@@ -180,7 +156,7 @@ func (j *IdeaDiscoveryPhasesJob) runIdeaCreatorTick(ctx context.Context, userID 
 	}
 	svc := j.runs
 	cfg := topicdiscovery.MustIdeaDiscoveryConfig()
-	route, err := svc.PhasedBotRequireRoute(ctx, ideaCreatorBehaviorKey)
+	route, err := svc.PhasedBotRequireRoute(ctx, topicdiscovery.TopicStageBehaviorKey(ideaCreatorStageCode))
 	if err != nil {
 		return err
 	}
@@ -191,7 +167,7 @@ func (j *IdeaDiscoveryPhasesJob) runIdeaCreatorTick(ctx context.Context, userID 
 	meta["aris_run_id"] = runID
 	meta["native_run_id"] = runID
 	meta["idea_discovery_invoke_mode"] = "phased_per_step"
-	meta["phase_id"] = ideaCreatorPhaseID
+	meta["phase_id"] = topicdiscovery.TopicStageCodeToPhaseID(ideaCreatorStageCode)
 	paperstep.PersistStepExtra(step, meta)
 	_ = j.steps.SaveStep(ctx, step)
 	cfg.ClearCLIWorkspaceSessions(paperRoot)
@@ -202,14 +178,14 @@ func (j *IdeaDiscoveryPhasesJob) runIdeaCreatorTick(ctx context.Context, userID 
 	if err := topicdiscovery.WriteNativePlatformArguments(paperRoot, argsLine); err != nil {
 		return err
 	}
-	req := topicdiscovery.BuildTopicDiscoveryInvokeRequest(ideaCreatorBehaviorKey, route.CapabilityID, input, invokeCtx)
+	req := topicdiscovery.BuildTopicDiscoveryInvokeRequest(topicdiscovery.TopicStageBehaviorKey(ideaCreatorStageCode), route.CapabilityID, input, invokeCtx)
 	raw, usage, err := svc.PhasedBotInvokeBehavior(ctx, step, req, "")
 	if err != nil {
 		return svc.PhasedBotHandleInvokeFailure(ctx, step, paperRoot, cfg, err)
 	}
 	meta = paperstep.LoadStepExtra(step)
 	meta["aris_invoke_count"] = topicdiscovery.IdeaDiscoveryInvokeCount(meta) + 1
-	meta["last_phased_invoke"] = ideaCreatorPhaseID
+	meta["last_phased_invoke"] = topicdiscovery.TopicStageCodeToPhaseID(ideaCreatorStageCode)
 	meta["last_invoke_preview"] = topicdiscovery.TruncateUTF8(string(raw), 4096)
 	meta["tokens_prompt"] = usage.PromptTokens
 	meta["tokens_completion"] = usage.CompletionTokens
@@ -231,28 +207,28 @@ func (j *IdeaDiscoveryPhasesJob) advanceIdeaCreatorAfterInvoke(
 ) error {
 	svc := j.runs
 	meta := paperstep.LoadStepExtra(step)
-	if !topicdiscovery.IdeaDiscoveryPhasedPhaseSucceeded(paperRoot, runID, ideaCreatorPhaseID, cfg) {
+	if !topicdiscovery.IdeaDiscoveryPhasedPhaseSucceeded(paperRoot, runID, topicdiscovery.TopicStageCodeToPhaseID(ideaCreatorStageCode), cfg) {
 		if topicdiscovery.IdeaDiscoveryPhasedBotMayRetryPhase(cfg) {
 			meta["async_llm"] = true
 			paperstep.PersistStepExtra(step, meta)
-			step.Status = "running"
+			step.Status = topicStepRunning
 			return j.steps.SaveStep(ctx, step)
 		}
-		reason := fmt.Sprintf("Idea Discovery 阶段 /%s 未产出约定产物", ideaCreatorPhaseID)
+		reason := fmt.Sprintf("Idea Discovery 阶段 /%s 未产出约定产物", topicdiscovery.TopicStageCodeToPhaseID(ideaCreatorStageCode))
 		return svc.PhasedBotPersistStageFailed(ctx, step, reason)
 	}
 	delete(meta, "async_llm")
 	delete(meta, "awaiting_user_confirm")
 	meta["async_llm_done"] = true
-	meta["aris_pending_phase"] = ideaCreatorPhaseID
+	meta["aris_pending_phase"] = topicdiscovery.TopicStageCodeToPhaseID(ideaCreatorStageCode)
 	paperstep.PersistStepExtra(step, meta)
 	if err := ideaCreatorCompleteStep(j, ctx, step); err != nil {
 		return err
 	}
-	if cfg.PhaseNeedsUserCheckpoint(ideaCreatorPhaseID) {
+	if cfg.PhaseNeedsUserCheckpoint(topicdiscovery.TopicStageCodeToPhaseID(ideaCreatorStageCode)) {
 		return nil
 	}
-	return svc.PhasedBotBeginNextStageAsync(ctx, userID, runVersion, ideaCreatorNextStage)
+	return svc.PhasedBotBeginNextStageAsync(ctx, userID, runVersion, topicdiscovery.NextPhasedTopicStageCode(ideaCreatorStageCode))
 }
 
 // ideaCreatorCompleteStep 将 idea_creator 标为 completed（100%）。
@@ -261,7 +237,7 @@ func ideaCreatorCompleteStep(j *IdeaDiscoveryPhasesJob, ctx context.Context, ste
 		return nil
 	}
 	now := time.Now()
-	step.Status = "completed"
+	step.Status = topicStepCompleted
 	step.ExecProgressPct = 100
 	step.CompletedAt = &now
 	return j.steps.SaveStep(ctx, step)

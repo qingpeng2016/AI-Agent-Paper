@@ -14,49 +14,27 @@ import (
 	"go.uber.org/zap"
 )
 
-const (
-	researchLitStageCode   = "research_lit"
-	researchLitPhaseID     = "research-lit"
-	researchLitBehaviorKey = "topic.stage.research_lit"
-	researchLitNextStage   = "idea_creator"
-)
-
-// RunResearchLit 扫 research_lit running 行，组装 /research-lit 命令并 invoke ARIS。
-func (j *IdeaDiscoveryPhasesJob) RunResearchLit(ctx context.Context) (scanned, invoked, skipped, failed int) {
-	rows, err := j.steps.ListByStatusAndStageOnMaxRunPerManuscript(ctx, "running", researchLitStageCode)
-	if err != nil {
-		logger.ErrorZ(ctx, "idea-discovery-phases-list-failed",
-			zap.String("stage_code", researchLitStageCode), zap.Error(err))
+// RunResearchLit 处理 entry 传入的 research_lit step：组装 /research-lit 并 invoke ARIS。
+func (j *IdeaDiscoveryPhasesJob) RunResearchLit(ctx context.Context, step *entity.PaperOutputTopicStep) (scanned, invoked, skipped, failed int) {
+	if step == nil || strings.TrimSpace(step.Status) != topicStepRunning ||
+		strings.TrimSpace(step.StageCode) != researchLitStageCode {
 		return 0, 0, 0, 0
-	}
-	for i := range rows {
-		if !researchLitQueueStep(&rows[i]) {
-			continue
-		}
-		scanned++
-		switch j.processResearchLitStep(ctx, &rows[i]) {
-		case "completed":
-			invoked++
-		case "failed":
-			failed++
-		default:
-			skipped++
-		}
-	}
-	return scanned, invoked, skipped, failed
-}
-
-// researchLitQueueStep 是否为本段待 bot 处理的 running 行（stage=research_lit 且 async_llm）。
-func researchLitQueueStep(step *entity.PaperOutputTopicStep) bool {
-	if step == nil || strings.TrimSpace(step.Status) != "running" {
-		return false
-	}
-	if strings.TrimSpace(step.StageCode) != researchLitStageCode {
-		return false
 	}
 	meta := paperstep.LoadStepExtra(step)
 	async, ok := meta["async_llm"].(bool)
-	return ok && async
+	if !ok || !async {
+		return 0, 0, 0, 0
+	}
+	scanned = 1
+	switch j.processResearchLitStep(ctx, step) {
+	case topicStepCompleted:
+		invoked++
+	case topicStepFailed:
+		failed++
+	default:
+		skipped++
+	}
+	return scanned, invoked, skipped, failed
 }
 
 // researchLitPrepareInvoke 本 tick 是否允许调 ARIS（async_llm、状态、非人工暂停）。
@@ -65,7 +43,7 @@ func (j *IdeaDiscoveryPhasesJob) researchLitPrepareInvoke(ctx context.Context, u
 	if v, ok := meta["async_llm"].(bool); !ok || !v {
 		return false, nil
 	}
-	if strings.TrimSpace(step.Status) != "running" {
+	if strings.TrimSpace(step.Status) != topicStepRunning {
 		delete(meta, "async_llm")
 		paperstep.PersistStepExtra(step, meta)
 		_ = j.steps.SaveStep(ctx, step)
@@ -80,67 +58,67 @@ func (j *IdeaDiscoveryPhasesJob) researchLitPrepareInvoke(ctx context.Context, u
 // processResearchLitStep 处理单条 research_lit：invoke、通知，返回 completed/failed/skipped。
 func (j *IdeaDiscoveryPhasesJob) processResearchLitStep(ctx context.Context, step *entity.PaperOutputTopicStep) string {
 	if step == nil || j.runs == nil {
-		return "skipped"
+		return topicStepSkipped
 	}
-	if strings.TrimSpace(step.Status) == "failed" {
-		return "skipped"
+	if strings.TrimSpace(step.Status) == topicStepFailed {
+		return topicStepSkipped
 	}
 	if step.ErrorMsg != nil && strings.TrimSpace(*step.ErrorMsg) != "" {
-		if strings.TrimSpace(step.Status) != "failed" {
+		if strings.TrimSpace(step.Status) != topicStepFailed {
 			papersvc.FailTopicStep(step, *step.ErrorMsg)
 			_ = j.steps.SaveStep(ctx, step)
 		}
-		return "skipped"
+		return topicStepSkipped
 	}
 	meta := papersvc.LoadStepExtra(step)
 	if async, ok := meta["async_llm"].(bool); !ok || !async {
-		return "skipped"
+		return topicStepSkipped
 	}
 	userID := uint(step.UserID)
 	runVersion := step.RunVersion
 	invoke, err := j.researchLitPrepareInvoke(ctx, userID, runVersion, step)
 	if err != nil {
 		researchLitMarkFailed(j, ctx, step, err.Error(), 0, 0)
-		return "failed"
+		return topicStepFailed
 	}
 	if !invoke {
-		return "skipped"
+		return topicStepSkipped
 	}
 	meta = papersvc.LoadStepExtra(step)
 	beforePrompt := researchLitIntMeta(meta["tokens_prompt"])
 	beforeCompletion := researchLitIntMeta(meta["tokens_completion"])
 	if err = j.runResearchLitTick(ctx, userID, runVersion, step); err != nil {
-		if strings.TrimSpace(step.Status) != "failed" {
+		if strings.TrimSpace(step.Status) != topicStepFailed {
 			researchLitMarkFailed(j, ctx, step, err.Error(), 0, 0)
 		} else {
 			meta = papersvc.LoadStepExtra(step)
 			researchLitNotify(j, ctx, step, papersvc.TopicStepOutcomeFailed, err.Error(),
 				researchLitIntMeta(meta["tokens_prompt"])-beforePrompt, researchLitIntMeta(meta["tokens_completion"])-beforeCompletion)
 		}
-		return "failed"
+		return topicStepFailed
 	}
 	meta = papersvc.LoadStepExtra(step)
 	deltaPrompt := researchLitIntMeta(meta["tokens_prompt"]) - beforePrompt
 	deltaCompletion := researchLitIntMeta(meta["tokens_completion"]) - beforeCompletion
-	if strings.TrimSpace(step.Status) == "completed" {
+	if strings.TrimSpace(step.Status) == topicStepCompleted {
 		researchLitNotify(j, ctx, step, papersvc.TopicStepOutcomeSuccess,
-			fmt.Sprintf("Idea Discovery · %s 已完成", researchLitPhaseID), deltaPrompt, deltaCompletion)
-		if topicdiscovery.TopicStageNeedsUserCheckpoint(researchLitPhaseID) {
+			fmt.Sprintf("Idea Discovery · %s 已完成", topicdiscovery.TopicStageCodeToPhaseID(researchLitStageCode)), deltaPrompt, deltaCompletion)
+		if topicdiscovery.TopicStageNeedsUserCheckpoint(topicdiscovery.TopicStageCodeToPhaseID(researchLitStageCode)) {
 			researchLitNotify(j, ctx, step, papersvc.TopicStepOutcomeCheckpoint,
-				topicdiscovery.TopicStageCheckpointDetail(researchLitPhaseID), deltaPrompt, deltaCompletion)
+				topicdiscovery.TopicStageCheckpointDetail(topicdiscovery.TopicStageCodeToPhaseID(researchLitStageCode)), deltaPrompt, deltaCompletion)
 		}
-		return "completed"
+		return topicStepCompleted
 	}
-	if strings.TrimSpace(step.Status) == "failed" {
+	if strings.TrimSpace(step.Status) == topicStepFailed {
 		researchLitNotify(j, ctx, step, papersvc.TopicStepOutcomeFailed,
-			fmt.Sprintf("Idea Discovery · %s 失败", researchLitPhaseID), deltaPrompt, deltaCompletion)
-		return "failed"
+			fmt.Sprintf("Idea Discovery · %s 失败", topicdiscovery.TopicStageCodeToPhaseID(researchLitStageCode)), deltaPrompt, deltaCompletion)
+		return topicStepFailed
 	}
 	logger.InfoZ(ctx, "idea-discovery-phases-invoke-tick",
 		zap.Uint64("step_id", step.ID),
 		zap.String("stage_code", researchLitStageCode),
-		zap.String("phase_id", researchLitPhaseID))
-	return "skipped"
+		zap.String("phase_id", topicdiscovery.TopicStageCodeToPhaseID(researchLitStageCode)))
+	return topicStepSkipped
 }
 
 // runResearchLitTick 组装工作区与 /research-lit 请求，执行一次 ARIS 并写回 step。
@@ -154,7 +132,7 @@ func (j *IdeaDiscoveryPhasesJob) runResearchLitTick(ctx context.Context, userID 
 	}
 	svc := j.runs
 	cfg := topicdiscovery.MustIdeaDiscoveryConfig()
-	route, err := svc.PhasedBotRequireRoute(ctx, researchLitBehaviorKey)
+	route, err := svc.PhasedBotRequireRoute(ctx, topicdiscovery.TopicStageBehaviorKey(researchLitStageCode))
 	if err != nil {
 		return err
 	}
@@ -165,7 +143,7 @@ func (j *IdeaDiscoveryPhasesJob) runResearchLitTick(ctx context.Context, userID 
 	meta["aris_run_id"] = runID
 	meta["native_run_id"] = runID
 	meta["idea_discovery_invoke_mode"] = "phased_per_step"
-	meta["phase_id"] = researchLitPhaseID
+	meta["phase_id"] = topicdiscovery.TopicStageCodeToPhaseID(researchLitStageCode)
 	paperstep.PersistStepExtra(step, meta)
 	_ = j.steps.SaveStep(ctx, step)
 	cfg.ClearCLIWorkspaceSessions(paperRoot)
@@ -176,21 +154,21 @@ func (j *IdeaDiscoveryPhasesJob) runResearchLitTick(ctx context.Context, userID 
 	if err := topicdiscovery.WriteNativePlatformArguments(paperRoot, argsLine); err != nil {
 		return err
 	}
-	req := topicdiscovery.BuildTopicDiscoveryInvokeRequest(researchLitBehaviorKey, route.CapabilityID, input, invokeCtx)
+	req := topicdiscovery.BuildTopicDiscoveryInvokeRequest(topicdiscovery.TopicStageBehaviorKey(researchLitStageCode), route.CapabilityID, input, invokeCtx)
 	raw, usage, err := svc.PhasedBotInvokeBehavior(ctx, step, req, "")
 	if err != nil {
 		return svc.PhasedBotHandleInvokeFailure(ctx, step, paperRoot, cfg, err)
 	}
 	meta = paperstep.LoadStepExtra(step)
 	meta["aris_invoke_count"] = topicdiscovery.IdeaDiscoveryInvokeCount(meta) + 1
-	meta["last_phased_invoke"] = researchLitPhaseID
+	meta["last_phased_invoke"] = topicdiscovery.TopicStageCodeToPhaseID(researchLitStageCode)
 	meta["last_invoke_preview"] = topicdiscovery.TruncateUTF8(string(raw), 4096)
 	meta["tokens_prompt"] = usage.PromptTokens
 	meta["tokens_completion"] = usage.CompletionTokens
 	delete(meta, "aris_invoke_last_error")
 	delete(meta, "aris_invoke_retries")
 	paperstep.PersistStepExtra(step, meta)
-	if topicdiscovery.IdeaDiscoveryPhasedPhaseSucceeded(paperRoot, runID, researchLitPhaseID, cfg) {
+	if topicdiscovery.IdeaDiscoveryPhasedPhaseSucceeded(paperRoot, runID, topicdiscovery.TopicStageCodeToPhaseID(researchLitStageCode), cfg) {
 		_ = svc.PhasedBotIngestLiterature(ctx, userID, runVersion, step.ManuscriptID, paperRoot, cfg)
 	}
 	return j.advanceResearchLitAfterInvoke(ctx, step, userID, runVersion, route, paperRoot, runID, cfg)
@@ -208,28 +186,28 @@ func (j *IdeaDiscoveryPhasesJob) advanceResearchLitAfterInvoke(
 ) error {
 	svc := j.runs
 	meta := paperstep.LoadStepExtra(step)
-	if !topicdiscovery.IdeaDiscoveryPhasedPhaseSucceeded(paperRoot, runID, researchLitPhaseID, cfg) {
+	if !topicdiscovery.IdeaDiscoveryPhasedPhaseSucceeded(paperRoot, runID, topicdiscovery.TopicStageCodeToPhaseID(researchLitStageCode), cfg) {
 		if topicdiscovery.IdeaDiscoveryPhasedBotMayRetryPhase(cfg) {
 			meta["async_llm"] = true
 			paperstep.PersistStepExtra(step, meta)
-			step.Status = "running"
+			step.Status = topicStepRunning
 			return j.steps.SaveStep(ctx, step)
 		}
-		reason := fmt.Sprintf("Idea Discovery 阶段 /%s 未产出约定产物", researchLitPhaseID)
+		reason := fmt.Sprintf("Idea Discovery 阶段 /%s 未产出约定产物", topicdiscovery.TopicStageCodeToPhaseID(researchLitStageCode))
 		return svc.PhasedBotPersistStageFailed(ctx, step, reason)
 	}
 	delete(meta, "async_llm")
 	delete(meta, "awaiting_user_confirm")
 	meta["async_llm_done"] = true
-	meta["aris_pending_phase"] = researchLitPhaseID
+	meta["aris_pending_phase"] = topicdiscovery.TopicStageCodeToPhaseID(researchLitStageCode)
 	paperstep.PersistStepExtra(step, meta)
 	if err := researchLitCompleteStep(j, ctx, step); err != nil {
 		return err
 	}
-	if cfg.PhaseNeedsUserCheckpoint(researchLitPhaseID) {
+	if cfg.PhaseNeedsUserCheckpoint(topicdiscovery.TopicStageCodeToPhaseID(researchLitStageCode)) {
 		return nil
 	}
-	return svc.PhasedBotBeginNextStageAsync(ctx, userID, runVersion, researchLitNextStage)
+	return svc.PhasedBotBeginNextStageAsync(ctx, userID, runVersion, topicdiscovery.NextPhasedTopicStageCode(researchLitStageCode))
 }
 
 // researchLitCompleteStep 将 research_lit 标为 completed（100%）。
@@ -238,7 +216,7 @@ func researchLitCompleteStep(j *IdeaDiscoveryPhasesJob, ctx context.Context, ste
 		return nil
 	}
 	now := time.Now()
-	step.Status = "completed"
+	step.Status = topicStepCompleted
 	step.ExecProgressPct = 100
 	step.CompletedAt = &now
 	return j.steps.SaveStep(ctx, step)
