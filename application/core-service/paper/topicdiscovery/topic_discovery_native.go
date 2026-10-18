@@ -65,12 +65,6 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryLLM(
 		return err
 	}
 	argsLine := cfg.FormatIdeaDiscoveryArgsLine(input, strings.TrimSpace(input.Venue), locale)
-	if phaseUserConfirmedForInvoke(meta, pendingPhase) {
-		argsLine += fmt.Sprintf(
-			"\n\n— platform: user confirmed phase %s (runtime_state); complete this pipeline phase in this invoke.",
-			pendingPhase,
-		)
-	}
 	if err := writeNativePlatformArguments(paperRoot, argsLine); err != nil {
 		return err
 	}

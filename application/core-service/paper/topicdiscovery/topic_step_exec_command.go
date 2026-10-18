@@ -3,11 +3,9 @@ package topicdiscovery
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
 )
@@ -18,7 +16,7 @@ func shellSingleQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
 }
 
-// formatARISCLIExecShellLine 可复制的 shell 单行（prompt 为完整参数）。
+// formatARISCLIExecShellLine 可复制的 argv 单行（prompt 为完整参数）。
 func formatARISCLIExecShellLine(cli string, args []string) string {
 	cli = strings.TrimSpace(cli)
 	if cli == "" {
@@ -49,68 +47,65 @@ func formatARISCLIExecShellLine(cli string, args []string) string {
 	return cli + " " + strings.Join(parts, " ")
 }
 
-func buildARISCLIExecEntry(paperRoot, cli string, args []string, prompt string) map[string]any {
-	shellLine := formatARISCLIExecShellLine(cli, args)
-	entry := map[string]any{
-		"invoked_at":    time.Now().UTC().Format(time.RFC3339),
-		"workspace":     filepath.Clean(paperRoot),
-		"command":       shellLine,
-		"exec_command":  shellLine,
+// formatARISCLIExecCommandStored 与 runARISCLI 一致：cmd.Dir=paperRoot + exec(cli, args…)。
+func formatARISCLIExecCommandStored(paperRoot, cli string, args []string) string {
+	line := formatARISCLIExecShellLine(cli, args)
+	root := filepath.Clean(strings.TrimSpace(paperRoot))
+	if root == "" {
+		return line
 	}
-	if p := strings.TrimSpace(prompt); p != "" {
-		entry["prompt"] = p
-		if strings.HasPrefix(p, "/idea-discovery") {
-			entry["behavior"] = "idea-discovery"
-		}
-	}
-	return entry
+	return "cd " + shellSingleQuote(root) + " && " + line
 }
 
-func formatARISCLIExecRecord(paperRoot, cli string, args []string, prompt string) string {
-	entry := buildARISCLIExecEntry(paperRoot, cli, args, prompt)
-	var b strings.Builder
-	_, _ = fmt.Fprintf(&b, "=== ARIS CLI invoke %s ===\n", entry["invoked_at"])
-	_, _ = fmt.Fprintf(&b, "workspace: %s\n", entry["workspace"])
-	_, _ = fmt.Fprintf(&b, "command: %s\n", entry["command"])
-	if p, _ := entry["prompt"].(string); p != "" {
-		_, _ = fmt.Fprintln(&b, "--- prompt ---")
-		_, _ = fmt.Fprintln(&b, p)
-	}
-	return strings.TrimRight(b.String(), "\n") + "\n"
-}
-
-func parseARISExecRecordText(record string) map[string]any {
+func execCommandLineFromPersistRecord(record string) string {
 	record = strings.TrimSpace(record)
 	if record == "" {
-		return nil
+		return ""
 	}
-	entry := map[string]any{}
+	if !strings.HasPrefix(record, "=== ARIS CLI invoke") {
+		return record
+	}
+	var workspace, command string
+	var promptLines []string
+	inPrompt := false
 	for _, line := range strings.Split(record, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "===") || line == "--- prompt ---" {
+		if strings.HasPrefix(line, "=== ARIS CLI invoke") {
 			continue
 		}
 		if strings.HasPrefix(line, "workspace:") {
-			entry["workspace"] = strings.TrimSpace(strings.TrimPrefix(line, "workspace:"))
+			workspace = strings.TrimSpace(strings.TrimPrefix(line, "workspace:"))
+			inPrompt = false
 			continue
 		}
 		if strings.HasPrefix(line, "command:") {
-			cmd := strings.TrimSpace(strings.TrimPrefix(line, "command:"))
-			entry["command"] = cmd
-			entry["exec_command"] = cmd
+			command = strings.TrimSpace(strings.TrimPrefix(line, "command:"))
+			inPrompt = false
 			continue
 		}
-	}
-	if idx := strings.Index(record, "--- prompt ---"); idx >= 0 {
-		prompt := strings.TrimSpace(record[idx+len("--- prompt ---"):])
-		if prompt != "" {
-			entry["prompt"] = prompt
+		if line == "--- prompt ---" {
+			inPrompt = true
+			continue
+		}
+		if inPrompt {
+			promptLines = append(promptLines, line)
 		}
 	}
-	if len(entry) == 0 {
-		entry["raw"] = record
+	command = strings.TrimSpace(command)
+	if command == "" {
+		return ""
 	}
-	return entry
+	// 旧版 record 的 command 行可能未带 shell 引号；有 prompt 段则以 prompt 为准重建。
+	if len(promptLines) > 0 {
+		prompt := strings.TrimSpace(strings.Join(promptLines, "\n"))
+		if prompt != "" {
+			cli, args := resolveARISCLIInvocation(prompt)
+			command = formatARISCLIExecShellLine(cli, args)
+		}
+	}
+	if ws := filepath.Clean(workspace); ws != "" && !strings.HasPrefix(command, "cd ") {
+		return "cd " + shellSingleQuote(ws) + " && " + command
+	}
+	return command
 }
 
 func loadExecCommandRoot(step *entity.PaperOutputTopicStep) map[string]any {
@@ -149,7 +144,6 @@ func stageExecCommandMap(root map[string]any, stageCode string) map[string]any {
 	case map[string]any:
 		return m
 	default:
-		// 兼容 json.Unmarshal 到 map[string]any 时 nested 为 map[string]interface{}
 		b, _ := json.Marshal(m)
 		var out map[string]any
 		if json.Unmarshal(b, &out) == nil && out != nil {
@@ -176,8 +170,9 @@ func nextExecCommandIndex(stageMap map[string]any) string {
 	return strconv.Itoa(maxN + 1)
 }
 
-func appendTopicStepExecCommandEntry(step *entity.PaperOutputTopicStep, entry map[string]any) {
-	if step == nil || len(entry) == 0 {
+func appendTopicStepExecCommandLine(step *entity.PaperOutputTopicStep, commandLine string) {
+	commandLine = strings.TrimSpace(commandLine)
+	if step == nil || commandLine == "" {
 		return
 	}
 	stage := strings.TrimSpace(step.StageCode)
@@ -186,17 +181,17 @@ func appendTopicStepExecCommandEntry(step *entity.PaperOutputTopicStep, entry ma
 	}
 	root := loadExecCommandRoot(step)
 	stageMap := stageExecCommandMap(root, stage)
-	stageMap[nextExecCommandIndex(stageMap)] = entry
+	stageMap[nextExecCommandIndex(stageMap)] = commandLine
 	root[stage] = stageMap
 	saveExecCommandRoot(step, root)
 }
 
 func appendTopicStepExecCommandFromRecord(step *entity.PaperOutputTopicStep, record string) {
-	entry := parseARISExecRecordText(record)
-	if len(entry) == 0 {
+	line := execCommandLineFromPersistRecord(record)
+	if line == "" {
 		return
 	}
-	appendTopicStepExecCommandEntry(step, entry)
+	appendTopicStepExecCommandLine(step, line)
 }
 
 func saveExecCommandRoot(step *entity.PaperOutputTopicStep, root map[string]any) {

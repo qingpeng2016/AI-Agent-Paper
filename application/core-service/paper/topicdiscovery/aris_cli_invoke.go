@@ -256,10 +256,10 @@ func arisCLIExecutable() string {
 	return "aris"
 }
 
-// FormatARISInvokeShellCommand 完整 shell 单行：aris --output-format json prompt '…'。
-func FormatARISInvokeShellCommand(cliPrompt string) string {
+// FormatARISInvokeShellCommand 与 runARISCLI 写入 exec_command 的格式一致（含 cd workspace）。
+func FormatARISInvokeShellCommand(paperRoot, cliPrompt string) string {
 	cli, args := resolveARISCLIInvocation(cliPrompt)
-	return formatARISCLIExecShellLine(cli, args)
+	return formatARISCLIExecCommandStored(paperRoot, cli, args)
 }
 
 func resolveARISCLIInvocation(prompt string) (cli string, args []string) {
@@ -288,7 +288,7 @@ func resolveARISCLIInvocation(prompt string) (cli string, args []string) {
 
 func runARISCLI(ctx context.Context, workspace, prompt string) (stdout, stderr, execRecord string, err error) {
 	cli, args := resolveARISCLIInvocation(prompt)
-	execRecord = formatARISCLIExecRecord(workspace, cli, args, prompt)
+	execRecord = formatARISCLIExecCommandStored(workspace, cli, args)
 
 	env := os.Environ()
 

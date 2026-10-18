@@ -23,8 +23,9 @@ func TestFormatARISInvokeShellCommand_ideaDiscovery(t *testing.T) {
 	}
 	argsLine := cfg.FormatIdeaDiscoveryArgsLine(in, "NeurIPS", "zh")
 	cliPrompt := buildIdeaDiscoveryCLIPrompt(argsLine)
-	line := FormatARISInvokeShellCommand(cliPrompt)
-	if !strings.HasPrefix(line, "aris --output-format json prompt '") {
+	const ws = "/tmp/ws"
+	line := FormatARISInvokeShellCommand(ws, cliPrompt)
+	if !strings.HasPrefix(line, "cd '/tmp/ws' && aris --output-format json prompt '") {
 		t.Fatalf("prefix: %q", line)
 	}
 	for _, sub := range []string{
@@ -41,18 +42,18 @@ func TestFormatARISInvokeShellCommand_ideaDiscovery(t *testing.T) {
 			t.Fatalf("missing %q in %q", sub, line)
 		}
 	}
-	entry := buildARISCLIExecEntry("/tmp/ws", "aris", buildARISNativeCLIArgs(cliPrompt), cliPrompt)
-	if entry["exec_command"] != entry["command"] {
-		t.Fatalf("exec_command mismatch: %#v", entry)
+	stored := formatARISCLIExecCommandStored(ws, "aris", buildARISNativeCLIArgs(cliPrompt))
+	if stored != line {
+		t.Fatalf("stored mismatch:\n%q\n%q", stored, line)
 	}
 }
 
 func TestAppendTopicStepExecCommand_jsonNumbered(t *testing.T) {
 	step := &entity.PaperOutputTopicStep{StageCode: "idea_discovery"}
-	rec1 := formatARISCLIExecRecord("/tmp/ws", "aris", []string{"prompt", "one"}, "one")
-	rec2 := formatARISCLIExecRecord("/tmp/ws", "aris", []string{"prompt", "two"}, "two")
-	appendTopicStepExecCommandFromRecord(step, rec1)
-	appendTopicStepExecCommandFromRecord(step, rec2)
+	line1 := formatARISCLIExecCommandStored("/tmp/ws", "aris", []string{"--output-format", "json", "prompt", "one"})
+	line2 := formatARISCLIExecCommandStored("/tmp/ws", "aris", []string{"--output-format", "json", "prompt", "two"})
+	appendTopicStepExecCommandFromRecord(step, line1)
+	appendTopicStepExecCommandFromRecord(step, line2)
 	if step.ExecCommand == nil {
 		t.Fatal("exec_command nil")
 	}
@@ -64,14 +65,7 @@ func TestAppendTopicStepExecCommand_jsonNumbered(t *testing.T) {
 	if !ok {
 		t.Fatalf("idea_discovery missing: %#v", root)
 	}
-	if stage["1"] == nil || stage["2"] == nil {
-		t.Fatalf("expected keys 1 and 2: %#v", stage)
+	if stage["1"] != line1 || stage["2"] != line2 {
+		t.Fatalf("expected string commands: %#v", stage)
 	}
-}
-
-func deref(s *string) string {
-	if s == nil {
-		return ""
-	}
-	return *s
 }

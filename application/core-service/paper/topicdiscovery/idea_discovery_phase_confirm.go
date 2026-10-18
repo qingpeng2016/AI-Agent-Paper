@@ -112,10 +112,6 @@ func setPhaseStatusInMeta(meta map[string]any, phase, status string) {
 	meta[phase] = normalizeIdeaDiscoveryPhaseStatus(status)
 }
 
-func phaseUserConfirmedForInvoke(meta map[string]any, phase string) bool {
-	return phaseStatusInMeta(meta, phase) == IdeaDiscoveryPhaseExecuting
-}
-
 // IdeaDiscoveryBotMayInvokePending：只读工作区 run_state（ARIS 写入，平台不写）。
 // DB 该 pending 为 executing；无 JSON 则打一次 aris；有 JSON 则该段在 JSON 里未 done 才打 aris。
 func IdeaDiscoveryBotMayInvokePending(meta map[string]any, pendingPhase, paperRoot, runID string) bool {
