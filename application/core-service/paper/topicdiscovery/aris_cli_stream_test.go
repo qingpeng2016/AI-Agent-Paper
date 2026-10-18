@@ -7,6 +7,22 @@ import (
 	"testing"
 )
 
+func TestResolveARISCLIOutputFormat(t *testing.T) {
+	t.Setenv("PAPER_ARIS_CLI_OUTPUT_FORMAT", "")
+	t.Setenv("PAPER_ARIS_CLI_CONSOLE", "1")
+	if resolveARISCLIOutputFormat() != "text" {
+		t.Fatalf("console on should default to text")
+	}
+	t.Setenv("PAPER_ARIS_CLI_CONSOLE", "0")
+	if resolveARISCLIOutputFormat() != "json" {
+		t.Fatalf("console off should default to json")
+	}
+	t.Setenv("PAPER_ARIS_CLI_OUTPUT_FORMAT", "json")
+	if resolveARISCLIOutputFormat() != "json" {
+		t.Fatal("env override json")
+	}
+}
+
 func TestArisCLIConsoleMirrorEnabled_envOverride(t *testing.T) {
 	t.Setenv("PAPER_ARIS_CLI_CONSOLE", "1")
 	if !arisCLIConsoleMirrorEnabled() {

@@ -27,6 +27,23 @@ func arisCLILogEnabled() bool {
 
 // arisCLIConsoleMirrorEnabled 将 ARIS 子进程 stdout/stderr 同步打到当前进程终端（与 json 输出格式无关）。
 // 默认：stderr 为 TTY 时开启（本机 go run --run_bot=true）；PAPER_ARIS_CLI_CONSOLE=1|0 强制开/关。
+// resolveARISCLIOutputFormat aris 仅支持 text|json。json 往往结束时才吐 stdout；终端调试默认 text 以便流式可见。
+// PAPER_ARIS_CLI_OUTPUT_FORMAT=text|json 强制；未设置且 console mirror 开启时用 text，否则 json（适合 nohup/落库）。
+func resolveARISCLIOutputFormat() string {
+	v := strings.TrimSpace(strings.ToLower(os.Getenv("PAPER_ARIS_CLI_OUTPUT_FORMAT")))
+	switch v {
+	case "text", "json":
+		return v
+	case "":
+		if arisCLIConsoleMirrorEnabled() {
+			return "text"
+		}
+		return "json"
+	default:
+		return "json"
+	}
+}
+
 func arisCLIConsoleMirrorEnabled() bool {
 	v := strings.TrimSpace(os.Getenv("PAPER_ARIS_CLI_CONSOLE"))
 	switch {
@@ -112,6 +129,9 @@ func streamARISCLIOutput(ctx context.Context, r io.Reader, stream string, acc *s
 			acc.Write(chunk)
 			if mirror != nil {
 				_, _ = mirror.Write(chunk)
+				if f, ok := mirror.(*os.File); ok {
+					_ = f.Sync()
+				}
 			}
 			pending.Write(chunk)
 			flushARISCLILogLines(ctx, stream, &pending, file)
@@ -194,9 +214,14 @@ func arisCLIRunHeartbeat(ctx context.Context, workspace string) {
 		case <-ticker.C:
 			elapsed := time.Since(start).Round(time.Second)
 			hint := arisCLIWorkspaceArtifactHint(workspace)
+			format := resolveARISCLIOutputFormat()
+			quietHint := "json mode may stay quiet until finish"
+			if format == "text" {
+				quietHint = "if still quiet, ARIS may be thinking or using tools without stdout"
+			}
 			_, _ = fmt.Fprintf(os.Stderr,
-				"[aris] still running (%s) — json mode may stay quiet until finish; watch paper/ files%s\n",
-				elapsed, hint)
+				"[aris] still running (%s) — %s; watch paper/ files%s\n",
+				elapsed, quietHint, hint)
 		}
 	}
 }
