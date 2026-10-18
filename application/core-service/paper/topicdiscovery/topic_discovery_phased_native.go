@@ -97,6 +97,31 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryPhaseLLM(
 	return s.advanceIdeaDiscoveryPhasedAfterInvoke(ctx, step, userID, runVersion, route, paperRoot, runID, phase, cfg)
 }
 
+// advanceResearchLitPhasedWhenDeliverablePresent 补救：已打过 ARIS 且 LITERATURE_LANDSCAPE.md 已落盘，但尚未 advance（例如 bot 重入时 count>=1）。
+func (s *TopicDiscoveryRunService) advanceResearchLitPhasedWhenDeliverablePresent(
+	ctx context.Context,
+	step *entity.PaperOutputTopicStep,
+	userID uint,
+	runVersion int,
+	paperRoot, runID, phase string,
+	cfg ARISIdeaDiscoveryConfig,
+) error {
+	if strings.TrimSpace(phase) != "research-lit" || !researchLitLandscapePresent(paperRoot) {
+		return fmt.Errorf("research-lit deliverable not ready")
+	}
+	stageCode := ideaDiscoveryPhaseIDToStageCode(phase)
+	route, err := s.requireTopicStrategyRoute(ctx, topicStageBehaviorKey(stageCode))
+	if err != nil {
+		return err
+	}
+	meta := paperstep.LoadStepExtra(step)
+	delete(meta, "async_llm")
+	delete(meta, "aris_invoke_last_error")
+	paperstep.PersistStepExtra(step, meta)
+	_, _ = s.ingestARISWorkspaceLiterature(ctx, userID, runVersion, step.ManuscriptID, paperRoot, cfg)
+	return s.advanceIdeaDiscoveryPhasedAfterInvoke(ctx, step, userID, runVersion, route, paperRoot, runID, phase, cfg)
+}
+
 func (s *TopicDiscoveryRunService) advanceIdeaDiscoveryPhasedAfterInvoke(
 	ctx context.Context,
 	step *entity.PaperOutputTopicStep,

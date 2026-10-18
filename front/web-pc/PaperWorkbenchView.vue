@@ -925,6 +925,12 @@ const topicAtHumanPause = computed(() => {
       s.status === 'running',
   )
   if (ideaDiscActive && isAnyIdeaDiscoveryPhaseExecuting(raw?.steps)) return false
+  if (
+    topicArisPhaseRows.value.some((r) => r.status === 'waiting_confirm') &&
+    !isAnyIdeaDiscoveryPhaseExecuting(raw?.steps)
+  ) {
+    return true
+  }
   if (isIdeaDiscoveryArisCheckpoint(raw?.steps, raw?.run_status)) return true
   if (currentTopicRun.value.status === 'checkpoint') {
     if (ideaDiscActive && isAnyIdeaDiscoveryPhaseExecuting(raw?.steps)) return false
@@ -1045,9 +1051,9 @@ const topicShowCheckpointPanel = computed(() => {
     (s) => s.stage_code === 'idea_discovery' || s.stage_code === 'topic_discovery',
   )
   if (ideaDisc) {
-    if (!isIdeaDiscoveryArisCheckpoint(raw?.steps, raw?.run_status)) return false
     if (!topicArisPhaseRows.value.some((r) => r.status === 'waiting_confirm')) return false
-    return topicForm.humanCheckpoint
+    if (isAnyIdeaDiscoveryPhaseExecuting(raw?.steps)) return false
+    return true
   }
   const arisPause = isIdeaDiscoveryArisCheckpoint(raw?.steps, raw?.run_status)
   if (!arisPause) {
@@ -1595,7 +1601,7 @@ function buildTopicRunRequest(action: 'start' | 'continue') {
     source_codes: [...topicForm.sourceCodes],
     intensity: topicForm.intensity,
     audit_level: topicForm.auditLevel,
-    human_checkpoint: false,
+    human_checkpoint: topicForm.humanCheckpoint,
     random_references: topicForm.randomReferences,
     user_literature_ids:
       topicForm.userLiteratureIds.length > 0 ? [...topicForm.userLiteratureIds] : undefined,

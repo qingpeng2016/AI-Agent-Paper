@@ -3,6 +3,7 @@ package topicdiscovery
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	paperstep "github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/step"
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
@@ -57,6 +58,14 @@ func (s *TopicDiscoveryRunService) PrepareIdeaDiscoveryPhasedBotInvoke(
 	}
 
 	if ideaDiscoveryPhasedInvokeCount(meta, phase) >= 1 {
+		if strings.TrimSpace(phase) == "research-lit" && researchLitLandscapePresent(paperRoot) {
+			if err := s.advanceResearchLitPhasedWhenDeliverablePresent(
+				ctx, step, userID, runVersion, paperRoot, runID, phase, cfg,
+			); err != nil {
+				return false, err
+			}
+			return false, nil
+		}
 		reason := ideaDiscoveryPhasedReinvokeFailureReason(paperRoot, phase)
 		if err := s.persistIdeaDiscoveryPhasedStepFailed(ctx, step, reason); err != nil {
 			return false, err
