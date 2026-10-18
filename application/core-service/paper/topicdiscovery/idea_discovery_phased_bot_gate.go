@@ -3,7 +3,6 @@ package topicdiscovery
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	paperstep "github.com/qingpeng2016/ai-agent-paper/application/core-service/paper/step"
 	"github.com/qingpeng2016/ai-agent-paper/domain/persistent/entity"
@@ -58,7 +57,7 @@ func (s *TopicDiscoveryRunService) PrepareIdeaDiscoveryPhasedBotInvoke(
 	}
 
 	if ideaDiscoveryPhasedInvokeCount(meta, phase) >= 1 {
-		reason := fmt.Sprintf("Idea Discovery 阶段 /%s 已执行 ARIS 但未收到 {\"result\":\"success\"}", strings.TrimSpace(phase))
+		reason := ideaDiscoveryPhasedReinvokeFailureReason(paperRoot, phase)
 		if err := s.persistIdeaDiscoveryPhasedStepFailed(ctx, step, reason); err != nil {
 			return false, err
 		}

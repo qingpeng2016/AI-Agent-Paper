@@ -32,6 +32,22 @@ func TestIdeaDiscoveryPhasedPhaseSucceeded_researchLitReport(t *testing.T) {
 	}
 }
 
+func TestIdeaDiscoveryPhasedPhaseInvokeSucceeded_researchLitFile(t *testing.T) {
+	root := t.TempDir()
+	ok, _, err := ideaDiscoveryPhasedPhaseInvokeSucceeded(root, "research-lit", json.RawMessage(`{"result":"success"}`))
+	if err == nil || ok {
+		t.Fatalf("missing file: ok=%v err=%v", ok, err)
+	}
+	path := filepath.Join(root, researchLitLandscapeRel)
+	if err := os.WriteFile(path, []byte("# landscape\n"+string(make([]byte, 80))), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ok, _, err = ideaDiscoveryPhasedPhaseInvokeSucceeded(root, "research-lit", json.RawMessage(`{"ideas":[]}`))
+	if err != nil || !ok {
+		t.Fatalf("with file: ok=%v err=%v", ok, err)
+	}
+}
+
 func TestParseIdeaDiscoveryPhasedInvokeResult(t *testing.T) {
 	ok, _, err := parseIdeaDiscoveryPhasedInvokeResult(json.RawMessage(`{"result":"success"}`))
 	if err != nil || !ok {
@@ -47,10 +63,13 @@ func TestParseIdeaDiscoveryPhasedInvokeResult(t *testing.T) {
 	}
 }
 
-func TestBuildIdeaDiscoveryPhaseCLIPrompt_includesResultHint(t *testing.T) {
+func TestBuildIdeaDiscoveryPhaseCLIPrompt_skillOnly(t *testing.T) {
 	p := buildIdeaDiscoveryPhaseCLIPrompt("research-lit", "FOO: bar", defaultARISIdeaDiscoveryConfig())
-	if !strings.Contains(p, `"result":"success"`) || !strings.Contains(p, `"result":"false"`) {
-		t.Fatalf("prompt missing result JSON hint: %q", p)
+	if p != "/research-lit FOO: bar" {
+		t.Fatalf("prompt: %q", p)
+	}
+	if strings.Contains(p, "AI-Agent-Paper phased invoke") {
+		t.Fatalf("prompt must not append platform JSON hint: %q", p)
 	}
 }
 

@@ -10,14 +10,12 @@ import (
 
 const BehaviorIdeaDiscoveryPhase = "topic.discovery.phase"
 
-// ideaDiscoveryPhasedResultJSONHint 分阶段 bot 以 ARIS 最终 JSON 的 result 字段判成败（不扫工作区文件）。
-const ideaDiscoveryPhasedResultJSONHint = `
+// researchLitLandscapeRel 分阶段 bot：/research-lit 段以该文件为唯一成功产物（paperRoot 下）。
+const researchLitLandscapeRel = "LITERATURE_LANDSCAPE.md"
 
-[AI-Agent-Paper phased invoke]
-When this skill finishes, your final assistant message MUST be exactly one JSON object (no markdown fences):
-- on success: {"result":"success"}
-- on failure: {"result":"false","reason":"brief explanation"}
-Platform treats only this JSON as pass/fail for this phase.`
+func researchLitLandscapePresent(paperRoot string) bool {
+	return workspaceFileMinSize(paperRoot, researchLitLandscapeRel, 64)
+}
 
 // buildIdeaDiscoveryPhaseCLIPrompt 单段 ARIS skill：/research-lit 等 + 平台 args；后续段追加 composed 指向 IDEA_REPORT。
 func buildIdeaDiscoveryPhaseCLIPrompt(phaseID, argsLine string, cfg ARISIdeaDiscoveryConfig) string {
@@ -36,7 +34,7 @@ func buildIdeaDiscoveryPhaseCLIPrompt(phaseID, argsLine string, cfg ARISIdeaDisc
 			line += fmt.Sprintf(` — composed: %s`, composed)
 		}
 	}
-	return line + ideaDiscoveryPhasedResultJSONHint
+	return line
 }
 
 func ideaDiscoveryPhasedStageBehavior(behavior string) bool {
@@ -293,6 +291,25 @@ func ideaDiscoveryPhasedPhaseSucceeded(paperRoot, runID, phase string, cfg ARISI
 func IdeaDiscoveryPhasedBotMayRetryPhase(cfg ARISIdeaDiscoveryConfig) bool {
 	_ = cfg
 	return false
+}
+
+func ideaDiscoveryPhasedReinvokeFailureReason(paperRoot, phase string) string {
+	phase = strings.TrimSpace(phase)
+	if phase == "research-lit" {
+		return fmt.Sprintf("Idea Discovery 阶段 /research-lit 已执行 ARIS 但未产出 %s", researchLitLandscapeRel)
+	}
+	return fmt.Sprintf("Idea Discovery 阶段 /%s 已执行 ARIS 但未收到 {\"result\":\"success\"}", phase)
+}
+
+func ideaDiscoveryPhasedPhaseInvokeSucceeded(paperRoot, phase string, raw json.RawMessage) (ok bool, failReason string, parseErr error) {
+	phase = strings.TrimSpace(phase)
+	if phase == "research-lit" {
+		if researchLitLandscapePresent(paperRoot) {
+			return true, "", nil
+		}
+		return false, "", fmt.Errorf("缺少必需产物 %s", researchLitLandscapeRel)
+	}
+	return parseIdeaDiscoveryPhasedInvokeResult(raw)
 }
 
 // ideaDiscoveryPhasedStepFailureReason 写入 step.error_msg 的文案（CLI 错误或缺产物）。
