@@ -1,7 +1,53 @@
 # research-review.manifest.result.json (Step 4)
 
-Write: `idea-stage/research-review.manifest.result.json`  
-Same keys and nesting as `aris-constraints/research-review.manifest.example.json` (replace example values).
+**Single contract for Step 4.** Wrapper loads **only this `.desc`**. Sibling `research-review.manifest.example.json` = init copy of **Example JSON** below.
+
+## Agent entry
+
+1. Read `RESEARCH_BRIEF.md` and `idea-stage/idea-creator.manifest.result.json` (rank-1 only for review).
+2. Follow **only this `.desc` file** (including **Example JSON**).
+3. Write `idea-stage/research-review.manifest.result.json` and composed §5 per sections below.
+
+## Example JSON (`idea-stage/research-review.manifest.result.json`)
+
+```json
+{
+  "result": "success",
+  "aris_phase": "research-review",
+  "report_path": "idea-stage/IDEA_REPORT.en.md",
+  "zh_report_path": "idea-stage/IDEA_REPORT.zh.md",
+  "focus_rank": 1,
+  "reviewer_model": "gpt-5.4",
+  "reviews": [
+    {
+      "rank": 1,
+      "idea_title": "EXAMPLE: Replace with idea-creator rank-1 title verbatim",
+      "verdict_summary": "One paragraph: overall reviewer stance (major revision / weak accept / reject) and why.",
+      "mock_score": "5/10",
+      "review_points": [
+        "Gap or weakness the reviewer flagged",
+        "Missing experiment or control",
+        "Narrative or contribution clarity issue",
+        "Venue fit note for target journal"
+      ],
+      "strengths": ["Optional strength 1"],
+      "weaknesses": ["Optional weakness 1"],
+      "actionable_items": ["Optional concrete next experiment"],
+      "review_brief_path": "idea-stage/RESEARCH_REVIEW_REQUEST.md",
+      "trace_path": ".aris/traces/research-review/example.jsonl"
+    }
+  ],
+  "finished_at": "2026-10-19T12:00:00Z"
+}
+```
+
+## ARIS runtime (from `research-review.aris.example.sh`)
+
+| Option | Value |
+|--------|--------|
+| skill | `/research-review` |
+| REVIEWER_MODEL | `gpt-5.4` |
+| composed | `idea-stage/IDEA_REPORT.en.md`, `idea-stage/IDEA_REPORT.zh.md` |
 
 ## result
 
@@ -53,7 +99,15 @@ After init, **`idea-stage/` holds the working reports**:
 | `idea-stage/IDEA_REPORT.en.md` | English | **§5** External review |
 | `idea-stage/IDEA_REPORT.zh.md` | Simplified Chinese | **§5** 外部审稿意见 |
 
-**Step 4:** use `aris-constraints/md_template/IDEA_REPORT.en.example.md` and `aris-constraints/md_template/IDEA_REPORT.zh.example.md` to see §5 subsections; write into the matching span in both idea-stage files (from `## External Critical Review` through the `---` before **§6 References**). Replace `[…]` hints with content from `reviews[0]` (rank-1 only). Do not edit other chapters. Do not leave `[…]` placeholders in §5.
+### Edit scope (mandatory)
+
+When editing `idea-stage/IDEA_REPORT.en.md` and `idea-stage/IDEA_REPORT.zh.md`:
+
+- **Only change** Step 4 span **§5** (from `## External Critical Review` / `## 外部审稿意见` through the `---` before §6).
+- **Do not change** anything else: `#` title and intro blurb, `## Table of contents` / `## 目录`, **§1–§4**, **§6**, or any text outside §5.
+- **Do not** delete, reorder, or rewrite headings outside §5; **do not** replace or truncate the whole report file.
+
+**Step 4:** use `aris-constraints/md_template/IDEA_REPORT.en.example.md` and `aris-constraints/md_template/IDEA_REPORT.zh.example.md` to see §5 subsections; write only inside the §5 span in both idea-stage files. Replace `[…]` hints with content from `reviews[0]` (rank-1 only). Do not leave `[…]` placeholders in §5.
 
 For `result=success`, section **§5** contract H2:
 

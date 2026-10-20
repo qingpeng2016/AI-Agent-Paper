@@ -1,7 +1,54 @@
 # novelty-check.manifest.result.json (Step 3)
 
-Write: `idea-stage/novelty-check.manifest.result.json`  
-Same keys and nesting as `aris-constraints/novelty-check.manifest.example.json` (replace example values).
+**Single contract for Step 3.** Wrapper loads **only this `.desc`**. Sibling `novelty-check.manifest.example.json` = init copy of **Example JSON** below.
+
+## Agent entry
+
+1. Read `RESEARCH_BRIEF.md` and `idea-stage/idea-creator.manifest.result.json`.
+2. Follow **only this `.desc` file** (including **Example JSON**).
+3. Write `idea-stage/novelty-check.manifest.result.json` and composed §4 per sections below.
+
+## Example JSON (`idea-stage/novelty-check.manifest.result.json`)
+
+```json
+{
+  "aris_phase": "novelty-check",
+  "result": "success",
+  "report_path": "idea-stage/IDEA_REPORT.en.md",
+  "zh_report_path": "idea-stage/IDEA_REPORT.zh.md",
+  "inputs": {
+    "idea_creator_manifest": "idea-stage/idea-creator.manifest.result.json"
+  },
+  "finished_at": "2026-10-19T12:00:00Z",
+  "checks": [
+    {
+      "idea_id": "idea-1",
+      "rank": 1,
+      "title": "SAME_AS_IDEA_CREATOR_MANIFEST",
+      "score": 7,
+      "recommendation": "PROCEED",
+      "closest_papers": [
+        {
+          "id": "nc-p1",
+          "title": "Example closest paper",
+          "year": 2023,
+          "urls": ["https://doi.org/10.1016/j.example"],
+          "overlap": "What overlaps",
+          "delta": "What remains different"
+        }
+      ]
+    }
+  ]
+}
+```
+
+## ARIS runtime (from `novelty-check.aris.example.sh`)
+
+| Option | Value |
+|--------|--------|
+| skill | `/novelty-check` |
+| REVIEWER_MODEL | `gpt-5.4` |
+| composed | `idea-stage/IDEA_REPORT.en.md`, `idea-stage/IDEA_REPORT.zh.md` |
 
 ## result
 
@@ -58,7 +105,15 @@ After init, **`idea-stage/` holds the working reports**:
 | `idea-stage/IDEA_REPORT.en.md` | English | **§4** Novelty check |
 | `idea-stage/IDEA_REPORT.zh.md` | Simplified Chinese | **§4** 新颖性评估 |
 
-**Step 3:** use `aris-constraints/md_template/IDEA_REPORT.en.example.md` and `aris-constraints/md_template/IDEA_REPORT.zh.example.md` to see §4 subsections; write into the matching span in both idea-stage files (from `## Novelty Verification` through the `---` before `## External Critical Review`). Replace `[…]` hints with content from `checks[]` and idea-creator titles. Do not edit other chapters. Do not leave `[…]` placeholders in §4.
+### Edit scope (mandatory)
+
+When editing `idea-stage/IDEA_REPORT.en.md` and `idea-stage/IDEA_REPORT.zh.md`:
+
+- **Only change** Step 3 span **§4** (from `## Novelty Verification` / `## 新颖性评估` through the `---` before §5).
+- **Do not change** anything else: `#` title and intro blurb, `## Table of contents` / `## 目录`, **§1–§3**, **§5–§6**, or any text outside §4.
+- **Do not** delete, reorder, or rewrite headings outside §4; **do not** replace or truncate the whole report file.
+
+**Step 3:** use `aris-constraints/md_template/IDEA_REPORT.en.example.md` and `aris-constraints/md_template/IDEA_REPORT.zh.example.md` to see §4 subsections; write only inside the §4 span in both idea-stage files. Replace `[…]` hints with content from `checks[]` and idea-creator titles. Do not leave `[…]` placeholders in §4.
 
 For `result=success`, section **§4** contract H2:
 

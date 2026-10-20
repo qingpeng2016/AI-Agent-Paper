@@ -1,7 +1,65 @@
 # idea-creator.manifest.result.json (Step 2)
 
-Write: `idea-stage/idea-creator.manifest.result.json`  
-Same keys and nesting as `aris-constraints/idea-creator.manifest.example.json` (replace example values).
+**Single contract for Step 2.** Wrapper `idea-creator.aris.example.sh` loads **only this `.desc`**. Sibling `idea-creator.manifest.example.json` = init copy of **Example JSON** below.
+
+## Agent entry
+
+1. Read `RESEARCH_BRIEF.md` and `idea-stage/research-lit.manifest.result.json`.
+2. Follow **only this `.desc` file** (including **Example JSON**).
+3. Write `idea-stage/idea-creator.manifest.result.json` and composed §3 per sections below.
+
+## Example JSON (`idea-stage/idea-creator.manifest.result.json`)
+
+```json
+{
+  "aris_phase": "idea-creator",
+  "result": "success",
+  "report_path": "idea-stage/IDEA_REPORT.en.md",
+  "zh_report_path": "idea-stage/IDEA_REPORT.zh.md",
+  "inputs": {
+    "research_brief": "RESEARCH_BRIEF.md",
+    "prior_research_lit_manifest": "idea-stage/research-lit.manifest.result.json"
+  },
+  "finished_at": "2026-10-19T12:00:00Z",
+  "ideas_evaluated": {
+    "generated": 12,
+    "survived_filtering": 12,
+    "piloted": 0,
+    "recommended": 3
+  },
+  "ideas": [
+    {
+      "id": "idea-1",
+      "rank": 1,
+      "title": "EXACT_TITLE_MUST_MATCH_REPORT",
+      "one_line_pitch": "...",
+      "method_steps": ["step1", "step2", "step3"],
+      "hypothesis": "...",
+      "minimum_experiment": "...",
+      "novelty_claim": "...",
+      "feasibility": "...",
+      "risk": "LOW",
+      "pilot_result": "SKIPPED",
+      "key_papers": ["p15", "p10"]
+    }
+  ]
+}
+```
+
+## ARIS runtime (from `idea-creator.aris.example.sh`)
+
+| Option | Value |
+|--------|--------|
+| skill | `/idea-creator` |
+| paper library | `literature/` |
+| language | `en` |
+| REVIEWER_MODEL | `gpt-5.4` |
+| PILOT_MAX_HOURS | `2` |
+| PILOT_TIMEOUT_HOURS | `3` |
+| MAX_PILOT_IDEAS | `3` |
+| MAX_TOTAL_GPU_HOURS | `8` |
+| OUTPUT_DIR | `idea-stage/` |
+| composed | `idea-stage/IDEA_REPORT.en.md`, `idea-stage/IDEA_REPORT.zh.md` |
 
 ## result
 
@@ -58,7 +116,15 @@ After init, **`idea-stage/` holds the working reports**:
 | `idea-stage/IDEA_REPORT.en.md` | English | **§3** Recommended ideas (all Idea blocks) |
 | `idea-stage/IDEA_REPORT.zh.md` | Simplified Chinese | **§3** 推荐研究方案（同上结构；`### Idea n: title` 与英文一致） |
 
-**Step 2:** use `aris-constraints/md_template/IDEA_REPORT.en.example.md` and `aris-constraints/md_template/IDEA_REPORT.zh.example.md` to see §3 subsections; write into the matching span in both idea-stage files (from `## Recommended Ideas (ranked)` through the `---` before `## Novelty Verification`). Replace `[…]` hints with content from `ideas[]`. Do not edit other chapters. Do not leave `[…]` placeholders in §3.
+### Edit scope (mandatory)
+
+When editing `idea-stage/IDEA_REPORT.en.md` and `idea-stage/IDEA_REPORT.zh.md`:
+
+- **Only change** Step 2 span **§3** (from `## Recommended Ideas (ranked)` / `## 推荐研究方案` through the `---` before §4).
+- **Do not change** anything else: `#` title and intro blurb, `## Table of contents` / `## 目录`, **§1–§2**, **§4–§6**, or any text outside §3.
+- **Do not** delete, reorder, or rewrite headings outside §3; **do not** replace or truncate the whole report file.
+
+**Step 2:** use `aris-constraints/md_template/IDEA_REPORT.en.example.md` and `aris-constraints/md_template/IDEA_REPORT.zh.example.md` to see §3 subsections; write only inside the §3 span in both idea-stage files. Replace `[…]` hints with content from `ideas[]`. Do not leave `[…]` placeholders in §3.
 
 For `result=success`:
 

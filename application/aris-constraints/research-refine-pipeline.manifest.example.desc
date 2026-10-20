@@ -1,6 +1,40 @@
 # research-refine-pipeline.manifest.result.json (Step 5)
 
-Single contract for Step 5 delivery: manifest JSON, `refine-logs/` markdown, and IDEA_REPORT §1 (EN + ZH). Read **`idea-creator.manifest.result.json`** for rank-1 `title`; read **`RESEARCH_BRIEF.md`**, prior step manifests, and **`research-review.manifest.result.json`** for context.
+**Single contract for Step 5.** Wrapper loads **only this `.desc`**. Sibling `research-refine-pipeline.manifest.example.json` = init copy of **Example JSON** below.
+
+## Agent entry
+
+1. Read `RESEARCH_BRIEF.md`, **`idea-creator.manifest.result.json`** (rank-1 `title`), and **`research-review.manifest.result.json`**.
+2. Follow **only this `.desc` file** (including **Example JSON** and deliverable authoring sections).
+3. Write manifest, `refine-logs/` markdown, and composed §1 (EN + ZH) per sections below.
+
+## Example JSON (`idea-stage/research-refine-pipeline.manifest.result.json`)
+
+```json
+{
+  "result": "success",
+  "aris_phase": "research-refine-pipeline",
+  "report_path": "idea-stage/IDEA_REPORT.en.md",
+  "zh_report_path": "idea-stage/IDEA_REPORT.zh.md",
+  "focus_rank": 1,
+  "idea_title": "EXAMPLE: Replace with idea-creator rank-1 title verbatim",
+  "deliverables": {
+    "final_proposal": "refine-logs/FINAL_PROPOSAL.md",
+    "experiment_plan": "refine-logs/EXPERIMENT_PLAN.md",
+    "experiment_tracker": "refine-logs/EXPERIMENT_TRACKER.md",
+    "pipeline_summary": "refine-logs/PIPELINE_SUMMARY.md"
+  },
+  "executive_summary": "One paragraph: chosen direction (rank-1), main contribution, and next experimental milestones.",
+  "finished_at": "2026-10-19T12:00:00Z"
+}
+```
+
+## ARIS runtime (from `research-refine-pipeline.aris.example.sh`)
+
+| Option | Value |
+|--------|--------|
+| skill | `/research-refine-pipeline` |
+| composed | `idea-stage/IDEA_REPORT.en.md`, `idea-stage/IDEA_REPORT.zh.md` |
 
 ## Delivery paths (do not swap)
 
@@ -9,9 +43,6 @@ Single contract for Step 5 delivery: manifest JSON, `refine-logs/` markdown, and
 | **Manifest JSON** | **`idea-stage/research-refine-pipeline.manifest.result.json`** | `refine-logs/research-refine-pipeline.manifest.result.json` or any other folder |
 | Deliverable markdown | `refine-logs/*.md` per table below | do not put manifest here |
 | §1 report body | **`idea-stage/IDEA_REPORT.en.md`** and **`idea-stage/IDEA_REPORT.zh.md`** | not only `refine-logs/` |
-
-Write manifest: **`idea-stage/research-refine-pipeline.manifest.result.json`** (project root–relative).  
-Same keys and nesting as `aris-constraints/research-refine-pipeline.manifest.example.json` (replace example values).
 
 Also write the markdown files at paths listed in `deliverables` (required paths below must exist and be non-empty for `success`).
 
@@ -131,7 +162,15 @@ After init, **`idea-stage/` holds the working reports**:
 | `idea-stage/IDEA_REPORT.en.md` | English | **§1** Executive summary |
 | `idea-stage/IDEA_REPORT.zh.md` | Simplified Chinese | **§1** 执行摘要 |
 
-**Step 5:** write into the matching span in **both** idea-stage files (EN: from `## Executive Summary` through the `---` before `## Literature Landscape`; ZH: from `## 执行摘要` through the `---` before `## 文献综述`). Replace **every** `[…]` hint in §1 (including the `[Step 5:` / `[第 5 步：` paragraph block) using `executive_summary`, rank-1 refinement, and deliverables context. **Do not** remove report title, table of contents, or §2–§6. Do not edit other chapters. Do not leave `[…]` placeholders in §1.
+### Edit scope (mandatory)
+
+When editing `idea-stage/IDEA_REPORT.en.md` and `idea-stage/IDEA_REPORT.zh.md`:
+
+- **Only change** Step 5 span **§1** (EN: from `## Executive Summary` through the `---` before `## Literature Landscape`; ZH: from `## 执行摘要` through the `---` before `## 文献综述`).
+- **Do not change** anything else: `#` title and intro blurb, `## Table of contents` / `## 目录`, **§2–§6**, or any text outside §1.
+- **Do not** delete, reorder, or rewrite headings outside §1; **do not** replace or truncate the whole report file.
+
+**Step 5:** write only inside the §1 span in both idea-stage files. Replace **every** `[…]` hint in §1 (including the `[Step 5:` / `[第 5 步：` paragraph block) using `executive_summary`, rank-1 refinement, and deliverables context. Do not leave `[…]` placeholders in §1.
 
 For `result=success`, section **§1** contract H2:
 

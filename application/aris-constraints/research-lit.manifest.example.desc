@@ -1,7 +1,55 @@
 # research-lit.manifest.result.json (Step 1)
 
-Write: `idea-stage/research-lit.manifest.result.json`  
-Same keys and nesting as `aris-constraints/research-lit.manifest.example.json` (replace example values).
+**Single contract for Step 1** (manifest JSON shape + report rules). The wrapper `bash aris-constraints/research-lit.aris.example.sh` only loads **this `.desc` file**. The sibling `research-lit.manifest.example.json` is an init copy of **Example JSON** below—not a second spec.
+
+## Agent entry
+
+1. Read `RESEARCH_BRIEF.md`.
+2. Follow **only this `.desc` file** (including **Example JSON**).
+3. Write `idea-stage/research-lit.manifest.result.json` and composed report sections per sections below.
+
+## Example JSON (`idea-stage/research-lit.manifest.result.json`)
+
+Replace example values; keep keys and nesting.
+
+```json
+{
+  "aris_phase": "research-lit",
+  "result": "success",
+  "report_path": "idea-stage/IDEA_REPORT.en.md",
+  "zh_report_path": "idea-stage/IDEA_REPORT.zh.md",
+  "finished_at": "2026-10-19T12:00:00Z",
+  "sources_used": ["arxiv", "web", "gemini"],
+  "papers": [
+    {
+      "id": "p1",
+      "title": "Example paper title",
+      "year": 2021,
+      "venue": "NeuroImage",
+      "urls": [
+        "https://arxiv.org/abs/2111.01351",
+        "https://doi.org/10.1016/j.neuroimage.2021.117123"
+      ],
+      "doi": "10.1016/j.neuroimage.2021.117123",
+      "arxiv_id": "2111.01351",
+      "pmid": null,
+      "pdf_path": null
+    }
+  ]
+}
+```
+
+## ARIS runtime (from `research-lit.aris.example.sh`)
+
+| Option | Value |
+|--------|--------|
+| skill | `/research-lit` |
+| language | `en` |
+| paper library | `literature/` |
+| sources | `all`, `gemini` |
+| ARXIV_DOWNLOAD | `false` |
+| ARXIV_MAX_DOWNLOAD | `5` |
+| composed | `idea-stage/IDEA_REPORT.en.md`, `idea-stage/IDEA_REPORT.zh.md` |
 
 ## result
 
@@ -52,7 +100,15 @@ After init, **`idea-stage/` holds the working reports** (same structure as the t
 | `idea-stage/IDEA_REPORT.en.md` | English | **§2** Literature landscape, **§6** References |
 | `idea-stage/IDEA_REPORT.zh.md` | Simplified Chinese | **§2** 文献综述, **§6** 参考文献 |
 
-**Step 1:** use the `aris-constraints/md_template/*.example.md` files to see which subsections belong in §2 and §6; write content into the matching sections in `idea-stage/IDEA_REPORT.en.md` and `idea-stage/IDEA_REPORT.zh.md`. Replace each `[…]` hint with real prose from `papers[]`. Keep headings and contract H2s unchanged; do not edit other chapters. Do not leave `[…]` placeholders in §2 or §6.
+### Edit scope (mandatory)
+
+When editing `idea-stage/IDEA_REPORT.en.md` and `idea-stage/IDEA_REPORT.zh.md`:
+
+- **Only change** Step 1 spans: **§2** (from `## Literature Landscape` / `## 文献综述` through the `---` before §3) and **§6** References / 参考文献 (including `sec-6` block).
+- **Do not change** anything else: `#` title and intro blurb, `## Table of contents` / `## 目录`, **§1**, **§3–§5**, or any text outside §2 and §6.
+- **Do not** delete, reorder, or rewrite headings outside §2/§6; **do not** replace or truncate the whole report file.
+
+**Step 1:** use the `aris-constraints/md_template/*.example.md` files to see which subsections belong in §2 and §6; write content only inside those spans in both idea-stage files. Replace each `[…]` hint with real prose from `papers[]`. Keep contract H2s inside §2/§6 unchanged. Do not leave `[…]` placeholders in §2 or §6.
 
 If files are missing, run `bash aris-constraints/all-init-project.example.sh` — normal workflow assumes init already ran.
 
