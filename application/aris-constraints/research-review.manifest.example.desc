@@ -5,8 +5,11 @@ Same keys and nesting as `aris-constraints/research-review.manifest.example.json
 
 ## result
 
-- `"success"` — all rules below met  
-- `"failed"` — otherwise (still write the file)
+**Delivery only** — not accept/reject outcome. Harsh `verdict_summary`, reject stance, and critical `review_points` are normal; write them in `reviews[0]`, not in `result`.
+
+- `"success"` — use when **all** of: valid JSON; `reviews` length **1** for rank-1 idea; `reviews[0].idea_title` matches idea-creator rank-1 title byte-for-byte; non-empty `verdict_summary` and `review_points`; `IDEA_REPORT.md` includes `## External Critical Review`.
+- `"failed"` — only if Step 4 **could not complete** the contract (e.g. missing review, wrong title, report section not written). Still write the file.
+- **Do not** use `"partial"` or other values.
 
 ## Top-level fields
 

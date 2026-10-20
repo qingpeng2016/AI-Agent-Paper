@@ -5,8 +5,11 @@ Same keys and nesting as `aris-constraints/research-lit.manifest.example.json` (
 
 ## result
 
-- `"success"` — all rules below met  
-- `"failed"` — otherwise (still write the file)
+**Delivery only** — not literature quality or coverage. Put assessment in the report prose, not in `result`.
+
+- `"success"` — use when **all** of: valid JSON; non-empty `papers[]` with required fields per table below; `IDEA_REPORT.md` includes `## Literature Landscape`; each paper’s URL rule in IDEA_REPORT section is met (see below).
+- `"failed"` — only if Step 1 **could not complete** the contract (e.g. empty papers, missing report section). Still write the file.
+- **Do not** use `"partial"` or other values.
 
 ## Top-level fields
 

@@ -5,8 +5,11 @@ Same keys and nesting as `aris-constraints/idea-creator.manifest.example.json` (
 
 ## result
 
-- `"success"` — all rules below met  
-- `"failed"` — otherwise (still write the file)
+**Delivery only** — not whether ideas are good. Weak or risky ideas still go in `ideas[]`; do not downgrade `result` for quality.
+
+- `"success"` — use when **all** of: valid JSON; non-empty `ideas[]` with contiguous ranks 1…N; required fields per table below; `IDEA_REPORT.md` includes `## Recommended Ideas (ranked)` and each `### Idea {rank}: {title}` line matching manifest titles byte-for-byte.
+- `"failed"` — only if Step 2 **could not complete** the contract (e.g. no ideas, missing headings, title mismatch). Still write the file.
+- **Do not** use `"partial"` or other values.
 
 ## Top-level fields
 

@@ -5,8 +5,11 @@ Same keys and nesting as `aris-constraints/novelty-check.manifest.example.json` 
 
 ## result
 
-- `"success"` — all rules below met  
-- `"failed"` — otherwise (still write the file)
+**Delivery only** — not whether ideas are novel. Low scores and `ABANDON` in `checks[]` are normal; put verdicts in `score` / `recommendation`, not in `result`.
+
+- `"success"` — use when **all** of: this file is valid JSON; `checks` has one entry per idea-creator `ideas[]` rank; each `title` matches idea-creator byte-for-byte; `IDEA_REPORT.md` includes `## Novelty Verification` (see below). **Even if every idea gets ABANDON.**
+- `"failed"` — only if Step 3 **could not complete** the contract (e.g. missing checks, wrong titles, report section not written). Still write the file.
+- **Do not** use `"partial"` or other values.
 
 ## Top-level fields
 
