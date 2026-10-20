@@ -1,9 +1,22 @@
 #!/usr/bin/env bash
-# Initialize idea-discovery workspace — run: bash aris-constraints/all-init-project.example.sh [project_root]
-# Default project root: ~/my-paper-new
+# Initialize idea-discovery workspace — run: bash aris-constraints/all-init-project.example.sh <project_name>
+# Example: bash aris-constraints/all-init-project.example.sh my-paper-new  →  ~/my-paper-new
+# Absolute path also allowed: bash aris-constraints/all-init-project.example.sh /data/my-paper-new
 set -euo pipefail
 
-ROOT="${1:-$HOME/my-paper-new}"
+if [[ $# -lt 1 || -z "${1// /}" ]]; then
+  echo "usage: $0 <project_name>" >&2
+  echo "  project_name: directory name under HOME (e.g. my-paper-new) or absolute path" >&2
+  exit 1
+fi
+
+NAME="$1"
+if [[ "$NAME" == /* ]]; then
+  ROOT="$NAME"
+else
+  ROOT="$HOME/$NAME"
+fi
+
 mkdir -p "$ROOT/idea-stage" "$ROOT/refine-logs" "$ROOT/literature" "$ROOT/aris-constraints" "$ROOT/research-wiki"
 
 cat > "$ROOT/RESEARCH_BRIEF.md" <<'EOF'
