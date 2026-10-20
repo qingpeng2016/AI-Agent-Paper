@@ -1,43 +1,62 @@
 #!/usr/bin/env bash
 # Step 2 — from project root: bash aris-constraints/idea-creator.validate.example.sh [root]
+# contract-id: idea-creator-validate-2026-03-20
 set -euo pipefail
 ROOT="${1:-.}"
 cd "$ROOT"
 REPORT="idea-stage/IDEA_REPORT.en.md"
 ZH_REPORT="idea-stage/IDEA_REPORT.zh.md"
 MANIFEST="idea-stage/idea-creator.manifest.result.json"
+CONTRACT_TAG="idea-creator-validate-2026-03-20"
 
-fail_en() { echo "STEP2 FAIL: $*" >&2; exit 1; }
-fail_zh() { echo "STEP2 失败: $*" >&2; exit 1; }
+fail_en() { echo "STEP2 FAIL [$CONTRACT_TAG]: $*" >&2; exit 1; }
+fail_zh() { echo "STEP2 失败 [$CONTRACT_TAG]: $*" >&2; exit 1; }
 
 [[ -f "$REPORT" ]] || fail_en "$REPORT missing"
 [[ -f "$ZH_REPORT" ]] || fail_zh "缺少 $ZH_REPORT"
 [[ -f "$MANIFEST" ]] || fail_en "$MANIFEST missing"
 
-if ! grep -q '^## Recommended Ideas (ranked)' "$REPORT"; then
-  fail_en "$REPORT has no line starting with: ## Recommended Ideas (ranked)"
-fi
-if ! grep -q '^## 推荐研究方案' "$ZH_REPORT"; then
-  if grep -q '^## Recommended Ideas (ranked)' "$ZH_REPORT"; then
-    fail_zh "$ZH_REPORT 请用契约 H2「## 推荐研究方案」，不要仅用英文「## Recommended Ideas (ranked)」"
-  else
-    fail_zh "$ZH_REPORT 缺少以「## 推荐研究方案」开头的行（§3 契约 H2）"
-  fi
-fi
-
 python3 <<'PY'
 import json, sys
 
+CONTRACT = "idea-creator-validate-2026-03-20"
+
 def fail_en(msg):
-    print(f"STEP2 FAIL: {msg}", file=sys.stderr)
+    print(f"STEP2 FAIL [{CONTRACT}]: {msg}", file=sys.stderr)
     sys.exit(1)
 
 def fail_zh(msg):
-    print(f"STEP2 失败: {msg}", file=sys.stderr)
+    print(f"STEP2 失败 [{CONTRACT}]: {msg}", file=sys.stderr)
     sys.exit(1)
 
+def norm_line(line: str) -> str:
+    return line.replace("\r", "").strip().lstrip("\ufeff")
+
+def norm_h2(line: str) -> str:
+    line = norm_line(line)
+    if not line.startswith("##"):
+        return line
+    rest = line[2:].strip()
+    return "## " + rest if rest else "##"
+
+def has_h2(text: str, *headings: str) -> bool:
+    want = set(headings)
+    for line in text.splitlines():
+        if norm_h2(line) in want:
+            return True
+    return False
+
+body = open("idea-stage/IDEA_REPORT.en.md", encoding="utf-8").read()
+body_zh = open("idea-stage/IDEA_REPORT.zh.md", encoding="utf-8").read()
+
+if not has_h2(body, "## Recommended Ideas (ranked)"):
+    fail_en("IDEA_REPORT.en.md 缺少契约 H2「## Recommended Ideas (ranked)」")
+
+if not has_h2(body_zh, "## 推荐研究方案", "## Recommended Ideas (ranked)"):
+    fail_zh("IDEA_REPORT.zh.md 缺少 §3 契约 H2：需要「## 推荐研究方案」或「## Recommended Ideas (ranked)」")
+
 try:
-    m = json.load(open("idea-stage/idea-creator.manifest.result.json"))
+    m = json.load(open("idea-stage/idea-creator.manifest.result.json", encoding="utf-8"))
 except Exception as e:
     fail_en(f"idea-creator.manifest.result.json invalid: {e}")
 
@@ -58,9 +77,6 @@ want = list(range(1, len(ideas) + 1))
 if sorted(ranks) != want:
     fail_en(f"ideas[].rank must be exactly {want}, got {ranks}")
 
-body = open("idea-stage/IDEA_REPORT.en.md").read()
-body_zh = open("idea-stage/IDEA_REPORT.zh.md").read()
-
 def scaffold_leftovers(path, text):
     bad = []
     prefixes = (
@@ -73,9 +89,9 @@ def scaffold_leftovers(path, text):
         "### Idea 3: [Title",
     )
     for line in text.splitlines():
-        s = line.strip()
+        s = norm_line(line)
         if any(s.startswith(p) for p in prefixes):
-            bad.append(f"{path}: scaffold line left: {s[:80]}")
+            bad.append(f"{path}: {s[:80]}")
     return bad
 
 for msg in scaffold_leftovers("IDEA_REPORT.en.md", body):

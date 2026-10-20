@@ -1,48 +1,67 @@
 #!/usr/bin/env bash
 # Step 5 — from project root: bash aris-constraints/research-refine-pipeline.validate.example.sh [root]
+# contract-id: research-refine-pipeline-validate-2026-03-20
 set -euo pipefail
 ROOT="${1:-.}"
 cd "$ROOT"
 REPORT="idea-stage/IDEA_REPORT.en.md"
 ZH_REPORT="idea-stage/IDEA_REPORT.zh.md"
+CONTRACT_TAG="research-refine-pipeline-validate-2026-03-20"
 
-fail_en() { echo "STEP5 FAIL: $*" >&2; exit 1; }
-fail_zh() { echo "STEP5 失败: $*" >&2; exit 1; }
+fail_en() { echo "STEP5 FAIL [$CONTRACT_TAG]: $*" >&2; exit 1; }
+fail_zh() { echo "STEP5 失败 [$CONTRACT_TAG]: $*" >&2; exit 1; }
 
 [[ -f "$REPORT" ]] || fail_en "$REPORT missing"
 [[ -f "$ZH_REPORT" ]] || fail_zh "缺少 $ZH_REPORT"
 [[ -f idea-stage/research-refine-pipeline.manifest.result.json ]] || fail_en "research-refine-pipeline.manifest.result.json missing"
 [[ -f idea-stage/idea-creator.manifest.result.json ]] || fail_en "idea-creator.manifest.result.json missing"
 
-if ! grep -q '^## Executive Summary' "$REPORT"; then
-  fail_en "$REPORT has no line starting with: ## Executive Summary"
-fi
-if ! grep -q '^## 执行摘要' "$ZH_REPORT"; then
-  if grep -q '^## Executive Summary' "$ZH_REPORT"; then
-    fail_zh "$ZH_REPORT 请用契约 H2「## 执行摘要」，不要仅用英文「## Executive Summary」"
-  else
-    fail_zh "$ZH_REPORT 缺少以「## 执行摘要」开头的行（§1 契约 H2）"
-  fi
-fi
-
 python3 <<'PY'
 import json, os, sys
 
+CONTRACT = "research-refine-pipeline-validate-2026-03-20"
+
 def fail_en(msg):
-    print(f"STEP5 FAIL: {msg}", file=sys.stderr)
+    print(f"STEP5 FAIL [{CONTRACT}]: {msg}", file=sys.stderr)
     sys.exit(1)
 
 def fail_zh(msg):
-    print(f"STEP5 失败: {msg}", file=sys.stderr)
+    print(f"STEP5 失败 [{CONTRACT}]: {msg}", file=sys.stderr)
     sys.exit(1)
 
+def norm_line(line: str) -> str:
+    return line.replace("\r", "").strip().lstrip("\ufeff")
+
+def norm_h2(line: str) -> str:
+    line = norm_line(line)
+    if not line.startswith("##"):
+        return line
+    rest = line[2:].strip()
+    return "## " + rest if rest else "##"
+
+def has_h2(text: str, *headings: str) -> bool:
+    want = set(headings)
+    for line in text.splitlines():
+        if norm_h2(line) in want:
+            return True
+    return False
+
+body = open("idea-stage/IDEA_REPORT.en.md", encoding="utf-8").read()
+body_zh = open("idea-stage/IDEA_REPORT.zh.md", encoding="utf-8").read()
+
+if not has_h2(body, "## Executive Summary"):
+    fail_en("IDEA_REPORT.en.md 缺少契约 H2「## Executive Summary」")
+
+if not has_h2(body_zh, "## 执行摘要", "## Executive Summary"):
+    fail_zh("IDEA_REPORT.zh.md 缺少 §1 契约 H2：需要「## 执行摘要」或「## Executive Summary」")
+
 try:
-    ic = json.load(open("idea-stage/idea-creator.manifest.result.json"))
+    ic = json.load(open("idea-stage/idea-creator.manifest.result.json", encoding="utf-8"))
 except Exception as e:
     fail_en(f"idea-creator.manifest.result.json invalid: {e}")
 
 try:
-    rf = json.load(open("idea-stage/research-refine-pipeline.manifest.result.json"))
+    rf = json.load(open("idea-stage/research-refine-pipeline.manifest.result.json", encoding="utf-8"))
 except Exception as e:
     fail_en(f"research-refine-pipeline.manifest.result.json invalid: {e}")
 
@@ -75,9 +94,6 @@ for k in ("final_proposal", "experiment_plan", "experiment_tracker"):
     if os.path.getsize(p) <= 0:
         fail_en(f"deliverables.{k} empty file: {p!r}")
 
-body = open("idea-stage/IDEA_REPORT.en.md").read()
-body_zh = open("idea-stage/IDEA_REPORT.zh.md").read()
-
 def scaffold_leftovers(path, text):
     bad = []
     prefixes = (
@@ -90,9 +106,9 @@ def scaffold_leftovers(path, text):
         "[来自 RESEARCH_BRIEF.md]",
     )
     for line in text.splitlines():
-        s = line.strip()
+        s = norm_line(line)
         if any(s.startswith(p) for p in prefixes):
-            bad.append(f"{path}: scaffold line left: {s[:80]}")
+            bad.append(f"{path}: {s[:80]}")
     return bad
 
 for msg in scaffold_leftovers("IDEA_REPORT.en.md", body):

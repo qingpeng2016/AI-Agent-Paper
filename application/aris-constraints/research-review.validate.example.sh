@@ -1,48 +1,67 @@
 #!/usr/bin/env bash
 # Step 4 — from project root: bash aris-constraints/research-review.validate.example.sh [root]
+# contract-id: research-review-validate-2026-03-20
 set -euo pipefail
 ROOT="${1:-.}"
 cd "$ROOT"
 REPORT="idea-stage/IDEA_REPORT.en.md"
 ZH_REPORT="idea-stage/IDEA_REPORT.zh.md"
+CONTRACT_TAG="research-review-validate-2026-03-20"
 
-fail_en() { echo "STEP4 FAIL: $*" >&2; exit 1; }
-fail_zh() { echo "STEP4 失败: $*" >&2; exit 1; }
+fail_en() { echo "STEP4 FAIL [$CONTRACT_TAG]: $*" >&2; exit 1; }
+fail_zh() { echo "STEP4 失败 [$CONTRACT_TAG]: $*" >&2; exit 1; }
 
 [[ -f "$REPORT" ]] || fail_en "$REPORT missing"
 [[ -f "$ZH_REPORT" ]] || fail_zh "缺少 $ZH_REPORT"
 [[ -f idea-stage/research-review.manifest.result.json ]] || fail_en "research-review.manifest.result.json missing"
 [[ -f idea-stage/idea-creator.manifest.result.json ]] || fail_en "idea-creator.manifest.result.json missing"
 
-if ! grep -q '^## External Critical Review' "$REPORT"; then
-  fail_en "$REPORT has no line starting with: ## External Critical Review"
-fi
-if ! grep -q '^## 外部审稿意见' "$ZH_REPORT"; then
-  if grep -q '^## External Critical Review' "$ZH_REPORT"; then
-    fail_zh "$ZH_REPORT 请用契约 H2「## 外部审稿意见」，不要仅用英文「## External Critical Review」"
-  else
-    fail_zh "$ZH_REPORT 缺少以「## 外部审稿意见」开头的行（§5 契约 H2）"
-  fi
-fi
-
 python3 <<'PY'
 import json, sys
 
+CONTRACT = "research-review-validate-2026-03-20"
+
 def fail_en(msg):
-    print(f"STEP4 FAIL: {msg}", file=sys.stderr)
+    print(f"STEP4 FAIL [{CONTRACT}]: {msg}", file=sys.stderr)
     sys.exit(1)
 
 def fail_zh(msg):
-    print(f"STEP4 失败: {msg}", file=sys.stderr)
+    print(f"STEP4 失败 [{CONTRACT}]: {msg}", file=sys.stderr)
     sys.exit(1)
 
+def norm_line(line: str) -> str:
+    return line.replace("\r", "").strip().lstrip("\ufeff")
+
+def norm_h2(line: str) -> str:
+    line = norm_line(line)
+    if not line.startswith("##"):
+        return line
+    rest = line[2:].strip()
+    return "## " + rest if rest else "##"
+
+def has_h2(text: str, *headings: str) -> bool:
+    want = set(headings)
+    for line in text.splitlines():
+        if norm_h2(line) in want:
+            return True
+    return False
+
+body = open("idea-stage/IDEA_REPORT.en.md", encoding="utf-8").read()
+body_zh = open("idea-stage/IDEA_REPORT.zh.md", encoding="utf-8").read()
+
+if not has_h2(body, "## External Critical Review"):
+    fail_en("IDEA_REPORT.en.md 缺少契约 H2「## External Critical Review」")
+
+if not has_h2(body_zh, "## 外部审稿意见", "## External Critical Review"):
+    fail_zh("IDEA_REPORT.zh.md 缺少 §5 契约 H2：需要「## 外部审稿意见」或「## External Critical Review」")
+
 try:
-    ic = json.load(open("idea-stage/idea-creator.manifest.result.json"))
+    ic = json.load(open("idea-stage/idea-creator.manifest.result.json", encoding="utf-8"))
 except Exception as e:
     fail_en(f"idea-creator.manifest.result.json invalid: {e}")
 
 try:
-    rr = json.load(open("idea-stage/research-review.manifest.result.json"))
+    rr = json.load(open("idea-stage/research-review.manifest.result.json", encoding="utf-8"))
 except Exception as e:
     fail_en(f"research-review.manifest.result.json invalid: {e}")
 
@@ -69,9 +88,6 @@ if rev.get("idea_title") != r1["title"]:
 if not (rev.get("verdict_summary") or "").strip():
     fail_en("reviews[0].verdict_summary empty")
 
-body = open("idea-stage/IDEA_REPORT.en.md").read()
-body_zh = open("idea-stage/IDEA_REPORT.zh.md").read()
-
 def scaffold_leftovers(path, text):
     bad = []
     prefixes = (
@@ -91,9 +107,9 @@ def scaffold_leftovers(path, text):
         "[可操作的修改建议]",
     )
     for line in text.splitlines():
-        s = line.strip()
+        s = norm_line(line)
         if any(s.startswith(p) for p in prefixes):
-            bad.append(f"{path}: scaffold line left: {s[:80]}")
+            bad.append(f"{path}: {s[:80]}")
     return bad
 
 for msg in scaffold_leftovers("IDEA_REPORT.en.md", body):
