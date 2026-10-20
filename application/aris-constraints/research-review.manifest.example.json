@@ -3,7 +3,7 @@
   "aris_phase": "research-review",
   "report_path": "idea-stage/IDEA_REPORT.md",
   "focus_rank": 1,
-  "reviewer_model": "gpt-6-sol",
+  "reviewer_model": "gpt-6-astra",
   "reviews": [
     {
       "rank": 1,
