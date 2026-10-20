@@ -272,18 +272,28 @@ func (s *TopicDiscoveryRunService) finishIdeaDiscoveryAfterGate(
 	paperRoot, runID string,
 	cfg ARISIdeaDiscoveryConfig,
 ) error {
+	platformOK, platformReasons := ValidateIdeaDiscoveryPlatformEvidence(paperRoot, cfg)
 	gate, gateErr := runIdeaDiscoveryEvidenceGate(paperRoot, runID, cfg.Artifacts.IdeaReport)
 	if strings.TrimSpace(gate.ExecRecord) != "" {
 		s.persistTopicStepExecCommand(ctx, step, gate.ExecRecord)
+	}
+	if !platformOK {
+		gate.Passed = false
+		gate.Reasons = append(gate.Reasons, platformReasons...)
+		if gateErr == nil {
+			gateErr = fmt.Errorf("platform evidence gate 未 PASS")
+		}
 	}
 	result := map[string]any{
 		"pipeline":        "aris_idea_discovery_native",
 		"behavior_key":    BehaviorIdeaDiscoveryRun,
 		"capability_id":   route.CapabilityID,
 		"aris_run_id":     runID,
-		"gate_passed":     gate.Passed,
-		"gate_stdout":     gate.Stdout,
-		"gate_blocked":    gate.Reasons,
+		"gate_passed":          gate.Passed,
+		"platform_evidence_ok": platformOK,
+		"platform_evidence":    platformReasons,
+		"gate_stdout":          gate.Stdout,
+		"gate_blocked":         gate.Reasons,
 		"artifact_config": cfg.artifactConfigMap(),
 	}
 	mergeNativeIdeaDiscoveryArtifacts(result, paperRoot, cfg)
@@ -371,6 +381,22 @@ func PrepareNativeIdeaDiscoveryWorkspace(paperRoot string, input topicRunInput, 
 	if err := os.MkdirAll(paperRoot, 0o755); err != nil {
 		return err
 	}
+	for _, rel := range []string{
+		strings.TrimSpace(cfg.Platform.OutputDir),
+		"idea-stage",
+		"refine-logs",
+		"idea-stage/docs",
+		filepath.Dir(strings.TrimSpace(cfg.Artifacts.IdeaReport)),
+		filepath.Dir(strings.TrimSpace(cfg.Artifacts.FinalProposal)),
+	} {
+		rel = strings.Trim(strings.TrimSpace(rel), "/")
+		if rel == "" || rel == "." {
+			continue
+		}
+		if err := os.MkdirAll(filepath.Join(paperRoot, filepath.FromSlash(rel)), 0o755); err != nil {
+			return err
+		}
+	}
 	locale = lang.NormalizeContentLanguage(locale)
 	dir := compactDirectionForPrompt(input)
 	kw := keywordsLine(input)
@@ -385,6 +411,20 @@ func PrepareNativeIdeaDiscoveryWorkspace(paperRoot string, input topicRunInput, 
 	if venue != "" {
 		fmt.Fprintf(&b, "## Target venue\n%s\n\n", venue)
 	}
+	fmt.Fprintf(&b, "## Platform mandatory deliverables (do not skip)\n\n")
+	fmt.Fprintf(&b, "Follow ARIS `/idea-discovery` composed mode. Required files:\n\n")
+	for rel, min := range cfg.normalizedEvidenceGate().MinFileBytes {
+		fmt.Fprintf(&b, "- `%s` (≥ %d bytes)\n", rel, min)
+	}
+	fmt.Fprintf(&b, "\nRequired sections inside `%s` (use Markdown H2; exact heading text):\n\n", cfg.Artifacts.IdeaReport)
+	for _, h := range cfg.normalizedEvidenceGate().ReportHeadings {
+		h = strings.TrimSpace(h)
+		if h == "" {
+			continue
+		}
+		fmt.Fprintf(&b, "- `## %s`\n", h)
+	}
+	fmt.Fprintf(&b, "\nSub-skills MUST use `— composed: %s` where applicable.\n", cfg.Artifacts.IdeaReport)
 	briefRel := strings.TrimSpace(cfg.Artifacts.ResearchBrief)
 	if briefRel == "" {
 		briefRel = "RESEARCH_BRIEF.md"

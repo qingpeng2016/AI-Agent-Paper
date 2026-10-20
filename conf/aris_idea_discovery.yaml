@@ -1,41 +1,37 @@
 # 原生 ARIS /idea-discovery 平台配置（改后需重启 API + bot）
 # artifacts：工作区相对路径，与已安装 ARIS /idea-discovery skill 产物约定一致
-# platform：文献由 /research-lit 拉取；选题 idea_discovery → confirm；bot 按 auto_proceed 暂停或连跑
+# platform：与 skill Constants 对齐，由 FormatIdeaDiscoveryArgsLine 写入 CLI prompt
 
 artifacts:
-  # 主报告；gate 校验、composed 参数、结果汇总均默认指向此文件
   idea_report: idea-stage/IDEA_REPORT.md
-  # refine 阶段最终方案（idea_discovery 完成后读入聚合结果）
   final_proposal: refine-logs/FINAL_PROPOSAL.md
-  # 实验计划 Markdown
   experiment_plan: refine-logs/EXPERIMENT_PLAN.md
-  # 实验跟踪表（仅检查文件是否存在，写入 artifact_paths）
   experiment_tracker: refine-logs/EXPERIMENT_TRACKER.md
-  # 流水线摘要（同上，存在性扫描）
   pipeline_summary: refine-logs/PIPELINE_SUMMARY.md
-  # 调 ARIS 前由平台生成的研究方向 brief
   research_brief: RESEARCH_BRIEF.md
-  # 本地 PDF 库目录名；CLI 会拼 paper library: <paperRoot>/literature
   literature_dir: literature
-  # 语料索引路径（/research-lit 可写入；ingest 时可选读标题/URL）
   corpus_json: .paper/corpus.json
 
-# workspace.inout_root：ARIS 工作区根（其下仍为 user_*/manuscript_*/run_*/paper/）。
-# 必须落在 Git 仓库外：cwd 在 AI-Agent-Paper 仓内时 aris 会索引整仓，首包易 >200k token。
-# 环境变量 PAPER_INOUT_ROOT / PAPER_ARIS_WORK_ROOT 未设置时以本项为准；仍为空则用仓库下 inout/。
-# 目录不存在时 API/bot 加载本配置会自动 mkdir -p（日志 idea-discovery-inout-root-ready）。
+# 平台确定性门禁（Go 在 ARIS gate 之外再验一遍；不替代 idea_discovery_gate.py）
+evidence_gate:
+  min_file_bytes:
+    idea-stage/IDEA_REPORT.md: 2048
+    refine-logs/FINAL_PROPOSAL.md: 512
+    refine-logs/EXPERIMENT_PLAN.md: 512
+    refine-logs/EXPERIMENT_TRACKER.md: 256
+  report_headings:
+    - Literature Landscape
+    - Ranked Ideas
+    - Novelty Verification
+    - External Critical Review
+    - Executive Summary
+
 workspace:
   inout_root: /www/wwwroot/AI-Agent-Paper-runtime/inout
-  # 相对 paperRoot 的平台路径（主根 = …/run_*/paper/）
   invoke_dir: .paper/invoke
-  # Claude/ARIS CLI 流式日志、latest_aris_cli.log、invoke_errors.log
   invoke_logs_dir: .paper/invoke/logs
-  # run 状态 JSON（由 aris /idea-discovery 写入）：{run_state_dir}/{run_id}.json
   run_state_dir: .aris/runs
 
-# /idea-discovery run_state 各 ARIS phase（顺序与 skill 一致）
-# pause：true=该 phase 前后需平台 Continue；false=可与相邻 false 合并为一段 UI 展示
-# label_zh：工作台分段进度等前端展示用中文名
 checkpoint_phases:
   research-lit:
     pause: true
@@ -53,19 +49,24 @@ checkpoint_phases:
     pause: true
     label_zh: 文献综述与实验规划
 
-# 每次 runARISCLI 前：删 paperRoot/.claude/sessions 与 .claude/.codex，并在下列目录删「内容含本 run 路径」的全局 session 文件
 cli_session_cleanup:
   claude: ~/.claude/sessions
   codex: ~/.codex/sessions
 
 platform:
-  # 传给 skill 的 AUTO_PROCEED（与 checkpoint_phases.pause 独立：前者管 skill 内行为，后者管平台段间是否停）
+  # skill AUTO_PROCEED：true=同 turn 连跑；false=每 checkpoint 停 turn（平台 bot 常用 false）
   auto_proceed: false
-  # 传给 skill 的 sources（如 local、web）；web 时由 /research-lit 联网检索
   sources: web
-  # 是否下载 arXiv PDF 到 literature_dir（CLI 参数 ARXIV_DOWNLOAD: true/false）
-  arxiv_download: true
-  # 单次文献阶段最多下载几篇 PDF（CLI 参数 ARXIV_MAX_DOWNLOAD: <N>；仅 arxiv_download: true 时生效）
+  arxiv_download: false
   arxiv_max_download: 5
-  # 每 bot tick 最多 1 次 aris；段内 drain 时 invoke 后保留 async_llm，由下一轮 scheduler 再跑
   max_aris_per_bot: 1
+  pilot_max_hours: 2
+  pilot_timeout_hours: 3
+  max_pilot_ideas: 3
+  max_total_gpu_hours: 8
+  reviewer_model: gpt-6-astra
+  output_dir: idea-stage/
+  compact: false
+  render_html: true
+  ref_paper: ""
+  resumable: true

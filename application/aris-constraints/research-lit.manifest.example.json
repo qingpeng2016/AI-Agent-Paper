@@ -1,0 +1,23 @@
+{
+  "aris_phase": "research-lit",
+  "result": "success",
+  "report_path": "idea-stage/IDEA_REPORT.md",
+  "finished_at": "2026-10-19T12:00:00Z",
+  "sources_used": ["arxiv", "web", "gemini"],
+  "papers": [
+    {
+      "id": "p1",
+      "title": "Example paper title",
+      "year": 2021,
+      "venue": "NeuroImage",
+      "urls": [
+        "https://arxiv.org/abs/2111.01351",
+        "https://doi.org/10.1016/j.neuroimage.2021.117123"
+      ],
+      "doi": "10.1016/j.neuroimage.2021.117123",
+      "arxiv_id": "2111.01351",
+      "pmid": null,
+      "pdf_path": null
+    }
+  ]
+}

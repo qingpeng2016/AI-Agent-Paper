@@ -1,0 +1,43 @@
+# research-lit.manifest.result.json (Step 1)
+
+Write: `idea-stage/research-lit.manifest.result.json`  
+Same keys and nesting as `aris-constraints/research-lit.manifest.example.json` (replace example values).
+
+## result
+
+- `"success"` — all rules below met  
+- `"failed"` — otherwise (still write the file)
+
+## Top-level fields
+
+| Field | Value |
+|-------|--------|
+| aris_phase | `"research-lit"` |
+| report_path | `"idea-stage/IDEA_REPORT.md"` |
+| finished_at | UTC ISO-8601 |
+| sources_used | string array (sources actually used, e.g. `web`, `arxiv`, `gemini`) |
+| papers | array, **length ≥ 8** for `success` |
+
+## papers[] (each entry)
+
+| Field | Required for success |
+|-------|----------------------|
+| id | stable id, e.g. `p1`, `p2`, … |
+| title | non-empty string |
+| year | integer |
+| venue | string (may be empty in edge cases; example shows filled) |
+| urls | string array; **or** satisfy address rule via doi / arxiv_id |
+| doi | string or null |
+| arxiv_id | string or null |
+| pmid | null or string |
+| pdf_path | null or path under project |
+
+**Address rule (each paper):** at least one of: non-empty `urls[]`, non-null `doi`, non-null `arxiv_id`.
+
+## IDEA_REPORT.md (composed)
+
+File: `idea-stage/IDEA_REPORT.md` (same as manifest `report_path`).
+
+For `result=success`, the report MUST include this markdown H2 line exactly:
+
+    ## Literature Landscape

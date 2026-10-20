@@ -1,0 +1,49 @@
+# novelty-check.manifest.result.json (Step 3)
+
+Write: `idea-stage/novelty-check.manifest.result.json`  
+Same keys and nesting as `aris-constraints/novelty-check.manifest.example.json` (replace example values).
+
+## result
+
+- `"success"` — all rules below met  
+- `"failed"` — otherwise (still write the file)
+
+## Top-level fields
+
+| Field | Value |
+|-------|--------|
+| aris_phase | `"novelty-check"` |
+| report_path | `"idea-stage/IDEA_REPORT.md"` |
+| inputs.idea_creator_manifest | `"idea-stage/idea-creator.manifest.result.json"` |
+| finished_at | UTC ISO-8601 |
+| checks | array; **length = number of recommended ideas in idea-creator manifest** (typically **3**) |
+
+## checks[] (one entry per idea rank)
+
+| Field | Required for success |
+|-------|----------------------|
+| idea_id | matches idea-creator `ideas[].id` for same rank |
+| rank | 1, 2, 3, … |
+| title | **byte-for-byte identical** to idea-creator `ideas[].title` for same rank |
+| score | number |
+| recommendation | `PROCEED` \| `PROCEED WITH CAUTION` \| `ABANDON` |
+| closest_papers | array (may be `[]`) |
+
+## closest_papers[] (when non-empty)
+
+| Field | Required |
+|-------|----------|
+| id | string |
+| title | string |
+| year | integer |
+| urls | non-empty string array |
+| overlap | string |
+| delta | string |
+
+## IDEA_REPORT.md (composed)
+
+File: `idea-stage/IDEA_REPORT.md` (same as manifest `report_path`).
+
+For `result=success`, the report MUST include this markdown H2 line exactly:
+
+    ## Novelty Verification

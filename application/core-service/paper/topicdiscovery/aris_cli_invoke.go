@@ -437,7 +437,7 @@ func runLocalStrategyInvoke(ctx context.Context, req StrategyInvokeRequest, plat
 		if err := PrepareNativeIdeaDiscoveryWorkspace(paperRoot, discoveryInput, req.Context.Language, ideaCfg); err != nil {
 			return nil, err
 		}
-		if strings.Contains(behavior, "discovery.run") {
+		if strings.Contains(behavior, "discovery.run") || strings.HasPrefix(behavior, "topic.stage.") {
 			if err := writeIdeaDiscoveryContractFile(paperRoot, ideaCfg); err != nil {
 				return nil, err
 			}

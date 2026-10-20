@@ -1,0 +1,15 @@
+{
+  "result": "success",
+  "aris_phase": "research-refine-pipeline",
+  "report_path": "idea-stage/IDEA_REPORT.md",
+  "focus_rank": 1,
+  "idea_title": "EXAMPLE: Replace with idea-creator rank-1 title verbatim",
+  "deliverables": {
+    "final_proposal": "refine-logs/FINAL_PROPOSAL.md",
+    "experiment_plan": "refine-logs/EXPERIMENT_PLAN.md",
+    "experiment_tracker": "refine-logs/EXPERIMENT_TRACKER.md",
+    "pipeline_summary": "refine-logs/PIPELINE_SUMMARY.md"
+  },
+  "executive_summary": "One paragraph: chosen direction (rank-1), main contribution, and next experimental milestones.",
+  "finished_at": "2026-10-19T12:00:00Z"
+}

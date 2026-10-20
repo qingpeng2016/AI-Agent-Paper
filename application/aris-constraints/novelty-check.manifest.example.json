@@ -1,0 +1,28 @@
+{
+  "aris_phase": "novelty-check",
+  "result": "success",
+  "report_path": "idea-stage/IDEA_REPORT.md",
+  "inputs": {
+    "idea_creator_manifest": "idea-stage/idea-creator.manifest.result.json"
+  },
+  "finished_at": "2026-10-19T12:00:00Z",
+  "checks": [
+    {
+      "idea_id": "idea-1",
+      "rank": 1,
+      "title": "SAME_AS_IDEA_CREATOR_MANIFEST",
+      "score": 7,
+      "recommendation": "PROCEED",
+      "closest_papers": [
+        {
+          "id": "nc-p1",
+          "title": "Example closest paper",
+          "year": 2023,
+          "urls": ["https://doi.org/10.1016/j.example"],
+          "overlap": "What overlaps",
+          "delta": "What remains different"
+        }
+      ]
+    }
+  ]
+}

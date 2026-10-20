@@ -301,13 +301,19 @@ func ideaDiscoveryPhasedReinvokeFailureReason(paperRoot, phase string) string {
 	return fmt.Sprintf("Idea Discovery 阶段 /%s 已执行 ARIS 但未收到 {\"result\":\"success\"}", phase)
 }
 
-func ideaDiscoveryPhasedPhaseInvokeSucceeded(paperRoot, phase string, raw json.RawMessage) (ok bool, failReason string, parseErr error) {
+func ideaDiscoveryPhasedPhaseInvokeSucceeded(paperRoot, phase string, raw json.RawMessage, cfg ARISIdeaDiscoveryConfig) (ok bool, failReason string, parseErr error) {
 	phase = strings.TrimSpace(phase)
 	if phase == "research-lit" {
 		if researchLitLandscapePresent(paperRoot) {
 			return true, "", nil
 		}
-		return false, "", fmt.Errorf("缺少必需产物 %s", researchLitLandscapeRel)
+		if researchLitStandaloneDeliverablesPresent(paperRoot, cfg) {
+			return true, "", nil
+		}
+		if workspaceFileMinSize(paperRoot, cfg.Artifacts.IdeaReport, 256) {
+			return true, "", nil
+		}
+		return false, "", fmt.Errorf("缺少文献阶段产物（composed %s 或兼容 standalone 文件）", cfg.Artifacts.IdeaReport)
 	}
 	return parseIdeaDiscoveryPhasedInvokeResult(raw)
 }

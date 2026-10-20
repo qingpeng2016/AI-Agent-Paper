@@ -1,0 +1,27 @@
+{
+  "result": "success",
+  "aris_phase": "research-review",
+  "report_path": "idea-stage/IDEA_REPORT.md",
+  "focus_rank": 1,
+  "reviewer_model": "gpt-6-sol",
+  "reviews": [
+    {
+      "rank": 1,
+      "idea_title": "EXAMPLE: Replace with idea-creator rank-1 title verbatim",
+      "verdict_summary": "One paragraph: overall reviewer stance (major revision / weak accept / reject) and why.",
+      "mock_score": "5/10",
+      "review_points": [
+        "Gap or weakness the reviewer flagged",
+        "Missing experiment or control",
+        "Narrative or contribution clarity issue",
+        "Venue fit note for target journal"
+      ],
+      "strengths": ["Optional strength 1"],
+      "weaknesses": ["Optional weakness 1"],
+      "actionable_items": ["Optional concrete next experiment"],
+      "review_brief_path": "idea-stage/RESEARCH_REVIEW_REQUEST.md",
+      "trace_path": ".aris/traces/research-review/example.jsonl"
+    }
+  ],
+  "finished_at": "2026-10-19T12:00:00Z"
+}

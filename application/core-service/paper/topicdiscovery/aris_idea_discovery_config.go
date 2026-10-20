@@ -76,11 +76,27 @@ type ideaDiscoveryArtifacts struct {
 }
 
 type ideaDiscoveryPlatform struct {
-	AutoProceed   bool   `yaml:"auto_proceed"`
-	Sources       string `yaml:"sources"`
-	ArxivDownload bool   `yaml:"arxiv_download"`
-	ArxivMaxDownload int `yaml:"arxiv_max_download"`
-	MaxArisPerBot int    `yaml:"max_aris_per_bot"`
+	AutoProceed        bool   `yaml:"auto_proceed"`
+	Sources            string `yaml:"sources"`
+	ArxivDownload      bool   `yaml:"arxiv_download"`
+	ArxivMaxDownload   int    `yaml:"arxiv_max_download"`
+	MaxArisPerBot      int    `yaml:"max_aris_per_bot"`
+	PilotMaxHours      int    `yaml:"pilot_max_hours"`
+	PilotTimeoutHours  int    `yaml:"pilot_timeout_hours"`
+	MaxPilotIdeas      int    `yaml:"max_pilot_ideas"`
+	MaxTotalGPUHours   int    `yaml:"max_total_gpu_hours"`
+	ReviewerModel      string `yaml:"reviewer_model"`
+	OutputDir          string `yaml:"output_dir"`
+	Compact            bool   `yaml:"compact"`
+	RenderHTML         bool   `yaml:"render_html"`
+	RefPaper           string `yaml:"ref_paper"`
+	Resumable          bool   `yaml:"resumable"`
+}
+
+// ideaDiscoveryEvidenceGate 平台侧产物门禁（与 ARIS skill RESUMABLE gate 互补）。
+type ideaDiscoveryEvidenceGate struct {
+	MinFileBytes   map[string]int64 `yaml:"min_file_bytes"`
+	ReportHeadings []string         `yaml:"report_headings"`
 }
 
 type ideaDiscoveryWorkspace struct {
@@ -101,6 +117,7 @@ type ARISIdeaDiscoveryConfig struct {
 	CheckpointPhases   map[string]IdeaDiscoveryCheckpointPhase `yaml:"checkpoint_phases"`
 	CLISessionCleanup  IdeaDiscoveryCLISessionCleanup          `yaml:"cli_session_cleanup"`
 	Platform           ideaDiscoveryPlatform                   `yaml:"platform"`
+	EvidenceGate       ideaDiscoveryEvidenceGate               `yaml:"evidence_gate"`
 }
 
 var (
@@ -220,12 +237,23 @@ func defaultARISIdeaDiscoveryConfig() ARISIdeaDiscoveryConfig {
 		CheckpointPhases:  defaultIdeaDiscoveryCheckpointPhases(),
 		CLISessionCleanup: defaultCLISessionCleanup(),
 		Platform: ideaDiscoveryPlatform{
-			AutoProceed:      false,
-			Sources:          "web",
-			ArxivDownload:    true,
-			ArxivMaxDownload: 5,
-			MaxArisPerBot:    1,
+			AutoProceed:       false,
+			Sources:           "web",
+			ArxivDownload:     true,
+			ArxivMaxDownload:  5,
+			MaxArisPerBot:     1,
+			PilotMaxHours:     2,
+			PilotTimeoutHours: 3,
+			MaxPilotIdeas:     3,
+			MaxTotalGPUHours:  8,
+			ReviewerModel:     "gpt-6-astra",
+			OutputDir:         "idea-stage/",
+			Compact:           false,
+			RenderHTML:        true,
+			RefPaper:          "",
+			Resumable:         true,
 		},
+		EvidenceGate: defaultIdeaDiscoveryEvidenceGate(ARISIdeaDiscoveryConfig{Artifacts: defaultIdeaDiscoveryArtifacts()}),
 	}
 }
 
@@ -371,6 +399,25 @@ func normalizeIdeaDiscoveryConfig(c *ARISIdeaDiscoveryConfig) {
 	if c.Platform.ArxivMaxDownload <= 0 {
 		c.Platform.ArxivMaxDownload = defaultARISIdeaDiscoveryConfig().Platform.ArxivMaxDownload
 	}
+	pdef := defaultARISIdeaDiscoveryConfig().Platform
+	if c.Platform.PilotMaxHours <= 0 {
+		c.Platform.PilotMaxHours = pdef.PilotMaxHours
+	}
+	if c.Platform.PilotTimeoutHours <= 0 {
+		c.Platform.PilotTimeoutHours = pdef.PilotTimeoutHours
+	}
+	if c.Platform.MaxPilotIdeas <= 0 {
+		c.Platform.MaxPilotIdeas = pdef.MaxPilotIdeas
+	}
+	if c.Platform.MaxTotalGPUHours <= 0 {
+		c.Platform.MaxTotalGPUHours = pdef.MaxTotalGPUHours
+	}
+	if strings.TrimSpace(c.Platform.ReviewerModel) == "" {
+		c.Platform.ReviewerModel = pdef.ReviewerModel
+	}
+	if strings.TrimSpace(c.Platform.OutputDir) == "" {
+		c.Platform.OutputDir = pdef.OutputDir
+	}
 	c.CheckpointPhases = normalizeIdeaDiscoveryCheckpointPhases(c.CheckpointPhases)
 	normalizeCLISessionCleanup(&c.CLISessionCleanup)
 	// 启动时创建 workspace.inout_root（含 /www/.../AI-Agent-Paper-runtime/inout），无需手工 mkdir。
@@ -439,18 +486,30 @@ func ideaDiscoveryQuotedDirection(input topicRunInput) string {
 	return `"` + inner + `"`
 }
 
-// FormatIdeaDiscoveryArgsLine 只含约定开关（禁止追加 composed / paper library / render html / resume 等）：
-// "…" — venue — AUTO_PROCEED — RESUMABLE — sources — ARXIV_DOWNLOAD [— ARXIV_MAX_DOWNLOAD 仅 download=true] — language
+// FormatIdeaDiscoveryArgsLine 与 ARIS /idea-discovery skill Constants 对齐（composed 仍由 skill 内传给子 skill，不在此重复）。
 func (c ARISIdeaDiscoveryConfig) FormatIdeaDiscoveryArgsLine(input topicRunInput, venue, language string) string {
+	p := c.Platform
 	ap := "false"
-	if c.Platform.AutoProceed {
+	if p.AutoProceed {
 		ap = "true"
 	}
+	resumable := "false"
+	if p.Resumable {
+		resumable = "true"
+	}
 	arxivDL := "false"
-	if c.Platform.ArxivDownload {
+	if p.ArxivDownload {
 		arxivDL = "true"
 	}
-	src := strings.TrimSpace(c.Platform.Sources)
+	compact := "false"
+	if p.Compact {
+		compact = "true"
+	}
+	renderHTML := "false"
+	if p.RenderHTML {
+		renderHTML = "true"
+	}
+	src := strings.TrimSpace(p.Sources)
 	if src == "" {
 		src = "web"
 	}
@@ -465,20 +524,40 @@ func (c ARISIdeaDiscoveryConfig) FormatIdeaDiscoveryArgsLine(input topicRunInput
 	if venue == "" {
 		venue = "NeurIPS"
 	}
+	outDir := strings.TrimSpace(p.OutputDir)
+	if outDir == "" {
+		outDir = "idea-stage/"
+	}
+	reviewer := strings.TrimSpace(p.ReviewerModel)
+	if reviewer == "" {
+		reviewer = "gpt-6-astra"
+	}
 	line := fmt.Sprintf(
-		`%s — venue: %s — AUTO_PROCEED: %s — RESUMABLE: true — sources: %s — ARXIV_DOWNLOAD: %s`,
+		`%s — venue: %s — AUTO_PROCEED: %s — RESUMABLE: %s — sources: %s — ARXIV_DOWNLOAD: %s — COMPACT: %s — RENDER_HTML: %s — OUTPUT_DIR: %s — REVIEWER_MODEL: %s — PILOT_MAX_HOURS: %d — PILOT_TIMEOUT_HOURS: %d — MAX_PILOT_IDEAS: %d — MAX_TOTAL_GPU_HOURS: %d`,
 		ideaDiscoveryQuotedDirection(input),
 		venue,
 		ap,
+		resumable,
 		src,
 		arxivDL,
+		compact,
+		renderHTML,
+		outDir,
+		reviewer,
+		p.PilotMaxHours,
+		p.PilotTimeoutHours,
+		p.MaxPilotIdeas,
+		p.MaxTotalGPUHours,
 	)
-	if c.Platform.ArxivDownload {
-		maxDL := c.Platform.ArxivMaxDownload
+	if p.ArxivDownload {
+		maxDL := p.ArxivMaxDownload
 		if maxDL <= 0 {
 			maxDL = 5
 		}
 		line += fmt.Sprintf(` — ARXIV_MAX_DOWNLOAD: %d`, maxDL)
+	}
+	if ref := strings.TrimSpace(p.RefPaper); ref != "" && !strings.EqualFold(ref, "false") {
+		line += fmt.Sprintf(` — REF_PAPER: %s`, ref)
 	}
 	line += fmt.Sprintf(` — language: %s`, loc)
 	return line

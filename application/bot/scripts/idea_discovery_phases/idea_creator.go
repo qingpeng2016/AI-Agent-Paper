@@ -3,6 +3,7 @@ package ideadiscoveryphases
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -83,10 +84,6 @@ func (j *IdeaDiscoveryPhasesJob) ideaCreatorPriorCompleted(ctx context.Context, 
 type ideaCreatorInvokePayload struct {
 	Req              topicdiscovery.StrategyInvokeRequest
 	PlatformArgsLine string
-	Sources          string
-	ArxivDownload    bool
-	ArxivMaxDownload int
-	Venue            string
 	Language         string
 }
 
@@ -106,10 +103,9 @@ func (j *IdeaDiscoveryPhasesJob) invokeIdeaCreator(ctx context.Context, step *en
 	if err != nil {
 		return err
 	}
-	locale := svc.PhasedBotBuildInvokeContext(ctx, userID, runVersion, step, input).Language
-	payload := ideaCreatorBuildInvokePayload(step, userID, runVersion, input, route, cfg, locale)
-
 	paperRoot := topicdiscovery.ARISRunPaperRoot(uint64(userID), step.ManuscriptID, runVersion)
+	locale := svc.PhasedBotBuildInvokeContext(ctx, userID, runVersion, step, input).Language
+	payload := ideaCreatorBuildInvokePayload(step, userID, runVersion, input, route, cfg, locale, paperRoot)
 	runID := topicdiscovery.PhasedBotResolveRunID(paperRoot, step, input)
 
 	// 1. 准备 workspace：清 CLI session、落 RESEARCH_BRIEF/参数，供 /idea-creator 读取。
@@ -173,42 +169,30 @@ func ideaCreatorBuildInvokePayload(
 	route *entity.PaperStrategyRoute,
 	cfg topicdiscovery.ARISIdeaDiscoveryConfig,
 	language string,
+	paperRoot string,
 ) ideaCreatorInvokePayload {
 	behaviorKey := topicdiscovery.TopicStageBehaviorKey(ideaCreatorStageCode)
 
-	sources := strings.TrimSpace(cfg.Platform.Sources)
-	if sources == "" {
-		sources = "web"
+	litDir := strings.TrimSpace(cfg.Artifacts.LiteratureDir)
+	if litDir == "" {
+		litDir = "literature"
 	}
-	arxivDownload := cfg.Platform.ArxivDownload
-	arxivDownloadCLI := "false"
-	if arxivDownload {
-		arxivDownloadCLI = "true"
+	paperLibrary := filepath.Join(paperRoot, litDir)
+	if !strings.HasSuffix(paperLibrary, string(filepath.Separator)) {
+		paperLibrary += string(filepath.Separator)
 	}
-	arxivMaxDownload := cfg.Platform.ArxivMaxDownload
-	if arxivMaxDownload <= 0 {
-		arxivMaxDownload = 5
-	}
-	venue := strings.TrimSpace(input.Venue)
-	if venue == "" {
-		venue = "NeurIPS"
-	}
+
 	language = lang.NormalizeContentLanguage(language)
 	if language == "" {
 		language = "zh"
 	}
 
 	platformArgs := fmt.Sprintf(
-		`%s — venue: %s — sources: %s — ARXIV_DOWNLOAD: %s`,
+		`%s — paper library: %s — language: %s`,
 		ideaCreatorQuotedDirection(input),
-		venue,
-		sources,
-		arxivDownloadCLI,
+		paperLibrary,
+		language,
 	)
-	if arxivDownload {
-		platformArgs += fmt.Sprintf(` — ARXIV_MAX_DOWNLOAD: %d`, arxivMaxDownload)
-	}
-	platformArgs += fmt.Sprintf(` — language: %s`, language)
 
 	req := topicdiscovery.StrategyInvokeRequest{
 		BehaviorKey:  behaviorKey,
@@ -239,10 +223,6 @@ func ideaCreatorBuildInvokePayload(
 	return ideaCreatorInvokePayload{
 		Req:              req,
 		PlatformArgsLine: platformArgs,
-		Sources:          sources,
-		ArxivDownload:    arxivDownload,
-		ArxivMaxDownload: arxivMaxDownload,
-		Venue:            venue,
 		Language:         language,
 	}
 }

@@ -1,0 +1,40 @@
+# research-refine-pipeline.manifest.result.json (Step 5)
+
+Write: `idea-stage/research-refine-pipeline.manifest.result.json`  
+Same keys and nesting as `aris-constraints/research-refine-pipeline.manifest.example.json` (replace example values).
+
+Also write the markdown files at paths listed in `deliverables` (required paths below must exist and be non-empty for `success`).
+
+## result
+
+- `"success"` — all rules below met  
+- `"failed"` — otherwise (still write the file)
+
+## Top-level fields
+
+| Field | Value |
+|-------|--------|
+| result | `"success"` or `"failed"` |
+| aris_phase | `"research-refine-pipeline"` |
+| report_path | `"idea-stage/IDEA_REPORT.md"` |
+| focus_rank | **1** |
+| idea_title | **byte-for-byte identical** to idea-creator `ideas[].title` where `rank=1` |
+| executive_summary | non-empty string |
+| finished_at | UTC ISO-8601 |
+
+## deliverables
+
+| Key | Path (use exactly) | Required for success |
+|-----|-------------------|----------------------|
+| final_proposal | `refine-logs/FINAL_PROPOSAL.md` | yes — file non-empty |
+| experiment_plan | `refine-logs/EXPERIMENT_PLAN.md` | yes — file non-empty |
+| experiment_tracker | `refine-logs/EXPERIMENT_TRACKER.md` | yes — file non-empty |
+| pipeline_summary | `refine-logs/PIPELINE_SUMMARY.md` | optional |
+
+## IDEA_REPORT.md (composed)
+
+File: `idea-stage/IDEA_REPORT.md` (same as manifest `report_path`).
+
+For `result=success`, the report MUST include this markdown H2 line exactly:
+
+    ## Executive Summary

@@ -34,7 +34,8 @@ func TestIdeaDiscoveryPhasedPhaseSucceeded_researchLitReport(t *testing.T) {
 
 func TestIdeaDiscoveryPhasedPhaseInvokeSucceeded_researchLitFile(t *testing.T) {
 	root := t.TempDir()
-	ok, _, err := ideaDiscoveryPhasedPhaseInvokeSucceeded(root, "research-lit", json.RawMessage(`{"result":"success"}`))
+	cfg := defaultARISIdeaDiscoveryConfig()
+	ok, _, err := ideaDiscoveryPhasedPhaseInvokeSucceeded(root, "research-lit", json.RawMessage(`{"result":"success"}`), cfg)
 	if err == nil || ok {
 		t.Fatalf("missing file: ok=%v err=%v", ok, err)
 	}
@@ -42,9 +43,26 @@ func TestIdeaDiscoveryPhasedPhaseInvokeSucceeded_researchLitFile(t *testing.T) {
 	if err := os.WriteFile(path, []byte("# landscape\n"+string(make([]byte, 80))), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	ok, _, err = ideaDiscoveryPhasedPhaseInvokeSucceeded(root, "research-lit", json.RawMessage(`{"ideas":[]}`))
+	ok, _, err = ideaDiscoveryPhasedPhaseInvokeSucceeded(root, "research-lit", json.RawMessage(`{"ideas":[]}`), cfg)
 	if err != nil || !ok {
 		t.Fatalf("with file: ok=%v err=%v", ok, err)
+	}
+}
+
+func TestIdeaDiscoveryPhasedPhaseInvokeSucceeded_researchLitComposedReport(t *testing.T) {
+	root := t.TempDir()
+	cfg := defaultARISIdeaDiscoveryConfig()
+	report := filepath.Join(root, filepath.FromSlash(cfg.Artifacts.IdeaReport))
+	if err := os.MkdirAll(filepath.Dir(report), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "# Idea Discovery Report\n\n## Literature Landscape\n" + string(make([]byte, 300))
+	if err := os.WriteFile(report, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ok, _, err := ideaDiscoveryPhasedPhaseInvokeSucceeded(root, "research-lit", json.RawMessage(`{"result":"success"}`), cfg)
+	if err != nil || !ok {
+		t.Fatalf("composed report: ok=%v err=%v", ok, err)
 	}
 }
 

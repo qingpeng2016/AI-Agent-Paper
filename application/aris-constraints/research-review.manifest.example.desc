@@ -1,0 +1,44 @@
+# research-review.manifest.result.json (Step 4)
+
+Write: `idea-stage/research-review.manifest.result.json`  
+Same keys and nesting as `aris-constraints/research-review.manifest.example.json` (replace example values).
+
+## result
+
+- `"success"` — all rules below met  
+- `"failed"` — otherwise (still write the file)
+
+## Top-level fields
+
+| Field | Value |
+|-------|--------|
+| result | `"success"` or `"failed"` |
+| aris_phase | `"research-review"` |
+| report_path | `"idea-stage/IDEA_REPORT.md"` |
+| focus_rank | **1** (rank-1 idea only) |
+| reviewer_model | from prompt (e.g. `gpt-6-sol`) |
+| reviews | array **length 1** |
+| finished_at | UTC ISO-8601 |
+
+## reviews[0]
+
+| Field | Required for success |
+|-------|----------------------|
+| rank | **1** |
+| idea_title | **byte-for-byte identical** to idea-creator `ideas[].title` where `rank=1` |
+| verdict_summary | non-empty string |
+| review_points | non-empty string array |
+| mock_score | optional string |
+| strengths | optional string array |
+| weaknesses | optional string array |
+| actionable_items | optional string array |
+| review_brief_path | optional path |
+| trace_path | optional path |
+
+## IDEA_REPORT.md (composed)
+
+File: `idea-stage/IDEA_REPORT.md` (same as manifest `report_path`).
+
+For `result=success`, the report MUST include this markdown H2 line exactly:
+
+    ## External Critical Review

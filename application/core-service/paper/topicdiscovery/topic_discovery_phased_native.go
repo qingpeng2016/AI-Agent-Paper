@@ -71,7 +71,7 @@ func (s *TopicDiscoveryRunService) RunNativeIdeaDiscoveryPhaseLLM(
 	syncIdeaDiscoveryPhasedProgressMeta(meta)
 	paperstep.PersistStepExtra(step, meta)
 
-	ok, failReason, parseErr := ideaDiscoveryPhasedPhaseInvokeSucceeded(paperRoot, phase, raw)
+	ok, failReason, parseErr := ideaDiscoveryPhasedPhaseInvokeSucceeded(paperRoot, phase, raw, cfg)
 	if parseErr != nil {
 		reason := ideaDiscoveryPhasedStepFailureReason(meta, phase, parseErr)
 		if err := s.persistIdeaDiscoveryPhasedStepFailed(ctx, step, reason); err != nil {

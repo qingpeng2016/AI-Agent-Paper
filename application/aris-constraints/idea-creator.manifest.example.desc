@@ -1,0 +1,57 @@
+# idea-creator.manifest.result.json (Step 2)
+
+Write: `idea-stage/idea-creator.manifest.result.json`  
+Same keys and nesting as `aris-constraints/idea-creator.manifest.example.json` (replace example values).
+
+## result
+
+- `"success"` — all rules below met  
+- `"failed"` — otherwise (still write the file)
+
+## Top-level fields
+
+| Field | Value |
+|-------|--------|
+| aris_phase | `"idea-creator"` |
+| report_path | `"idea-stage/IDEA_REPORT.md"` |
+| inputs.research_brief | `"RESEARCH_BRIEF.md"` |
+| inputs.prior_research_lit_manifest | `"idea-stage/research-lit.manifest.result.json"` |
+| finished_at | UTC ISO-8601 |
+| ideas_evaluated.generated | integer **≥ 8** for `success` |
+| ideas_evaluated.survived_filtering | integer |
+| ideas_evaluated.piloted | **0** when pilots skipped |
+| ideas_evaluated.recommended | **3** for `success` |
+| ideas | array **length 3**, ranks **1, 2, 3** |
+
+## ideas[] (each of 3 entries)
+
+| Field | Required for success |
+|-------|----------------------|
+| id | string |
+| rank | 1, 2, or 3 |
+| title | non-empty; must match report heading (see IDEA_REPORT) |
+| one_line_pitch | string |
+| method_steps | non-empty string array |
+| hypothesis | string |
+| minimum_experiment | string |
+| novelty_claim | string |
+| feasibility | string |
+| risk | string (e.g. LOW, MEDIUM, HIGH) |
+| pilot_result | `"SKIPPED"` when no pilot run |
+| key_papers | string array of `papers[].id` from research-lit manifest only |
+
+## IDEA_REPORT.md (composed)
+
+File: `idea-stage/IDEA_REPORT.md` (same as manifest `report_path`).
+
+For `result=success`:
+
+1. MUST include this markdown H2 line exactly:
+
+       ## Recommended Ideas (ranked)
+
+2. For **each** manifest `ideas[]` entry, MUST include exactly one heading line:
+
+       ### Idea {rank}: {title}
+
+   where `{rank}` is `ideas[].rank` and `{title}` is **byte-for-byte identical** to `ideas[].title`.
