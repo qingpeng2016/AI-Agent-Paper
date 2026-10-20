@@ -16,7 +16,7 @@ Same keys and nesting as `aris-constraints/novelty-check.manifest.example.json` 
 | report_path | `"idea-stage/IDEA_REPORT.md"` |
 | inputs.idea_creator_manifest | `"idea-stage/idea-creator.manifest.result.json"` |
 | finished_at | UTC ISO-8601 |
-| checks | array; **length = number of recommended ideas in idea-creator manifest** (typically **3**) |
+| checks | array; **length = `len(ideas)` in idea-creator manifest** |
 
 ## checks[] (one entry per idea rank)
 

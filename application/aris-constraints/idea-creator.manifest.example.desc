@@ -17,18 +17,18 @@ Same keys and nesting as `aris-constraints/idea-creator.manifest.example.json` (
 | inputs.research_brief | `"RESEARCH_BRIEF.md"` |
 | inputs.prior_research_lit_manifest | `"idea-stage/research-lit.manifest.result.json"` |
 | finished_at | UTC ISO-8601 |
-| ideas_evaluated.generated | integer **≥ 8** for `success` |
+| ideas_evaluated.generated | integer (optional; not validated) |
 | ideas_evaluated.survived_filtering | integer |
 | ideas_evaluated.piloted | **0** when pilots skipped |
-| ideas_evaluated.recommended | **3** for `success` |
-| ideas | array **length 3**, ranks **1, 2, 3** |
+| ideas_evaluated.recommended | integer; if present, **must equal** `len(ideas)` |
+| ideas | non-empty array; ranks **1 … N** contiguous (N = array length) |
 
-## ideas[] (each of 3 entries)
+## ideas[] (each recommended entry)
 
 | Field | Required for success |
 |-------|----------------------|
 | id | string |
-| rank | 1, 2, or 3 |
+| rank | 1 … N (no gaps) |
 | title | non-empty; must match report heading (see IDEA_REPORT) |
 | one_line_pitch | string |
 | method_steps | non-empty string array |
