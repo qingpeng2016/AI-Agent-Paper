@@ -34,6 +34,10 @@ Also write the markdown files at paths listed in `deliverables` (required paths 
 | experiment_tracker | `refine-logs/EXPERIMENT_TRACKER.md` | yes — file non-empty |
 | pipeline_summary | `refine-logs/PIPELINE_SUMMARY.md` | optional |
 
+## experiment_plan (authoring)
+
+Structure and required **first chapter** (data URLs, access steps, package layout, `data/` paths): see `aris-constraints/research-refine-pipeline.explain.example.desc`. Validate does not yet check those headings; agents should still follow the explain file for Step 5.
+
 ## IDEA_REPORT.md (composed)
 
 File: `idea-stage/IDEA_REPORT.md` (same as manifest `report_path`).

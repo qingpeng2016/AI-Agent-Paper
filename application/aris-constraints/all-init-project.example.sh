@@ -25,6 +25,7 @@ COPIED=0
 for pattern in \
   '*.aris.example.sh' \
   '*.manifest.example.desc' \
+  '*.explain.example.desc' \
   '*.manifest.example.json' \
   '*.validate.example.sh' \
   'validate-idea-discovery.example.sh' \

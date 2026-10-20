@@ -1,0 +1,22 @@
+# Step 5 — `refine-logs/EXPERIMENT_PLAN.md` (authoring)
+
+Guidance only; validate still checks non-empty deliverables + manifest (see `research-refine-pipeline.manifest.example.desc`).
+
+Plan is for **idea-creator rank 1** only; align with `FINAL_PROPOSAL.md` and rank-1 title. Do not invent URLs, passwords, or cohort stats—use **TBD** + how to verify if unknown.
+
+## First section (required)
+
+Right after `#` title, the **first H2** must be:
+
+    ## Data access and workspace layout
+
+Include these four H3 subsections (each non-empty):
+
+| H3 | Content |
+|----|---------|
+| `### Dataset and official sources` | Dataset name/version; official `https://…` URL(s); DUA/license; citation |
+| `### How to obtain the data` | Ordered steps: terms → download/request → forms/credentials → verify; mark `Planned procedure (not yet executed)` if not done |
+| `### What you receive after download` | Archive shape, top-level dirs, file types this study uses; short “download OK when …” checklist |
+| `### Where to put files in this project` | Paths under workspace root, e.g. `data/<dataset-slug>/` (`README.md`, `raw/`, phenotypic/derivatives as needed); no secrets in git |
+
+Then continue with study question, Phase 0, etc. Phase 0 “obtain data” should **reference this section**, not duplicate URLs.
