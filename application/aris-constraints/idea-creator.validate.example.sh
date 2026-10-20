@@ -46,6 +46,30 @@ def has_h2(text: str, *headings: str) -> bool:
             return True
     return False
 
+def matches_contract_h2(line: str, heading: str) -> bool:
+    n = norm_line(line)
+    if norm_h2(line) == heading or n == heading:
+        return True
+    # e.g. "## Novelty Verification## Novelty Verification" from a bad merge
+    return n.startswith(heading) and len(n) > len(heading) and n[len(heading)] in "# \t"
+
+def section_between(text: str, start_h2s: tuple[str, ...], end_h2s: tuple[str, ...]) -> str:
+    """Lines from first §3 contract H2 until §4 contract H2 (Step 2 scope only)."""
+    lines = text.splitlines()
+    start = end = None
+    for i, line in enumerate(lines):
+        if start is None and any(matches_contract_h2(line, h) for h in start_h2s):
+            start = i
+            continue
+        if start is not None and any(matches_contract_h2(line, h) for h in end_h2s):
+            end = i
+            break
+    if start is None:
+        return ""
+    if end is None:
+        end = len(lines)
+    return "\n".join(lines[start:end])
+
 body = open("idea-stage/IDEA_REPORT.en.md", encoding="utf-8").read()
 body_zh = open("idea-stage/IDEA_REPORT.zh.md", encoding="utf-8").read()
 
@@ -94,9 +118,24 @@ def scaffold_leftovers(path, text):
             bad.append(f"{path}: {s[:80]}")
     return bad
 
-for msg in scaffold_leftovers("IDEA_REPORT.en.md", body):
+sec3_en = section_between(
+    body,
+    ("## Recommended Ideas (ranked)",),
+    ("## Novelty Verification",),
+)
+sec3_zh = section_between(
+    body_zh,
+    ("## 推荐研究方案", "## Recommended Ideas (ranked)"),
+    ("## 新颖性评估", "## Novelty Verification"),
+)
+if not sec3_en.strip():
+    fail_en("§3 区间为空（从 ## Recommended Ideas (ranked) 到 ## Novelty Verification）")
+if not sec3_zh.strip():
+    fail_zh("§3 区间为空（从 ## 推荐研究方案 到 ## 新颖性评估）")
+
+for msg in scaffold_leftovers("IDEA_REPORT.en.md §3", sec3_en):
     fail_en(f"scaffold line left: {msg}")
-for msg in scaffold_leftovers("IDEA_REPORT.zh.md", body_zh):
+for msg in scaffold_leftovers("IDEA_REPORT.zh.md §3", sec3_zh):
     fail_zh(f"§3 仍留模版占位行: {msg}")
 
 for i in ideas:
