@@ -19,6 +19,25 @@ fi
 
 mkdir -p "$ROOT/idea-stage" "$ROOT/refine-logs" "$ROOT/literature" "$ROOT/aris-constraints" "$ROOT/research-wiki"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DEST="$ROOT/aris-constraints"
+COPIED=0
+for pattern in \
+  '*.aris.example.sh' \
+  '*.manifest.example.desc' \
+  '*.manifest.example.json' \
+  '*.validate.example.sh' \
+  'validate-idea-discovery.example.sh' \
+  'all-init-project.example.sh'
+do
+  for src in "$SCRIPT_DIR"/$pattern; do
+    [[ -f "$src" ]] || continue
+    cp -f "$src" "$DEST/"
+    COPIED=$((COPIED + 1))
+  done
+done
+chmod +x "$DEST"/*.sh 2>/dev/null || true
+
 cat > "$ROOT/RESEARCH_BRIEF.md" <<'EOF'
 # Research Brief
 
@@ -35,3 +54,4 @@ EOF
 echo "Initialized: $ROOT"
 echo "  dirs: idea-stage refine-logs literature aris-constraints research-wiki"
 echo "  file: RESEARCH_BRIEF.md"
+echo "  templates: copied $COPIED file(s) from $SCRIPT_DIR -> $DEST"
