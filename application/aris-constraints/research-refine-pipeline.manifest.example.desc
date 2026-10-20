@@ -99,6 +99,8 @@ Non-empty prose; no `[…]` scaffold lines.
 
 Detailed executable plan. **Not** IDEA_REPORT §1.
 
+**Layout reference:** `aris-constraints/md_template/EXPERIMENT_PLAN.en.example.md` and `EXPERIMENT_PLAN.zh.example.md` (claim-driven phases 0–5, decision table, milestones). Write **`refine-logs/EXPERIMENT_PLAN.md`** in English unless the project explicitly requires a Chinese plan file.
+
 ### Verification gate (mandatory before “writing dead”)
 
 Every **official URL** listed under data access must be **checked in this run** (fetch or browser): page loads (not 404/5xx), content matches the named dataset. If not checked, label the URL **`TBD — verify:`** + search starting point; **do not** present broken or guessed links as official.

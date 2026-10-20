@@ -16,6 +16,9 @@ Steps 1–5: **`aris-constraints/*.manifest.example.desc`** is the single contra
 | `IDEA_REPORT.en.example.md` | `idea-stage/IDEA_REPORT.en.md` | English (contract / validate) |
 | `IDEA_REPORT.zh.example.md` | `idea-stage/IDEA_REPORT.zh.md` | Simplified Chinese |
 
+| `EXPERIMENT_PLAN.en.example.md` | `refine-logs/EXPERIMENT_PLAN.md` (Step 5) | English; first H2 must be `## Data access and workspace layout` |
+| `EXPERIMENT_PLAN.zh.example.md` | reference / optional Chinese plan | Same structure as EN template |
+
 Placeholder style matches platform narrative templates (e.g. Workflow 3): **`[Fill-in instruction]`** on its own line or after a label — not sample content to keep.
 
 **目录格式（中文层级列表，带 `#sec-*` 链接）** 见 `IDEA_REPORT.zh.example.md` 文首 `## 目录`（**6 章**：执行摘要、文献综述、推荐研究方案、新颖性评估、外部审稿意见、参考文献；§2 含 2.1–2.4，§4–5 含子节）。中文用语以模板为准（学术报告体，非直译）。英文模版 `IDEA_REPORT.en.example.md` 为同一 `sec-*` 锚点的 English TOC。
