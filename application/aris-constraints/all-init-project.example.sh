@@ -41,6 +41,14 @@ if [[ -d "$SCRIPT_DIR/md_template" ]]; then
   mkdir -p "$DEST/md_template"
   cp -f "$SCRIPT_DIR"/md_template/* "$DEST/md_template/" 2>/dev/null || true
 fi
+EN_REPORT_TEMPLATE="$DEST/md_template/IDEA_REPORT.en.example.md"
+ZH_REPORT_TEMPLATE="$DEST/md_template/IDEA_REPORT.zh.example.md"
+if [[ -f "$EN_REPORT_TEMPLATE" ]]; then
+  cp -f "$EN_REPORT_TEMPLATE" "$ROOT/idea-stage/IDEA_REPORT.en.md"
+fi
+if [[ -f "$ZH_REPORT_TEMPLATE" ]]; then
+  cp -f "$ZH_REPORT_TEMPLATE" "$ROOT/idea-stage/IDEA_REPORT.zh.md"
+fi
 chmod +x "$DEST"/*.sh 2>/dev/null || true
 
 cat > "$ROOT/RESEARCH_BRIEF.md" <<'EOF'
@@ -59,4 +67,6 @@ EOF
 echo "Initialized: $ROOT"
 echo "  dirs: idea-stage refine-logs literature aris-constraints research-wiki"
 echo "  file: RESEARCH_BRIEF.md"
+echo "  report templates: aris-constraints/md_template/IDEA_REPORT.en.example.md, IDEA_REPORT.zh.example.md"
+echo "  idea-stage: IDEA_REPORT.en.md, IDEA_REPORT.zh.md (working copies from templates)"
 echo "  templates: copied $COPIED file(s) from $SCRIPT_DIR -> $DEST"

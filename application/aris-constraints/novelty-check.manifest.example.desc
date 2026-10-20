@@ -7,7 +7,7 @@ Same keys and nesting as `aris-constraints/novelty-check.manifest.example.json` 
 
 **Delivery only** — not whether ideas are novel. Low scores and `ABANDON` in `checks[]` are normal; put verdicts in `score` / `recommendation`, not in `result`.
 
-- `"success"` — use when **all** of: this file is valid JSON; `checks` has one entry per idea-creator `ideas[]` rank; each `title` matches idea-creator byte-for-byte; `IDEA_REPORT.md` includes `## Novelty Verification` (see below). **Even if every idea gets ABANDON.**
+- `"success"` — use when **all** of: valid JSON; `checks` has one entry per idea-creator `ideas[]` rank; each `title` matches idea-creator byte-for-byte; composed **§4** in **both** `idea-stage/IDEA_REPORT.en.md` and `idea-stage/IDEA_REPORT.zh.md` includes `## Novelty Verification`. **Even if every idea gets ABANDON.**
 - `"failed"` — only if Step 3 **could not complete** the contract (e.g. missing checks, wrong titles, report section not written). Still write the file.
 - **Do not** use `"partial"` or other values.
 
@@ -16,7 +16,8 @@ Same keys and nesting as `aris-constraints/novelty-check.manifest.example.json` 
 | Field | Value |
 |-------|--------|
 | aris_phase | `"novelty-check"` |
-| report_path | `"idea-stage/IDEA_REPORT.md"` |
+| report_path | `"idea-stage/IDEA_REPORT.en.md"` |
+| zh_report_path | `"idea-stage/IDEA_REPORT.zh.md"` |
 | inputs.idea_creator_manifest | `"idea-stage/idea-creator.manifest.result.json"` |
 | finished_at | UTC ISO-8601 |
 | checks | array; **length = `len(ideas)` in idea-creator manifest** |
@@ -43,10 +44,25 @@ Same keys and nesting as `aris-constraints/novelty-check.manifest.example.json` 
 | overlap | string |
 | delta | string |
 
-## IDEA_REPORT.md (composed)
+## Composed reports (Step 3 owns §4)
 
-File: `idea-stage/IDEA_REPORT.md` (same as manifest `report_path`).
+**Section layout (read-only reference):**
 
-For `result=success`, the report MUST include this markdown H2 line exactly:
+- English: `aris-constraints/md_template/IDEA_REPORT.en.example.md`
+- Chinese: `aris-constraints/md_template/IDEA_REPORT.zh.example.md`
 
-    ## Novelty Verification
+After init, **`idea-stage/` holds the working reports**:
+
+| File | Language | Step 3 fills |
+|------|----------|----------------|
+| `idea-stage/IDEA_REPORT.en.md` | English | **§4** Novelty check |
+| `idea-stage/IDEA_REPORT.zh.md` | Simplified Chinese | **§4** 新颖性评估 |
+
+**Step 3:** use `aris-constraints/md_template/IDEA_REPORT.en.example.md` and `aris-constraints/md_template/IDEA_REPORT.zh.example.md` to see §4 subsections; write into the matching span in both idea-stage files (from `## Novelty Verification` through the `---` before `## External Critical Review`). Replace `[…]` hints with content from `checks[]` and idea-creator titles. Do not edit other chapters. Do not leave `[…]` placeholders in §4.
+
+For `result=success`, section **§4** contract H2:
+
+- English: `## Novelty Verification`
+- Chinese: `## 新颖性评估`
+
+If files are missing, run `bash aris-constraints/all-init-project.example.sh`.

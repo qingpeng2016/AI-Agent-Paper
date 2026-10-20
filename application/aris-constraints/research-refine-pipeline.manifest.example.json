@@ -1,7 +1,8 @@
 {
   "result": "success",
   "aris_phase": "research-refine-pipeline",
-  "report_path": "idea-stage/IDEA_REPORT.md",
+  "report_path": "idea-stage/IDEA_REPORT.en.md",
+  "zh_report_path": "idea-stage/IDEA_REPORT.zh.md",
   "focus_rank": 1,
   "idea_title": "EXAMPLE: Replace with idea-creator rank-1 title verbatim",
   "deliverables": {

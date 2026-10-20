@@ -1,7 +1,8 @@
 {
   "aris_phase": "research-lit",
   "result": "success",
-  "report_path": "idea-stage/IDEA_REPORT.md",
+  "report_path": "idea-stage/IDEA_REPORT.en.md",
+  "zh_report_path": "idea-stage/IDEA_REPORT.zh.md",
   "finished_at": "2026-10-19T12:00:00Z",
   "sources_used": ["arxiv", "web", "gemini"],
   "papers": [

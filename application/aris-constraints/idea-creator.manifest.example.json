@@ -1,7 +1,8 @@
 {
   "aris_phase": "idea-creator",
   "result": "success",
-  "report_path": "idea-stage/IDEA_REPORT.md",
+  "report_path": "idea-stage/IDEA_REPORT.en.md",
+  "zh_report_path": "idea-stage/IDEA_REPORT.zh.md",
   "inputs": {
     "research_brief": "RESEARCH_BRIEF.md",
     "prior_research_lit_manifest": "idea-stage/research-lit.manifest.result.json"

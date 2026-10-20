@@ -9,7 +9,7 @@ Also write the markdown files at paths listed in `deliverables` (required paths 
 
 **Delivery only** — not whether the refined plan is feasible or publishable. Put judgment in `executive_summary` and deliverable markdown, not in `result`.
 
-- `"success"` — use when **all** of: valid JSON; `idea_title` matches idea-creator rank-1 title byte-for-byte; non-empty `executive_summary`; required `deliverables` files exist and are non-empty (see table below); `IDEA_REPORT.md` includes `## Executive Summary`.
+- `"success"` — use when **all** of: valid JSON; `idea_title` matches idea-creator rank-1 title byte-for-byte; non-empty `executive_summary`; required `deliverables` files exist and are non-empty (see table below); composed **§1** in **both** `idea-stage/IDEA_REPORT.en.md` and `idea-stage/IDEA_REPORT.zh.md` includes `## Executive Summary`.
 - `"failed"` — only if Step 5 **could not complete** the contract (e.g. missing files, empty deliverables, report section not written). Still write the file.
 - **Do not** use `"partial"` or other values.
 
@@ -19,7 +19,8 @@ Also write the markdown files at paths listed in `deliverables` (required paths 
 |-------|--------|
 | result | `"success"` or `"failed"` |
 | aris_phase | `"research-refine-pipeline"` |
-| report_path | `"idea-stage/IDEA_REPORT.md"` |
+| report_path | `"idea-stage/IDEA_REPORT.en.md"` |
+| zh_report_path | `"idea-stage/IDEA_REPORT.zh.md"` |
 | focus_rank | **1** |
 | idea_title | **byte-for-byte identical** to idea-creator `ideas[].title` where `rank=1` |
 | executive_summary | non-empty string |
@@ -36,12 +37,27 @@ Also write the markdown files at paths listed in `deliverables` (required paths 
 
 ## experiment_plan (authoring)
 
-Structure and required **first chapter** (data URLs, access steps, package layout, `data/` paths): see `aris-constraints/research-refine-pipeline.explain.example.desc`. Validate does not yet check those headings; agents should still follow the explain file for Step 5.
+Structure and required **first chapter** (data URLs, access steps, package layout, `data/` paths): see `aris-constraints/research-refine-pipeline.explain.example.desc`. That file guides **`refine-logs/EXPERIMENT_PLAN.md` only**, not IDEA_REPORT §1.
 
-## IDEA_REPORT.md (composed)
+## Composed reports (Step 5 owns §1)
 
-File: `idea-stage/IDEA_REPORT.md` (same as manifest `report_path`).
+**Section layout (read-only reference):**
 
-For `result=success`, the report MUST include this markdown H2 line exactly:
+- English: `aris-constraints/md_template/IDEA_REPORT.en.example.md`
+- Chinese: `aris-constraints/md_template/IDEA_REPORT.zh.example.md`
 
-    ## Executive Summary
+After init, **`idea-stage/` holds the working reports**:
+
+| File | Language | Step 5 fills |
+|------|----------|----------------|
+| `idea-stage/IDEA_REPORT.en.md` | English | **§1** Executive summary |
+| `idea-stage/IDEA_REPORT.zh.md` | Simplified Chinese | **§1** 执行摘要 |
+
+**Step 5:** use `aris-constraints/md_template/IDEA_REPORT.en.example.md` and `aris-constraints/md_template/IDEA_REPORT.zh.example.md` to see §1 subsections; write into the matching span in both idea-stage files (from `## Executive Summary` through the `---` before `## Literature Landscape`). Replace `[…]` hints using `executive_summary`, rank-1 refinement, and deliverables context. Do not edit other chapters. Do not leave `[…]` placeholders in §1.
+
+For `result=success`, section **§1** contract H2:
+
+- English: `## Executive Summary`
+- Chinese: `## 执行摘要`
+
+If files are missing, run `bash aris-constraints/all-init-project.example.sh`.

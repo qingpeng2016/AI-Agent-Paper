@@ -1,7 +1,8 @@
 {
   "aris_phase": "novelty-check",
   "result": "success",
-  "report_path": "idea-stage/IDEA_REPORT.md",
+  "report_path": "idea-stage/IDEA_REPORT.en.md",
+  "zh_report_path": "idea-stage/IDEA_REPORT.zh.md",
   "inputs": {
     "idea_creator_manifest": "idea-stage/idea-creator.manifest.result.json"
   },

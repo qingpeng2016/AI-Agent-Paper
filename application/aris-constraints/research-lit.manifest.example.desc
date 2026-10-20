@@ -7,7 +7,7 @@ Same keys and nesting as `aris-constraints/research-lit.manifest.example.json` (
 
 **Delivery only** — not literature quality or coverage. Put assessment in the report prose, not in `result`.
 
-- `"success"` — use when **all** of: valid JSON; non-empty `papers[]` with required fields per table below; `IDEA_REPORT.md` includes `## Literature Landscape`; each paper’s URL rule in IDEA_REPORT section is met (see below).
+- `"success"` — use when **all** of: valid JSON; non-empty `papers[]` with required fields per table below; composed report sections in **both** `idea-stage/IDEA_REPORT.en.md` and `idea-stage/IDEA_REPORT.zh.md` meet the template contract below (§2 and §6); each paper’s URL rule is met in the English report (see below).
 - `"failed"` — only if Step 1 **could not complete** the contract (e.g. empty papers, missing report section). Still write the file.
 - **Do not** use `"partial"` or other values.
 
@@ -16,7 +16,8 @@ Same keys and nesting as `aris-constraints/research-lit.manifest.example.json` (
 | Field | Value |
 |-------|--------|
 | aris_phase | `"research-lit"` |
-| report_path | `"idea-stage/IDEA_REPORT.md"` |
+| report_path | `"idea-stage/IDEA_REPORT.en.md"` |
+| zh_report_path | `"idea-stage/IDEA_REPORT.zh.md"` (Simplified Chinese; same `sec-*` anchors as EN) |
 | finished_at | UTC ISO-8601 |
 | sources_used | string array (sources actually used, e.g. `web`, `arxiv`, `gemini`) |
 | papers | non-empty array |
@@ -37,12 +38,36 @@ Same keys and nesting as `aris-constraints/research-lit.manifest.example.json` (
 
 **Address rule (each paper):** at least one of: non-empty `urls[]`, non-null `doi`, non-null `arxiv_id`.
 
-## IDEA_REPORT.md (composed)
+## Composed reports (Step 1 owns §2 and §6)
 
-File: `idea-stage/IDEA_REPORT.md` (same as manifest `report_path`).
+**Section layout (read-only reference):**
 
-For `result=success`, the report MUST include this markdown H2 line exactly:
+- English: `aris-constraints/md_template/IDEA_REPORT.en.example.md`
+- Chinese: `aris-constraints/md_template/IDEA_REPORT.zh.example.md`
 
-    ## Literature Landscape
+After init, **`idea-stage/` holds the working reports** (same structure as the templates above):
 
-For each paper, at least **one** string from `papers[].urls` MUST appear verbatim in `IDEA_REPORT.md` (not necessarily every URL in the array).
+| File | Language | Step 1 fills |
+|------|----------|----------------|
+| `idea-stage/IDEA_REPORT.en.md` | English | **§2** Literature landscape, **§6** References |
+| `idea-stage/IDEA_REPORT.zh.md` | Simplified Chinese | **§2** 文献综述, **§6** 参考文献 |
+
+**Step 1:** use the `aris-constraints/md_template/*.example.md` files to see which subsections belong in §2 and §6; write content into the matching sections in `idea-stage/IDEA_REPORT.en.md` and `idea-stage/IDEA_REPORT.zh.md`. Replace each `[…]` hint with real prose from `papers[]`. Keep headings and contract H2s unchanged; do not edit other chapters. Do not leave `[…]` placeholders in §2 or §6.
+
+If files are missing, run `bash aris-constraints/all-init-project.example.sh` — normal workflow assumes init already ran.
+
+For `result=success`:
+
+- **English** (`IDEA_REPORT.en.md`) — H2 exactly:
+
+      ## Literature Landscape
+
+- **Chinese** (`IDEA_REPORT.zh.md`) — H2 exactly:
+
+      ## 文献综述
+
+Every `papers[]` entry must appear in §2.4 and §6; EN and ZH use the same papers and the same chosen URL per paper (verbatim).
+
+### URL rule (validate uses English file)
+
+For each paper, at least **one** string from `papers[].urls` MUST appear verbatim in `idea-stage/IDEA_REPORT.en.md` (not necessarily every URL in the array). Prefer the same URL in `IDEA_REPORT.zh.md` §2.4 and §6.

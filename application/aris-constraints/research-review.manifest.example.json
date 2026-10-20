@@ -1,7 +1,8 @@
 {
   "result": "success",
   "aris_phase": "research-review",
-  "report_path": "idea-stage/IDEA_REPORT.md",
+  "report_path": "idea-stage/IDEA_REPORT.en.md",
+  "zh_report_path": "idea-stage/IDEA_REPORT.zh.md",
   "focus_rank": 1,
   "reviewer_model": "gpt-5.4",
   "reviews": [

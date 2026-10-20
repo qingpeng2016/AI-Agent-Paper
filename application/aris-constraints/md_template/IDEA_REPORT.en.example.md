@@ -1,12 +1,6 @@
-# Idea Discovery Report: {short topic title}
+# Idea Discovery Report: [Short topic from RESEARCH_BRIEF]
 
-<!--
-  Target: idea-stage/IDEA_REPORT.md (composed across Steps 1–5).
-  Pair: IDEA_REPORT.zh.example.md (same sec-* anchors for TOC jumps).
-  Top-level report: 6 chapters (sec-1 … sec-6). Subsections use 1 / 1.1 / 1.1.1 under each contract H2.
-  Contract H2 lines must stay exactly as written (manifest + validate + platform gate).
-  Do not hard-code datasets, URLs, or sample sizes. Remove this comment when done.
--->
+Template for idea-discovery (Steps 1–5). Fill in all sections per step manifests and `aris-constraints/*.manifest.example.desc`, then run step validators. Output: `idea-stage/IDEA_REPORT.en.md`. Pair with `IDEA_REPORT.zh.md` (same `sec-*` anchors). **Do not leave bracket placeholders in finished sections** — replace with real prose, lists, and citations.
 
 ## Table of contents
 
@@ -41,17 +35,17 @@
 
 ### 1. Executive summary
 
-{Step 5: rank-1 refinement, next milestones, data/prereg status; 2–4 paragraphs.}
+[Step 5: 2–4 paragraphs on rank-1 refinement, next milestones, data/prereg status]
 
 #### 1.1 Report metadata
 
-**Research direction:** {from RESEARCH_BRIEF.md}
+**Research direction:** [From RESEARCH_BRIEF.md]
 
-**Target venue:** {venue}
+**Target venue:** [Venue]
 
-**Generated:** {YYYY-MM-DD}
+**Generated:** [YYYY-MM-DD]
 
-**Ideas evaluated:** {generated} → {after filters} → {pilots run} → {recommended}
+**Ideas evaluated:** [generated] → [after filters] → [pilots run] → [recommended]
 
 ---
 
@@ -65,36 +59,36 @@
 
 #### 2.1 Scope and heterogeneity
 
-{Step 1: consensus, sources of variation; no unverified URLs.}
+[Step 1: field consensus and main sources of heterogeneity; no unverified URLs]
 
 <a id="sec-2-2"></a>
 
-#### 2.2 Key findings ({N} papers, {year range})
+#### 2.2 Key findings ([N] papers, [year range])
 
-1. {finding + citable basis (author/year); or TBD}
+1. [Finding with citable basis (author/year); or TBD]
 2. …
 
 <a id="sec-2-3"></a>
 
 #### 2.3 Gaps identified
 
-- {gap 1}
+- [Gap 1]
 - …
 
 <a id="sec-2-4"></a>
 
 #### 2.4 Paper entries
 
-{Each manifest papers[] entry: at least one urls[] string must appear verbatim in this file.}
+[Step 1: one subsection per manifest papers[] entry; at least one urls[] string per paper must appear verbatim in this file]
 
 <a id="sec-2-4-1"></a>
 
-##### 2.4.1 {p1 short title} ({year})
+##### 2.4.1 [Short title] ([year])
 
-- **Takeaway:** {1–2 sentences}
-- **Link:** {url or doi from manifest}
+- **Takeaway:** [1–2 sentences]
+- **Link:** [URL or DOI from manifest]
 
-{Repeat 2.4.x for each paper: 2.4.2, 2.4.3, …}
+[Repeat 2.4.2, 2.4.3, … for each remaining paper]
 
 ---
 
@@ -104,59 +98,59 @@
 
 ### 3. Recommended ideas
 
-{Optional 1–2 sentence portfolio intro.}
+[Optional: 1–2 sentences on how the three ideas complement each other]
 
 <a id="sec-3-1"></a>
 
-### Idea 1: {byte-identical to idea-creator.manifest ideas[].title where rank=1}
+### Idea 1: [Title byte-identical to idea-creator manifest rank=1]
 
 ##### 3.1.1 Methods and hypothesis
 
 **Method (what we would actually do):**
-1. {step}
+1. [Step]
 2. …
 
-**Hypothesis:** {…}
+**Hypothesis:** [Testable statement]
 
 ##### 3.1.2 Experiment and expected outcomes
 
-**Minimum experiment:** {…}
+**Minimum experiment:** [What to run first]
 
 **Expected outcomes:**
-- Positive signal: {…}
-- Null/negative: {…}
+- Positive signal: [Interpretation]
+- Null/negative: [Interpretation]
 
 ##### 3.1.3 Assessment and risks
 
-**Novelty:** {score}/10 — {…}
+**Novelty:** [score]/10 — [Brief rationale]
 
-**Feasibility:** {…}
+**Feasibility:** [Brief rationale]
 
-**Risks:** {…}
+**Risks:** [Main risks]
 
-**Contribution type:** {…}
+**Contribution type:** [Empirical / methods / theory / etc.]
 
-**Pilot results:** {…}
+**Pilot results:** [Done / skipped and why]
 
-**Likely reviewer objection:** {…}
+**Likely reviewer objection:** [Objection and response sketch]
 
-**Why we should do this:** {…}
+**Why we should do this:** [1–2 sentences]
 
 ---
 
 <a id="sec-3-2"></a>
 
-### Idea 2: {title from manifest rank=2}
+### Idea 2: [Title from manifest rank=2]
 
-{Same 3.1.1–3.1.3 structure with numbering 3.2.1–3.2.3, or reuse 3.1.x labels under each Idea block.}
+[Same 3.1.1–3.1.3 structure; subsection numbers 3.2.1–3.2.3 under this Idea block]
 
 ---
 
 <a id="sec-3-3"></a>
 
-### Idea 3: {title from manifest rank=3}
+### Idea 3: [Title from manifest rank=3]
 
-{Same structure.}
+[Same structure as Idea 1]
 
 ---
 
@@ -170,35 +164,35 @@
 
 #### 4.1 Overview
 
-{Step 3: portfolio verdict, execution priority.}
+[Step 3: portfolio verdict and execution priority]
 
 <a id="sec-4-2"></a>
 
 #### 4.2 Per-idea checks
 
-##### 4.2.1 Idea 1: {title}
+##### 4.2.1 Idea 1: [Title]
 
-**Novelty score:** {n}/10  
-**Recommendation:** {PROCEED / CAUTIOUS / ABANDON, etc.}
+**Novelty score:** [n]/10  
+**Recommendation:** [PROCEED / CAUTIOUS / ABANDON, etc.]
 
 **Closest prior work:**
-- {citation} — {gap vs this idea}
+- [Citation] — [Gap vs this idea]
 
-**Main risks:** {…}
+**Main risks:** [Risks]
 
-##### 4.2.2 Idea 2: {title}
+##### 4.2.2 Idea 2: [Title]
 
-{Same.}
+[Same structure]
 
-##### 4.2.3 Idea 3: {title}
+##### 4.2.3 Idea 3: [Title]
 
-{Same.}
+[Same structure]
 
 <a id="sec-4-3"></a>
 
 #### 4.3 Portfolio synthesis
 
-{…}
+[Whether ideas overlap; suggested execution or publication order]
 
 ---
 
@@ -208,43 +202,43 @@
 
 ### 5. External review
 
-{Step 4: rank-1 idea; idea_title matches manifest.}
+[Step 4: rank-1 idea only; idea_title matches manifest]
 
 <a id="sec-5-1"></a>
 
 #### 5.1 Overall verdict
 
-{…}
+[Summary verdict]
 
 <a id="sec-5-2"></a>
 
 #### 5.2 Strengths
 
-- {…}
+- [Strength]
 
 <a id="sec-5-3"></a>
 
 #### 5.3 Critical weaknesses
 
-1. {…}
+1. [Weakness]
 
 <a id="sec-5-4"></a>
 
 #### 5.4 Method concerns
 
-- {…}
+- [Concern]
 
 <a id="sec-5-5"></a>
 
 #### 5.5 Venue fit and reviewer objections
 
-{…}
+[Venue fit and likely objections]
 
 <a id="sec-5-6"></a>
 
 #### 5.6 Actionable follow-ups and reviewer synthesis
 
-{…}
+[Concrete follow-ups]
 
 ---
 
@@ -252,8 +246,6 @@
 
 ### 6. References
 
-{Each entry: authors. **Title**. *Journal*. year;volume(issue):pages. https://doi.org/… — URLs must match §2.4 and appear verbatim from manifest `papers[].urls`.}
+[Step 1: numbered bibliography — one entry per manifest papers[]]
 
-Example:
-
-1. Yang Q, Fu L, Xia M, et al. Disrupted intrinsic functional brain topology in patients with major depressive disorder. *Mol Psychiatry*. 2022;27(1):854–866. https://doi.org/10.1038/s41380-021-01247-2
+[Each entry: authors. **Title**. *Journal*. year;volume(issue):pages. https://doi.org/… — URL must match §2.4 and appear verbatim from that paper’s urls[]]
