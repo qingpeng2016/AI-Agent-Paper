@@ -13,7 +13,12 @@ fail_zh() { echo "STEP5 失败 [$CONTRACT_TAG]: $*" >&2; exit 1; }
 
 [[ -f "$REPORT" ]] || fail_en "$REPORT missing"
 [[ -f "$ZH_REPORT" ]] || fail_zh "缺少 $ZH_REPORT"
-[[ -f idea-stage/research-refine-pipeline.manifest.result.json ]] || fail_en "research-refine-pipeline.manifest.result.json missing"
+if [[ ! -f idea-stage/research-refine-pipeline.manifest.result.json ]]; then
+  if [[ -f refine-logs/research-refine-pipeline.manifest.result.json ]]; then
+    fail_en "manifest is under refine-logs/; move or rewrite to idea-stage/research-refine-pipeline.manifest.result.json"
+  fi
+  fail_en "idea-stage/research-refine-pipeline.manifest.result.json missing"
+fi
 [[ -f idea-stage/idea-creator.manifest.result.json ]] || fail_en "idea-creator.manifest.result.json missing"
 
 python3 <<'PY'
