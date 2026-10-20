@@ -5,8 +5,9 @@
 ## Agent entry
 
 1. Read `RESEARCH_BRIEF.md`, **`idea-creator.manifest.result.json`** (rank-1 `title`), and **`research-review.manifest.result.json`**.
-2. Follow **only this `.desc` file** (including **Example JSON** and deliverable authoring sections).
-3. Write manifest, `refine-logs/` markdown, and composed §1 (EN + ZH) per sections below.
+2. Plan all Step 5 deliverables for the **rank-1 idea only** — the highest-ranked proposal in **`idea-stage/IDEA_REPORT.en.md`** (`## Recommended Ideas (ranked)`, `### Idea 1:`; same title as idea-creator rank 1). Do not re-select by §4 novelty scores or other ranks.
+3. Follow **only this `.desc` file** (including **Example JSON** and deliverable authoring sections).
+4. Write manifest, `refine-logs/` markdown, and composed §1 (EN + ZH) per sections below.
 
 ## Example JSON (`idea-stage/research-refine-pipeline.manifest.result.json`)
 
