@@ -16,8 +16,10 @@ Steps 1–5: **`aris-constraints/*.manifest.example.desc`** is the single contra
 | `IDEA_REPORT.en.example.md` | `idea-stage/IDEA_REPORT.en.md` | English (contract / validate) |
 | `IDEA_REPORT.zh.example.md` | `idea-stage/IDEA_REPORT.zh.md` | Simplified Chinese |
 
-| `EXPERIMENT_PLAN.en.example.md` | `refine-logs/EXPERIMENT_PLAN.md` (Step 5) | English; first H2 must be `## Data access and workspace layout` |
-| `EXPERIMENT_PLAN.zh.example.md` | reference / optional Chinese plan | Same structure as EN template |
+| `EXPERIMENT_PLAN.en.example.md` | `refine-logs/EXPERIMENT_PLAN.md` (Step 5) | English; **field-agnostic** scaffold like IDEA_REPORT (`[Step 5: …]`, TOC, `sec-*`, `### N.` / `#### N.M`); first content H2 `## Data access and workspace layout` |
+| `EXPERIMENT_PLAN.zh.example.md` | reference / optional Chinese plan | Same `sec-*` and numbering; 目录与契约 H2 用语见模版 |
+
+Step 5 section fill-in guide: **`research-refine-pipeline.explain.example.desc`** (contract remains `research-refine-pipeline.manifest.example.desc`).
 
 Placeholder style matches platform narrative templates (e.g. Workflow 3): **`[Fill-in instruction]`** on its own line or after a label — not sample content to keep.
 

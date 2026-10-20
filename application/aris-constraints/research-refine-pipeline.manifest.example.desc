@@ -6,8 +6,9 @@
 
 1. Read `RESEARCH_BRIEF.md`, **`idea-creator.manifest.result.json`** (rank-1 `title`), and **`research-review.manifest.result.json`**.
 2. Plan all Step 5 deliverables for the **rank-1 idea only** — the highest-ranked proposal in **`idea-stage/IDEA_REPORT.en.md`** (`## Recommended Ideas (ranked)`, `### Idea 1:`; same title as idea-creator rank 1). Do not re-select by §4 novelty scores or other ranks.
-3. Follow **only this `.desc` file** (including **Example JSON** and deliverable authoring sections).
-4. Write manifest, `refine-logs/` markdown, and composed §1 (EN + ZH) per sections below.
+3. For section shape and `[Step 5: …]` fill-in style, read **`research-refine-pipeline.explain.example.desc`** and **`md_template/EXPERIMENT_PLAN.en.example.md`** (generic scaffold — content from **this** rank-1 study, any field).
+4. Follow **only this `.desc` file** (including **Example JSON** and deliverable authoring sections).
+5. Write manifest, `refine-logs/` markdown, and composed §1 (EN + ZH) per sections below.
 
 ## Example JSON (`idea-stage/research-refine-pipeline.manifest.result.json`)
 
@@ -100,7 +101,7 @@ Non-empty prose; no `[…]` scaffold lines.
 
 Detailed executable plan. **Not** IDEA_REPORT §1.
 
-**Layout reference:** `aris-constraints/md_template/EXPERIMENT_PLAN.en.example.md` and `EXPERIMENT_PLAN.zh.example.md` (claim-driven phases 0–5, decision table, milestones). Write **`refine-logs/EXPERIMENT_PLAN.md`** in English unless the project explicitly requires a Chinese plan file.
+**Layout reference:** `aris-constraints/md_template/EXPERIMENT_PLAN.en.example.md` and `EXPERIMENT_PLAN.zh.example.md` — same pattern as `IDEA_REPORT.*.example.md`: **`## Table of contents` / `## 目录`**, `sec-*` anchors, contract **`##` H2**, numbered **`### N.`** / **`#### N.M`**, `---` between major chapters. Write **`refine-logs/EXPERIMENT_PLAN.md`** in English unless the project explicitly requires a Chinese plan file.
 
 ### Verification gate (mandatory before “writing dead”)
 
@@ -114,20 +115,20 @@ Primary dataset comes from **this project’s** rank-1 idea / `FINAL_PROPOSAL.md
 
 ### First section (required)
 
-Right after `#` title, the **first H2** must be:
+After `#` title and intro blurb, add **`## Table of contents`** (see template), then `---`. The **first content H2** must be:
 
     ## Data access and workspace layout
 
-Include these four H3 subsections (each non-empty):
+Under **`### 1. Data access and workspace layout`**, include these four **`#### 1.x`** subsections (each non-empty):
 
-| H3 | Content |
-|----|---------|
-| `### Dataset and official sources` | Dataset name/version for **this study**; **verified** landing URL(s); download DOI/portal if separate; DUA/license; citation |
-| `### How to obtain the data` | Ordered steps from **verified** instructions only. If steps were not executed in this run, heading line **`Planned procedure (not yet executed)`** and no fake credentials or timings |
-| `### What you receive after download` | Directory tree, sizes, file types, QC checklist **only after download** or **quoted from official docs** with source link. Otherwise: **TBD until first download** + what will be recorded in `data/<dataset-slug>/README.md` |
-| `### Where to put files in this project` | Paths **relative to workspace root** (contains `RESEARCH_BRIEF.md`), e.g. `data/<dataset-slug>/README.md`, `raw/`, phenotypic/derivatives. No machine-specific absolute roots. No secrets in git |
+| Subsection | Content |
+|------------|---------|
+| `#### 1.1 Dataset and official sources` | Dataset name/version for **this study**; **verified** landing URL(s); download DOI/portal if separate; DUA/license; citation |
+| `#### 1.2 How to obtain the data` | Ordered steps from **verified** instructions only. If steps were not executed in this run, heading line **`Planned procedure (not yet executed)`** and no fake credentials or timings |
+| `#### 1.3 What you receive after download` | Directory tree, sizes, file types, QC checklist **only after download** or **quoted from official docs** with source link. Otherwise: **TBD until first download** + what will be recorded in `data/<dataset-slug>/README.md` |
+| `#### 1.4 Where to put files in this project` | Paths **relative to workspace root** (contains `RESEARCH_BRIEF.md`), e.g. `data/<dataset-slug>/README.md`, `raw/`, phenotypic/derivatives. No machine-specific absolute roots. No secrets in git |
 
-Then continue with study question, phases (Phase 0 data audit, preprocessing, analysis), resources, timeline. Phase 0 “obtain data” should **reference this section**, not duplicate URLs.
+Then continue with §2–§11 per template (generic phase titles; **phase bodies are project-specific** — simulation, experiment, survey, ML, etc.). Phase 0 “obtain data” should **reference §1**, not duplicate URLs.
 
 ---
 
