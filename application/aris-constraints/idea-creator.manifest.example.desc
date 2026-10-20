@@ -1,6 +1,6 @@
 # idea-creator.manifest.result.json (Step 2)
 
-**Single contract for Step 2.** Wrapper `idea-creator.aris.example.sh` loads **only this `.desc`**. Sibling `idea-creator.manifest.example.json` = init copy of **Example JSON** below.
+**Single contract for Step 2.** Wrapper `idea-creator.aris.example.sh` loads **only this `.desc` file**.
 
 ## Agent entry
 

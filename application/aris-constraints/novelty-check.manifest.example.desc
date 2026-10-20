@@ -1,6 +1,6 @@
 # novelty-check.manifest.result.json (Step 3)
 
-**Single contract for Step 3.** Wrapper loads **only this `.desc`**. Sibling `novelty-check.manifest.example.json` = init copy of **Example JSON** below.
+**Single contract for Step 3.** Wrapper `novelty-check.aris.example.sh` loads **only this `.desc` file**.
 
 ## Agent entry
 

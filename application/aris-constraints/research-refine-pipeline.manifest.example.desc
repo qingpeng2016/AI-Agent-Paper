@@ -1,6 +1,6 @@
 # research-refine-pipeline.manifest.result.json (Step 5)
 
-**Single contract for Step 5.** Wrapper loads **only this `.desc`**. Sibling `research-refine-pipeline.manifest.example.json` = init copy of **Example JSON** below.
+**Single contract for Step 5.** Wrapper `research-refine-pipeline.aris.example.sh` loads **only this `.desc` file**.
 
 ## Agent entry
 

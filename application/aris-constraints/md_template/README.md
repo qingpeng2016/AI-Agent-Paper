@@ -1,6 +1,6 @@
 # Markdown templates (idea discovery)
 
-Steps 1–5: **`aris-constraints/*.manifest.example.desc`** is the single contract (field tables + **Example JSON** + report rules). **`*.aris.example.sh`** loads only the `.desc`. Sibling `*.manifest.example.json` is an init mirror of Example JSON in the desc.
+Steps 1–5: **`aris-constraints/*.manifest.example.desc`** is the single contract (field tables + **Example JSON** + report rules). **`*.aris.example.sh`** loads only the `.desc`.
 
 ## Naming (do not mix)
 

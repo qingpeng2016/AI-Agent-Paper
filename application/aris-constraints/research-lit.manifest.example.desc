@@ -1,6 +1,6 @@
 # research-lit.manifest.result.json (Step 1)
 
-**Single contract for Step 1** (manifest JSON shape + report rules). The wrapper `bash aris-constraints/research-lit.aris.example.sh` only loads **this `.desc` file**. The sibling `research-lit.manifest.example.json` is an init copy of **Example JSON** below—not a second spec.
+**Single contract for Step 1** (manifest JSON shape + report rules). Wrapper `bash aris-constraints/research-lit.aris.example.sh` loads **only this `.desc` file**.
 
 ## Agent entry
 

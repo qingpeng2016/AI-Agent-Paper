@@ -1,6 +1,6 @@
 # research-review.manifest.result.json (Step 4)
 
-**Single contract for Step 4.** Wrapper loads **only this `.desc`**. Sibling `research-review.manifest.example.json` = init copy of **Example JSON** below.
+**Single contract for Step 4.** Wrapper `research-review.aris.example.sh` loads **only this `.desc` file**.
 
 ## Agent entry
 
