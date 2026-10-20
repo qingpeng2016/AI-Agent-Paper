@@ -16,7 +16,7 @@ Same keys and nesting as `aris-constraints/research-lit.manifest.example.json` (
 | report_path | `"idea-stage/IDEA_REPORT.md"` |
 | finished_at | UTC ISO-8601 |
 | sources_used | string array (sources actually used, e.g. `web`, `arxiv`, `gemini`) |
-| papers | array, **length ≥ 8** for `success` |
+| papers | non-empty array |
 
 ## papers[] (each entry)
 
@@ -41,3 +41,5 @@ File: `idea-stage/IDEA_REPORT.md` (same as manifest `report_path`).
 For `result=success`, the report MUST include this markdown H2 line exactly:
 
     ## Literature Landscape
+
+Every string in `papers[].urls` MUST appear verbatim at least once in `IDEA_REPORT.md`.
