@@ -42,4 +42,4 @@ For `result=success`, the report MUST include this markdown H2 line exactly:
 
     ## Literature Landscape
 
-Every string in `papers[].urls` MUST appear verbatim at least once in `IDEA_REPORT.md`.
+For each paper, at least **one** string from `papers[].urls` MUST appear verbatim in `IDEA_REPORT.md` (not necessarily every URL in the array).

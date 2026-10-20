@@ -16,10 +16,10 @@ for p in papers:
     assert isinstance(p.get("year"), int)
     urls, doi, arx = p.get("urls") or [], p.get("doi"), p.get("arxiv_id")
     assert urls or doi or arx, p.get("id")
-    for url in urls:
-        url = (url or "").strip()
-        if not url:
-            continue
-        assert url in body, f"URL missing from IDEA_REPORT: {url!r} (paper {p.get('id')})"
+    listed = [(u or "").strip() for u in urls if (u or "").strip()]
+    if listed:
+        assert any(u in body for u in listed), (
+            f"no url from papers[].urls found in IDEA_REPORT for paper {p.get('id')!r}: {listed}"
+        )
 print("STEP1 OK")
 PY
