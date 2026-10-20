@@ -7,7 +7,7 @@ Same keys and nesting as `aris-constraints/research-review.manifest.example.json
 
 **Delivery only** — not accept/reject outcome. Harsh `verdict_summary`, reject stance, and critical `review_points` are normal; write them in `reviews[0]`, not in `result`.
 
-- `"success"` — use when **all** of: valid JSON; `reviews` length **1** for rank-1 idea; `reviews[0].idea_title` matches idea-creator rank-1 title byte-for-byte; non-empty `verdict_summary` and `review_points`; `IDEA_REPORT.md` includes `## External Critical Review`.
+- `"success"` — use when **all** of: valid JSON; `reviews` length **1** for rank-1 idea; `reviews[0].idea_title` matches idea-creator rank-1 title byte-for-byte; non-empty `verdict_summary`; `IDEA_REPORT.md` includes `## External Critical Review`.
 - `"failed"` — only if Step 4 **could not complete** the contract (e.g. missing review, wrong title, report section not written). Still write the file.
 - **Do not** use `"partial"` or other values.
 
@@ -30,7 +30,7 @@ Same keys and nesting as `aris-constraints/research-review.manifest.example.json
 | rank | **1** |
 | idea_title | **byte-for-byte identical** to idea-creator `ideas[].title` where `rank=1` |
 | verdict_summary | non-empty string |
-| review_points | non-empty string array |
+| review_points | optional string array (detail bullets; `strengths` / `weaknesses` / `actionable_items` OK instead) |
 | mock_score | optional string |
 | strengths | optional string array |
 | weaknesses | optional string array |

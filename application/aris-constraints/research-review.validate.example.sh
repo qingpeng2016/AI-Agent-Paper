@@ -55,8 +55,5 @@ if rev.get("idea_title") != r1["title"]:
 if not (rev.get("verdict_summary") or "").strip():
     fail("reviews[0].verdict_summary empty")
 
-if len(rev.get("review_points") or []) < 1:
-    fail("reviews[0].review_points need at least 1 entry")
-
 print("STEP4 OK")
 PY
