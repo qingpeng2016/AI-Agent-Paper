@@ -16,7 +16,7 @@ Same keys and nesting as `aris-constraints/research-review.manifest.example.json
 | aris_phase | `"research-review"` |
 | report_path | `"idea-stage/IDEA_REPORT.md"` |
 | focus_rank | **1** (rank-1 idea only) |
-| reviewer_model | from prompt (e.g. `gpt-6-astra`) |
+| reviewer_model | from prompt (e.g. `gpt-5.4`) |
 | reviews | array **length 1** |
 | finished_at | UTC ISO-8601 |
 

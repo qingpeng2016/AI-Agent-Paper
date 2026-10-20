@@ -64,7 +64,7 @@ platform:
   pilot_timeout_hours: 3
   max_pilot_ideas: 3
   max_total_gpu_hours: 8
-  reviewer_model: gpt-6-astra
+  reviewer_model: gpt-5.4
   output_dir: idea-stage/
   compact: false
   render_html: true

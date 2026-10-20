@@ -44,7 +44,7 @@ func TestDefaultARISIdeaDiscoveryConfig(t *testing.T) {
 	if !strings.HasPrefix(line, `"`) {
 		t.Fatalf("quoted direction: %s", line)
 	}
-	if !strings.Contains(line, "PILOT_MAX_HOURS: 2") || !strings.Contains(line, "REVIEWER_MODEL: gpt-6-astra") {
+	if !strings.Contains(line, "PILOT_MAX_HOURS: 2") || !strings.Contains(line, "REVIEWER_MODEL: gpt-5.4") {
 		t.Fatalf("skill constants missing in args line: %s", line)
 	}
 	for _, forbidden := range []string{"composed:", "paper library:", "resume"} {

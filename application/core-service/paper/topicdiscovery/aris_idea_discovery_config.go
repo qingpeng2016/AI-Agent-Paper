@@ -246,7 +246,7 @@ func defaultARISIdeaDiscoveryConfig() ARISIdeaDiscoveryConfig {
 			PilotTimeoutHours: 3,
 			MaxPilotIdeas:     3,
 			MaxTotalGPUHours:  8,
-			ReviewerModel:     "gpt-6-astra",
+			ReviewerModel:     "gpt-5.4",
 			OutputDir:         "idea-stage/",
 			Compact:           false,
 			RenderHTML:        true,
@@ -530,7 +530,7 @@ func (c ARISIdeaDiscoveryConfig) FormatIdeaDiscoveryArgsLine(input topicRunInput
 	}
 	reviewer := strings.TrimSpace(p.ReviewerModel)
 	if reviewer == "" {
-		reviewer = "gpt-6-astra"
+		reviewer = "gpt-5.4"
 	}
 	line := fmt.Sprintf(
 		`%s — venue: %s — AUTO_PROCEED: %s — RESUMABLE: %s — sources: %s — ARXIV_DOWNLOAD: %s — COMPACT: %s — RENDER_HTML: %s — OUTPUT_DIR: %s — REVIEWER_MODEL: %s — PILOT_MAX_HOURS: %d — PILOT_TIMEOUT_HOURS: %d — MAX_PILOT_IDEAS: %d — MAX_TOTAL_GPU_HOURS: %d`,
