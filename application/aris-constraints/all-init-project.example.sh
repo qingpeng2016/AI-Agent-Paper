@@ -37,6 +37,10 @@ do
     COPIED=$((COPIED + 1))
   done
 done
+if [[ -d "$SCRIPT_DIR/md_template" ]]; then
+  mkdir -p "$DEST/md_template"
+  cp -f "$SCRIPT_DIR"/md_template/* "$DEST/md_template/" 2>/dev/null || true
+fi
 chmod +x "$DEST"/*.sh 2>/dev/null || true
 
 cat > "$ROOT/RESEARCH_BRIEF.md" <<'EOF'
