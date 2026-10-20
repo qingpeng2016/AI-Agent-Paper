@@ -1,11 +1,13 @@
 # research-refine-pipeline.manifest.result.json (Step 5)
 
+Single contract for Step 5 delivery: manifest JSON, `refine-logs/` markdown, and IDEA_REPORT §1 (EN + ZH). Read **`idea-creator.manifest.result.json`** for rank-1 `title`; read **`RESEARCH_BRIEF.md`**, prior step manifests, and **`research-review.manifest.result.json`** for context.
+
 ## Delivery paths (do not swap)
 
 | Artifact | Path | Wrong (invalid) |
 |----------|------|-----------------|
 | **Manifest JSON** | **`idea-stage/research-refine-pipeline.manifest.result.json`** | `refine-logs/research-refine-pipeline.manifest.result.json` or any other folder |
-| FINAL_PROPOSAL, EXPERIMENT_PLAN, … | `refine-logs/*.md` per table below | do not put manifest here |
+| Deliverable markdown | `refine-logs/*.md` per table below | do not put manifest here |
 | §1 report body | **`idea-stage/IDEA_REPORT.en.md`** and **`idea-stage/IDEA_REPORT.zh.md`** | not only `refine-logs/` |
 
 Write manifest: **`idea-stage/research-refine-pipeline.manifest.result.json`** (project root–relative).  
@@ -43,9 +45,77 @@ Also write the markdown files at paths listed in `deliverables` (required paths 
 | experiment_tracker | `refine-logs/EXPERIMENT_TRACKER.md` | yes — file non-empty |
 | pipeline_summary | `refine-logs/PIPELINE_SUMMARY.md` | optional |
 
-## experiment_plan (authoring)
+All deliverables are for **idea-creator rank 1** only; align titles and claims with rank-1 idea and external review (`research-review`).
 
-Structure and required **first chapter** (data URLs, access steps, package layout, `data/` paths): see `aris-constraints/research-refine-pipeline.explain.example.desc`. That file guides **`refine-logs/EXPERIMENT_PLAN.md` only**, not IDEA_REPORT §1.
+---
+
+## Authoring: `refine-logs/FINAL_PROPOSAL.md`
+
+Refined rank-1 proposal after literature + ideas + novelty + external review. Suggested structure:
+
+- `#` title — rank-1 idea title (or concise variant; must match manifest `idea_title` if used as H1)
+- Problem framing and gap (from §2 / rank-1 idea)
+- **Refined** hypothesis and methods (incorporate review follow-ups)
+- Primary/secondary outcomes and analysis plan (high level)
+- Expected contributions and venue fit
+- Risks and mitigations (from review + idea-creator)
+
+Non-empty prose; no `[…]` scaffold lines.
+
+---
+
+## Authoring: `refine-logs/EXPERIMENT_PLAN.md`
+
+Detailed executable plan. **Not** IDEA_REPORT §1.
+
+### Verification gate (mandatory before “writing dead”)
+
+Every **official URL** listed under data access must be **checked in this run** (fetch or browser): page loads (not 404/5xx), content matches the named dataset. If not checked, label the URL **`TBD — verify:`** + search starting point; **do not** present broken or guessed links as official.
+
+**Data usability:** Only state that data is obtainable (portal, DUA, password channel) if the **same verified page or DOI landing** says so. Do not invent hosts, mirrors, version folders, archive sizes, or directory trees unless **verified on the official site or after a real download**. Wrong URLs fail delivery quality even when validate passes.
+
+Passwords, tokens, and cohort N from outcome modeling: never fabricate; **TBD** + official contact/DUA text.
+
+Primary dataset comes from **this project’s** rank-1 idea / `FINAL_PROPOSAL.md` / `RESEARCH_BRIEF.md`.
+
+### First section (required)
+
+Right after `#` title, the **first H2** must be:
+
+    ## Data access and workspace layout
+
+Include these four H3 subsections (each non-empty):
+
+| H3 | Content |
+|----|---------|
+| `### Dataset and official sources` | Dataset name/version for **this study**; **verified** landing URL(s); download DOI/portal if separate; DUA/license; citation |
+| `### How to obtain the data` | Ordered steps from **verified** instructions only. If steps were not executed in this run, heading line **`Planned procedure (not yet executed)`** and no fake credentials or timings |
+| `### What you receive after download` | Directory tree, sizes, file types, QC checklist **only after download** or **quoted from official docs** with source link. Otherwise: **TBD until first download** + what will be recorded in `data/<dataset-slug>/README.md` |
+| `### Where to put files in this project` | Paths **relative to workspace root** (contains `RESEARCH_BRIEF.md`), e.g. `data/<dataset-slug>/README.md`, `raw/`, phenotypic/derivatives. No machine-specific absolute roots. No secrets in git |
+
+Then continue with study question, phases (Phase 0 data audit, preprocessing, analysis), resources, timeline. Phase 0 “obtain data” should **reference this section**, not duplicate URLs.
+
+---
+
+## Authoring: `refine-logs/EXPERIMENT_TRACKER.md`
+
+Living log for rank-1 execution. Suggested sections:
+
+- `#` title + link to rank-1 idea title
+- **Decision log** — refinements adopted from review (dated bullets)
+- **Phase checklist** — Phase 0 … N with status (pending / in progress / done)
+- **Risks & blockers** — data access, compute, preregistration
+- **Next actions** — ordered short list
+
+Non-empty.
+
+---
+
+## Authoring: `refine-logs/PIPELINE_SUMMARY.md` (optional)
+
+One-page pointer: rank-1 one-liner, where full detail lives (`FINAL_PROPOSAL.md`, `EXPERIMENT_PLAN.md`), key milestones, how to run Phase 0. Optional for `success` but write if time permits.
+
+---
 
 ## Composed reports (Step 5 owns §1)
 
@@ -61,7 +131,7 @@ After init, **`idea-stage/` holds the working reports**:
 | `idea-stage/IDEA_REPORT.en.md` | English | **§1** Executive summary |
 | `idea-stage/IDEA_REPORT.zh.md` | Simplified Chinese | **§1** 执行摘要 |
 
-**Step 5:** use `aris-constraints/md_template/IDEA_REPORT.en.example.md` and `aris-constraints/md_template/IDEA_REPORT.zh.example.md` to see §1 subsections; write into the matching span in **both** idea-stage files (EN: from `## Executive Summary` through the `---` before `## Literature Landscape`; ZH: from `## 执行摘要` through the `---` before `## 文献综述`). Replace **every** `[…]` hint in §1 (including the `[Step 5:` / `[第 5 步：` paragraph block) using `executive_summary`, rank-1 refinement, and deliverables context. **Do not** remove report title, table of contents, or §2–§6. Do not edit other chapters. Do not leave `[…]` placeholders in §1.
+**Step 5:** write into the matching span in **both** idea-stage files (EN: from `## Executive Summary` through the `---` before `## Literature Landscape`; ZH: from `## 执行摘要` through the `---` before `## 文献综述`). Replace **every** `[…]` hint in §1 (including the `[Step 5:` / `[第 5 步：` paragraph block) using `executive_summary`, rank-1 refinement, and deliverables context. **Do not** remove report title, table of contents, or §2–§6. Do not edit other chapters. Do not leave `[…]` placeholders in §1.
 
 For `result=success`, section **§1** contract H2:
 

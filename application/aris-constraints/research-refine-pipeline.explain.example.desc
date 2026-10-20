@@ -1,30 +1,5 @@
-# Step 5 — `refine-logs/EXPERIMENT_PLAN.md` (authoring)
+# Step 5 authoring (moved)
 
-Guidance only; validate still checks non-empty deliverables + manifest (see `research-refine-pipeline.manifest.example.desc`).
+All delivery rules and deliverable templates (EXPERIMENT_PLAN data-access chapter, FINAL_PROPOSAL, TRACKER, §1 reports) are in **`research-refine-pipeline.manifest.example.desc`**.
 
-Plan is for **idea-creator rank 1** only; align with `FINAL_PROPOSAL.md` and rank-1 title. Primary dataset comes from **this project’s** rank-1 idea / `FINAL_PROPOSAL.md` / `RESEARCH_BRIEF.md` — not from this file.
-
-## Verification gate (mandatory before “writing dead”)
-
-Every **official URL** listed under data access must be **checked in this run** (fetch or browser): page loads (not 404/5xx), content matches the named dataset. If not checked, label the URL **`TBD — verify:`** + search starting point; **do not** present broken or guessed links as official.
-
-**Data usability:** Only state that data is obtainable (portal, DUA, password channel) if the **same verified page or DOI landing** says so. Do not invent hosts, mirrors, version folders, archive sizes, or directory trees unless **verified on the official site or after a real download**. Wrong URLs fail delivery quality even when validate passes.
-
-Passwords, tokens, and cohort N from outcome modeling: never fabricate; **TBD** + official contact/DUA text.
-
-## First section (required)
-
-Right after `#` title, the **first H2** must be:
-
-    ## Data access and workspace layout
-
-Include these four H3 subsections (each non-empty):
-
-| H3 | Content |
-|----|---------|
-| `### Dataset and official sources` | Dataset name/version for **this study**; **verified** landing URL(s); download DOI/portal if separate; DUA/license; citation |
-| `### How to obtain the data` | Ordered steps from **verified** instructions only. If steps were not executed in this run, heading line **`Planned procedure (not yet executed)`** and no fake credentials or timings |
-| `### What you receive after download` | Directory tree, sizes, file types, QC checklist **only after download** or **quoted from official docs** with source link. Otherwise: **TBD until first download** + what will be recorded in `data/<dataset-slug>/README.md` |
-| `### Where to put files in this project` | Paths **relative to workspace root** (contains `RESEARCH_BRIEF.md`), e.g. `data/<dataset-slug>/README.md`, `raw/`, phenotypic/derivatives. No machine-specific absolute roots. No secrets in git |
-
-Then continue with study question, Phase 0, etc. Phase 0 “obtain data” should **reference this section**, not duplicate URLs.
+Do not use this file for new work; kept so older project copies still list a familiar filename after init.
