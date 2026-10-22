@@ -1,7 +1,5 @@
 # Data Source Profile
 
-`/data-source-discovery` template. **Read this file** → write `data-source/DATA_SOURCE_PROFILE.en.md`. **Two document `##` only.** **Recommended datasets: min 1, max 3** (`### 2.1` required; `2.2`/`2.3` optional). Each block: **`#### 2.x.1`–`2.x.4`**. Manifest **`datasets[]` count must match profile blocks (1–3)**. If only one dataset, **delete unused `### 2.2`/`2.3` sections** from the template — no empty headings. Before success: `bash aris-constraints/data-source-discovery.validate.example.sh`.
-
 **Date:** [YYYY-MM-DD]  
 **Primary ID:** [manifest `primary_recommendation_id` → block **2.1**]
 

@@ -23,8 +23,8 @@ If the Paper workspace defines `aris-constraints/data-source-discovery.manifest.
 - **OUTPUT_DIR = `data-source/`** — **All** skill outputs (manifest, profiles). Run **`mkdir -p data-source`** first if missing.
 - **DATA_STAGING = `data-source/raw/`** — Optional probe downloads (small files only unless user approves size).
 - **MAX_CANDIDATES = 8** — Internal search shortlist breadth (not all appear in profile).
-- **MIN_PROFILE_DATASETS = 1** · **MAX_PROFILE_DATASETS = 3** — **`## 推荐数据集`** documents **`### 2.1`–`2.3`** only (at least **2.1**; up to three ranked entries).
-- **MAX_PRIMARY = 1** — One locked **`primary_recommendation_id`** (always **`### 2.1`** / `datasets[0]` or matching id).
+- **MIN_PROFILE_DATASETS = 1** · **MAX_PROFILE_DATASETS = 3** — Profile **`### 2.1`–`2.3`**: **hard floor 1, hard cap 3**. **Target: fill toward 3** — after search, document **`min(3, viable shortlist)`** ranked datasets (not only the primary).
+- **MAX_PRIMARY = 1** — One locked **`primary_recommendation_id`** (always **`### 2.1`**). **`2.2`/`2.3`** = next-best alternates (any `access_tier`; say why not primary).
 - **SOURCES** — Parse `— sources:` from the invocation. Default: `web`. Recommended for discovery: `web, gemini, openalex` when available.
 - **PROBE_DOWNLOAD = false** — When `true`, download a **minimal** subset (metadata + 1–2 subjects or &lt;50MB) to validate layout.
 - **ALLOW_GATED_SECONDARY = true** — List apply-to-access datasets only under **Secondary / not free**, never as primary.
@@ -106,16 +106,16 @@ Score fit (high/medium/low) against Phase 0. Choose **`primary_recommendation`**
 - Structure section complete with **structure_verified: true**
 - Gaps must be **survivable** for a plausible paper OR explicitly warn that `/research-lit` should narrow claims
 
-Write **1–3 datasets** into the profile (`### 2.1` required; `2.2` / `2.3` if useful alternates). **`datasets[]` in manifest** must match profile count (1–3). Only **`2.1`** may be `open_free_direct` primary; `2.2`/`2.3` may be lower tier with reason in lead.
+Write **`min(3, viable shortlist)`** datasets into profile when possible (**goal: 3 blocks**; **minimum 1** only if no other defensible candidate after Phase 1–2). **`datasets[]`** count must match **`### 2.x`** blocks (1–3). If profile has **&lt;3** but search found more names, explain in **`executive_summary`** why entries were dropped. Only **`2.1`** may be `open_free_direct` primary.
 
 ### Phase 5: Write deliverables
 
 #### 5.1 `data-source/DATA_SOURCE_PROFILE.en.md`
 
-**Mandatory:** Read `aris-constraints/md_template/DATA_SOURCE_PROFILE.en.example.md` and **clone its heading tree** (TOC + `sec-*` anchors). Replace placeholders only.
+**Mandatory:** Read `aris-constraints/md_template/DATA_SOURCE_PROFILE.en.example.md` and **clone its heading tree** (TOC + `sec-*` anchors). Replace placeholders only. **Deliverable must not** include md_template agent-instruction paragraphs (title + date/ID metadata only before `##`).
 
 - **`## Data requirements`** → **`## Recommended datasets`** (only two document H2).
-- **1–3 blocks:** **`### 2.1`** (primary) through optional **`### 2.3`**; each block has **`#### 2.x.1`–`2.x.4`** (publication, directory structure, access/license, download). Put sample size / protocol in each **`### 2.x` lead**.
+- **1–3 blocks (prefer 3):** **`### 2.1`** (primary) … **`### 2.3`** when shortlisted; each **`#### 2.x.1`–`2.x.4`**. Sample size / protocol in each **`### 2.x` lead**.
 - **Anti-patterns:** extra H2 (candidates, “detailed version”, gaps, downstream); duplicating sections after the template; `### 1.` legacy blocks.
 
 #### 5.2 `data-source/DATA_SOURCE_PROFILE.zh.md`

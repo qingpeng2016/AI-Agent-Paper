@@ -50,6 +50,8 @@ H4_SUFFIX_ZH = [
 ]
 MIN_DATASETS = 1
 MAX_DATASETS = 3
+FORBIDDEN_BODY_ZH = ("交付模版", "Read 本文件", "data-source-discovery.validate.example.sh")
+FORBIDDEN_BODY_EN = ("deliverable template", "Read this file", "data-source-discovery.validate.example.sh")
 LEGACY_H2_ZH = [
     "## 研究数据需求",
     "## 候选数据集",
@@ -129,13 +131,16 @@ def dataset_blocks(body: str):
     nums = [int(m.group(1)) for m in re.finditer(r"^### 2\.(\d+)\b", body, re.MULTILINE)]
     return nums
 
-def check_file(path, h2_list, h4_suffixes, forbidden_h2, legacy_h2, label, need_toc):
+def check_file(path, h2_list, h4_suffixes, forbidden_h2, legacy_h2, label, need_toc, forbidden_body=()):
     import re
     if not os.path.isfile(path):
         fail(f"{label} missing: {path}")
     body = open(path, encoding="utf-8").read().strip()
     if len(body) < 200:
         fail(f"{label} too short or empty: {path}")
+    for needle in forbidden_body:
+        if needle in body:
+            fail(f"{path} contains agent-instruction text {needle!r}; remove template preamble from deliverable")
     blocks = dataset_blocks(body)
     if not blocks:
         fail(f"{path} missing ### 2.1 dataset block")
@@ -209,11 +214,11 @@ for p in (pen, pzh):
 forbidden_en = FORBIDDEN_TOP_H2_EN + FORBIDDEN_TOP_H2_EN_EXTRA
 check_file(
     pen, REQUIRED_H2_EN, H4_SUFFIX_EN, forbidden_en, LEGACY_H2_EN,
-    "profile EN", "## Table of contents",
+    "profile EN", "## Table of contents", FORBIDDEN_BODY_EN,
 )
 check_file(
     pzh, REQUIRED_H2_ZH, H4_SUFFIX_ZH, FORBIDDEN_TOP_H2_ZH, LEGACY_H2_ZH,
-    "profile ZH", "## 目录",
+    "profile ZH", "## 目录", FORBIDDEN_BODY_ZH,
 )
 
 blocks_zh = dataset_blocks(open(pzh, encoding="utf-8").read())

@@ -1,7 +1,5 @@
 # 数据源画像
 
-`/data-source-discovery` 交付模版。**Read 本文件** → 写入 `data-source/DATA_SOURCE_PROFILE.zh.md`。**仅两个文档级 `##`**：`数据需求`、`推荐数据集`。**推荐数据集至少 1 个、最多 3 个**（`### 2.1` 必填，`2.2`/`2.3` 可选）。每块 **四个 `#### 2.x.1`～`2.x.4`**；按序写完再写下一块。样本量/协议写在 **`### 2.x` 段首**。manifest **`datasets[]` 条数与 profile 块数一致（1–3）**。**只写 1 个时删掉未用的 `### 2.2`/`2.3` 整段**，勿留空标题。交付前：`bash aris-constraints/data-source-discovery.validate.example.sh`。
-
 **日期：** [YYYY-MM-DD]  
 **主推 ID：** [manifest `primary_recommendation_id`，对应 **2.1**]
 
