@@ -1,0 +1,60 @@
+# Step 5 — how to write deliverables (authoring guide)
+
+**Enforceable contract:** `research-refine-pipeline.desc` (JSON fields, paths, URL verification, `result=success` gates).
+
+**This file:** human/agent guide for **shape and fill-in style** — same role as reading `IDEA_REPORT.*.md` before composing the report. Templates are **field-agnostic**; content comes from **this project’s** rank-1 idea, not from a fixed domain example.
+
+---
+
+## EXPERIMENT_PLAN (`refine-logs/EXPERIMENT_PLAN.md`)
+
+**Scaffolds:** section layout in **this explain file** (Step 5 Phases 0–11). Do **not** use `md_template/EXPERIMENT_PLAN.*.md` — those templates are for standalone **`/experiment-plan`** (`aris-constraints/skills/experiment-plan/experiment-plan.desc`).
+
+**Pattern (match `IDEA_REPORT.*.md`):**
+
+| In template | Meaning |
+|-------------|---------|
+| Lines after `#` title | Workflow instructions — not part of the finished plan body; may trim in delivery |
+| `## Table of contents` / `## 目录` | Numbered links to `#sec-*` |
+| `---` between major chapters | Visual break; keep in deliverable |
+| `## …` H2 | **Contract** section title (EN deliverable: first content H2 must be `## Data access and workspace layout`) |
+| `<a id="sec-N">` | Stable anchors; EN/ZH templates share ids |
+| `### N.` / `#### N.M` | Numbered section headings |
+| `[Step 5: …]` / `[第 5 步：…]` | **Replace entirely** with study-specific prose — do not ship brackets |
+
+**Where content comes from:** rank-1 block in `idea-stage/IDEA_REPORT.en.md` (§3 Idea 1), novelty/review for that idea (§4–§5), `refine-logs/FINAL_PROPOSAL.md`, `RESEARCH_BRIEF.md`, and `research-review.manifest.result.json`. Phase names stay generic; **steps inside Phases 0–4 are yours** (simulation, survey, bench, ML, theory, etc.).
+
+### Section-by-section (what to write)
+
+| § | EN contract H2 (representative) | Fill-in |
+|---|----------------------------------|---------|
+| 1 | Data access and workspace layout | **Mandatory first.** §1.1–1.4: official sources (verified URLs or `TBD — verify:`), obtain steps, post-download layout, project-relative paths. See manifest **Verification gate**. |
+| 2 | Study Question and Claim Hierarchy | 2.1 one primary question; 2.2 ordered confirmatory claims (count flexible); 2.3 what conclusions are out of scope |
+| 3 | Phase 0 — Data and Protocol Lock | Feasibility, QC-only pass, population lock, validation split freeze, prereg — **no** outcome-guided tuning |
+| 4 | Phase 1 — Preparation and Analysis-Ready Inputs | Domain prep pipeline + deliverable artifacts |
+| 5 | Phase 2 — Primary Analysis Pipeline | 5.1 main test; 5.2 secondary/exploratory; 5.3 validation/leakage; 5.4 metrics and multiplicity |
+| 6 | Phase 3 — Confirmatory Inference | Execute prespecified confirmatory tests in fixed order |
+| 7 | Phase 4 — Robustness and Sensitivity | All prespecified robustness; null/weak-evidence wording |
+| 8 | Phase 5 — Reporting and Release | Output map, sharing, deviations |
+| 9 | Required Figures and Tables | Numbered list tied to claims |
+| 10 | Preregistered Decision Table | Rows map **observed patterns → allowed claim wording** for §2 |
+| 11 | Milestones and Dependencies | Table M0… aligned with phases; stop conditions |
+
+**Not allowed in the template sense:** copying a domain-specific plan (e.g. one imaging/graph study) as boilerplate — every numbered step under Phases 0–4 must reflect rank-1 methods from the report.
+
+---
+
+## Other Step 5 markdown (brief)
+
+| File | Template / guide |
+|------|------------------|
+| `refine-logs/FINAL_PROPOSAL.md` | Structure in manifest **Authoring: FINAL_PROPOSAL** — refined rank-1 narrative after review |
+| `refine-logs/EXPERIMENT_TRACKER.md` | Manifest **Authoring: EXPERIMENT_TRACKER** — dated execution log, not a duplicate of EXPERIMENT_PLAN |
+| `refine-logs/PIPELINE_SUMMARY.md` | Optional one-page pointer |
+| `idea-stage/IDEA_REPORT.en.md` / `.zh.md` §1 | `IDEA_REPORT.*.md` — Step 5 **only** edits §1; see manifest **Edit scope** |
+
+---
+
+## Validate vs quality
+
+Step 5 validate checks manifest JSON, non-empty deliverables, and §1 placeholders. **URL honesty and claim alignment** are contract in the manifest, not automatic validate failures — still required for delivery.

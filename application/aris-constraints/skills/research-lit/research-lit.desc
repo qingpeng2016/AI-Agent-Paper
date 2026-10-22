@@ -1,0 +1,129 @@
+# research-lit.manifest.result.json (Step 1)
+
+**Single contract for Step 1** (manifest JSON shape + report rules). Wrapper `bash aris-constraints/skills/research-lit/research-lit.aris.sh` loads **only this `.desc` file**.
+
+## Agent entry
+
+1. Read `RESEARCH_BRIEF.md`.
+2. Follow **only this `.desc` file** (including **Example JSON**).
+3. Write `idea-stage/research-lit.manifest.result.json` and composed report sections per sections below.
+
+## Example JSON (`idea-stage/research-lit.manifest.result.json`)
+
+Replace example values; keep keys and nesting.
+
+```json
+{
+  "aris_phase": "research-lit",
+  "result": "success",
+  "report_path": "idea-stage/IDEA_REPORT.en.md",
+  "zh_report_path": "idea-stage/IDEA_REPORT.zh.md",
+  "finished_at": "2026-10-19T12:00:00Z",
+  "sources_used": ["arxiv", "web", "gemini"],
+  "papers": [
+    {
+      "id": "p1",
+      "title": "Example paper title",
+      "year": 2021,
+      "venue": "NeuroImage",
+      "urls": [
+        "https://arxiv.org/abs/2111.01351",
+        "https://doi.org/10.1016/j.neuroimage.2021.117123"
+      ],
+      "doi": "10.1016/j.neuroimage.2021.117123",
+      "arxiv_id": "2111.01351",
+      "pmid": null,
+      "pdf_path": null
+    }
+  ]
+}
+```
+
+## ARIS runtime (from `research-lit.aris.sh`)
+
+| Option | Value |
+|--------|--------|
+| skill | `/research-lit` |
+| language | `en` |
+| paper library | `literature/` |
+| sources | `all`, `gemini` |
+| ARXIV_DOWNLOAD | `false` |
+| ARXIV_MAX_DOWNLOAD | `5` |
+| composed | `idea-stage/IDEA_REPORT.en.md`, `idea-stage/IDEA_REPORT.zh.md` |
+
+## result
+
+**Delivery only** — not literature quality or coverage. Put assessment in the report prose, not in `result`.
+
+- `"success"` — use when **all** of: valid JSON; non-empty `papers[]` with required fields per table below; composed report sections in **both** `idea-stage/IDEA_REPORT.en.md` and `idea-stage/IDEA_REPORT.zh.md` meet the template contract below (§2 and §6); each paper’s URL rule is met in the English report (see below).
+- `"failed"` — only if Step 1 **could not complete** the contract (e.g. empty papers, missing report section). Still write the file.
+- **Do not** use `"partial"` or other values.
+
+## Top-level fields
+
+| Field | Value |
+|-------|--------|
+| aris_phase | `"research-lit"` |
+| report_path | `"idea-stage/IDEA_REPORT.en.md"` |
+| zh_report_path | `"idea-stage/IDEA_REPORT.zh.md"` (Simplified Chinese; same `sec-*` anchors as EN) |
+| finished_at | UTC ISO-8601 |
+| sources_used | string array (sources actually used, e.g. `web`, `arxiv`, `gemini`) |
+| papers | non-empty array |
+
+## papers[] (each entry)
+
+| Field | Required for success |
+|-------|----------------------|
+| id | stable id, e.g. `p1`, `p2`, … |
+| title | non-empty string |
+| year | integer |
+| venue | string (may be empty in edge cases; example shows filled) |
+| urls | string array; **or** satisfy address rule via doi / arxiv_id |
+| doi | string or null |
+| arxiv_id | string or null |
+| pmid | null or string |
+| pdf_path | null or path under project |
+
+**Address rule (each paper):** at least one of: non-empty `urls[]`, non-null `doi`, non-null `arxiv_id`.
+
+## Composed reports (Step 1 owns §2 and §6)
+
+**Section layout (read-only reference):**
+
+- English: `aris-constraints/md_template/IDEA_REPORT.en.md`
+- Chinese: `aris-constraints/md_template/IDEA_REPORT.zh.md`
+
+After init, **`idea-stage/` holds the working reports** (same structure as the templates above):
+
+| File | Language | Step 1 fills |
+|------|----------|----------------|
+| `idea-stage/IDEA_REPORT.en.md` | English | **§2** Literature landscape, **§6** References |
+| `idea-stage/IDEA_REPORT.zh.md` | Simplified Chinese | **§2** 文献综述, **§6** 参考文献 |
+
+### Edit scope (mandatory)
+
+When editing `idea-stage/IDEA_REPORT.en.md` and `idea-stage/IDEA_REPORT.zh.md`:
+
+- **Only change** Step 1 spans: **§2** (from `## Literature Landscape` / `## 文献综述` through the `---` before §3) and **§6** References / 参考文献 (including `sec-6` block).
+- **Do not change** anything else: `#` title and intro blurb, `## Table of contents` / `## 目录`, **§1**, **§3–§5**, or any text outside §2 and §6.
+- **Do not** delete, reorder, or rewrite headings outside §2/§6; **do not** replace or truncate the whole report file.
+
+**Step 1:** use the `aris-constraints/md_template/IDEA_REPORT.*.md` files to see which subsections belong in §2 and §6; write content only inside those spans in both idea-stage files. Replace each `[…]` hint with real prose from `papers[]`. Keep contract H2s inside §2/§6 unchanged. Do not leave `[…]` placeholders in §2 or §6.
+
+If files are missing, run `bash aris-constraints/all-init-project.example.sh` — normal workflow assumes init already ran.
+
+For `result=success`:
+
+- **English** (`IDEA_REPORT.en.md`) — H2 exactly:
+
+      ## Literature Landscape
+
+- **Chinese** (`IDEA_REPORT.zh.md`) — H2 exactly:
+
+      ## 文献综述
+
+Every `papers[]` entry must appear in §2.4 and §6; EN and ZH use the same papers and the same chosen URL per paper (verbatim).
+
+### URL rule (validate uses English file)
+
+For each paper, at least **one** string from `papers[].urls` MUST appear verbatim in `idea-stage/IDEA_REPORT.en.md` (not necessarily every URL in the array). Prefer the same URL in `IDEA_REPORT.zh.md` §2.4 and §6.

@@ -22,19 +22,10 @@ mkdir -p "$ROOT/idea-stage" "$ROOT/refine-logs" "$ROOT/literature" "$ROOT/aris-c
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEST="$ROOT/aris-constraints"
 COPIED=0
-for pattern in \
-  '*.aris.example.sh' \
-  '*.manifest.example.desc' \
-  '*.explain.example.desc' \
-  '*.validate.example.sh' \
-  'validate-idea-discovery.example.sh' \
-  'all-init-project.example.sh'
-do
-  for src in "$SCRIPT_DIR"/$pattern; do
-    [[ -f "$src" ]] || continue
-    cp -f "$src" "$DEST/"
-    COPIED=$((COPIED + 1))
-  done
+for src in "$SCRIPT_DIR"/all-init-project.example.sh; do
+  [[ -f "$src" ]] || continue
+  cp -f "$src" "$DEST/"
+  COPIED=$((COPIED + 1))
 done
 if [[ -d "$SCRIPT_DIR/md_template" ]]; then
   mkdir -p "$DEST/md_template"
@@ -47,9 +38,10 @@ if [[ -d "$SCRIPT_DIR/skills" ]]; then
   # Mirror for ARIS slash-command discovery (canonical copy: aris-constraints/skills/)
   mkdir -p "$ROOT/skills"
   cp -R "$SCRIPT_DIR/skills/"* "$ROOT/skills/" 2>/dev/null || true
+  find "$DEST/skills" -name '*.sh' -exec chmod +x {} \; 2>/dev/null || true
 fi
-EN_REPORT_TEMPLATE="$DEST/md_template/IDEA_REPORT.en.example.md"
-ZH_REPORT_TEMPLATE="$DEST/md_template/IDEA_REPORT.zh.example.md"
+EN_REPORT_TEMPLATE="$DEST/md_template/IDEA_REPORT.en.md"
+ZH_REPORT_TEMPLATE="$DEST/md_template/IDEA_REPORT.zh.md"
 if [[ -f "$EN_REPORT_TEMPLATE" ]]; then
   cp -f "$EN_REPORT_TEMPLATE" "$ROOT/idea-stage/IDEA_REPORT.en.md"
 fi
@@ -74,9 +66,9 @@ EOF
 echo "Initialized: $ROOT"
 echo "  dirs: idea-stage refine-logs literature aris-constraints research-wiki data-source skills"
 echo "  file: RESEARCH_BRIEF.md"
-echo "  report templates: aris-constraints/md_template/IDEA_REPORT.en.example.md, IDEA_REPORT.zh.example.md"
-echo "  experiment-plan templates: md_template/EXPERIMENT_PLAN.en|zh.example.md, EXPERIMENT_TRACKER.en|zh.example.md"
-echo "  data-source-discovery: aris-constraints/skills/data-source-discovery/SKILL.md (+ mirror project/skills/ for ARIS)"
-echo "  data profile templates: md_template/DATA_SOURCE_PROFILE.en|zh.example.md"
+echo "  report templates: aris-constraints/md_template/IDEA_REPORT.en.md, IDEA_REPORT.zh.md"
+echo "  experiment-plan templates: md_template/EXPERIMENT_PLAN.en|zh.md, EXPERIMENT_TRACKER.en|zh.md"
+echo "  skill bundles: aris-constraints/skills/<name>/ (*.aris.sh, *.desc, *.validate.sh; mirror to project/skills/ for ARIS)"
+echo "  data profile templates: md_template/DATA_SOURCE_PROFILE.en|zh.md"
 echo "  idea-stage: IDEA_REPORT.en.md, IDEA_REPORT.zh.md (working copies from templates)"
-echo "  templates: copied $COPIED file(s) from $SCRIPT_DIR -> $DEST (md_template/* includes experiment-plan scaffolds)"
+echo "  copied: all-init + md_template + skills/ ($COPIED top-level script(s) from $SCRIPT_DIR)"

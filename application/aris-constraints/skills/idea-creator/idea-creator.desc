@@ -1,0 +1,142 @@
+# idea-creator.manifest.result.json (Step 2)
+
+**Single contract for Step 2.** Wrapper `idea-creator.aris.sh` loads **only this `.desc` file**.
+
+## Agent entry
+
+1. Read `RESEARCH_BRIEF.md` and `idea-stage/research-lit.manifest.result.json`.
+2. Follow **only this `.desc` file** (including **Example JSON**).
+3. Write `idea-stage/idea-creator.manifest.result.json` and composed §3 per sections below.
+
+## Example JSON (`idea-stage/idea-creator.manifest.result.json`)
+
+```json
+{
+  "aris_phase": "idea-creator",
+  "result": "success",
+  "report_path": "idea-stage/IDEA_REPORT.en.md",
+  "zh_report_path": "idea-stage/IDEA_REPORT.zh.md",
+  "inputs": {
+    "research_brief": "RESEARCH_BRIEF.md",
+    "prior_research_lit_manifest": "idea-stage/research-lit.manifest.result.json"
+  },
+  "finished_at": "2026-10-19T12:00:00Z",
+  "ideas_evaluated": {
+    "generated": 12,
+    "survived_filtering": 12,
+    "piloted": 0,
+    "recommended": 3
+  },
+  "ideas": [
+    {
+      "id": "idea-1",
+      "rank": 1,
+      "title": "EXACT_TITLE_MUST_MATCH_REPORT",
+      "one_line_pitch": "...",
+      "method_steps": ["step1", "step2", "step3"],
+      "hypothesis": "...",
+      "minimum_experiment": "...",
+      "novelty_claim": "...",
+      "feasibility": "...",
+      "risk": "LOW",
+      "pilot_result": "SKIPPED",
+      "key_papers": ["p15", "p10"]
+    }
+  ]
+}
+```
+
+## ARIS runtime (from `idea-creator.aris.sh`)
+
+| Option | Value |
+|--------|--------|
+| skill | `/idea-creator` |
+| paper library | `literature/` |
+| language | `en` |
+| REVIEWER_MODEL | `gpt-5.4` |
+| PILOT_MAX_HOURS | `2` |
+| PILOT_TIMEOUT_HOURS | `3` |
+| MAX_PILOT_IDEAS | `3` |
+| MAX_TOTAL_GPU_HOURS | `8` |
+| OUTPUT_DIR | `idea-stage/` |
+| composed | `idea-stage/IDEA_REPORT.en.md`, `idea-stage/IDEA_REPORT.zh.md` |
+
+## result
+
+**Delivery only** — not whether ideas are good. Weak or risky ideas still go in `ideas[]`; do not downgrade `result` for quality.
+
+- `"success"` — use when **all** of: valid JSON; non-empty `ideas[]` with contiguous ranks 1…N; required fields per table below; composed **§3** in **both** `idea-stage/IDEA_REPORT.en.md` and `idea-stage/IDEA_REPORT.zh.md` (contract H2 and `### Idea {rank}: {title}` lines); each title matches manifest byte-for-byte in the English report.
+- `"failed"` — only if Step 2 **could not complete** the contract (e.g. no ideas, missing headings, title mismatch). Still write the file.
+- **Do not** use `"partial"` or other values.
+
+## Top-level fields
+
+| Field | Value |
+|-------|--------|
+| aris_phase | `"idea-creator"` |
+| report_path | `"idea-stage/IDEA_REPORT.en.md"` |
+| zh_report_path | `"idea-stage/IDEA_REPORT.zh.md"` |
+| inputs.research_brief | `"RESEARCH_BRIEF.md"` |
+| inputs.prior_research_lit_manifest | `"idea-stage/research-lit.manifest.result.json"` |
+| finished_at | UTC ISO-8601 |
+| ideas_evaluated.generated | integer (optional; not validated) |
+| ideas_evaluated.survived_filtering | integer |
+| ideas_evaluated.piloted | **0** when pilots skipped |
+| ideas_evaluated.recommended | integer; if present, **must equal** `len(ideas)` |
+| ideas | non-empty array; ranks **1 … N** contiguous (N = array length) |
+
+## ideas[] (each recommended entry)
+
+| Field | Required for success |
+|-------|----------------------|
+| id | string |
+| rank | 1 … N (no gaps) |
+| title | non-empty; must match report heading (see composed reports) |
+| one_line_pitch | string |
+| method_steps | non-empty string array |
+| hypothesis | string |
+| minimum_experiment | string |
+| novelty_claim | string |
+| feasibility | string |
+| risk | string (e.g. LOW, MEDIUM, HIGH) |
+| pilot_result | `"SKIPPED"` when no pilot run |
+| key_papers | string array of `papers[].id` from research-lit manifest only |
+
+## Composed reports (Step 2 owns §3)
+
+**Section layout (read-only reference):**
+
+- English: `aris-constraints/md_template/IDEA_REPORT.en.md`
+- Chinese: `aris-constraints/md_template/IDEA_REPORT.zh.md`
+
+After init, **`idea-stage/` holds the working reports**:
+
+| File | Language | Step 2 fills |
+|------|----------|----------------|
+| `idea-stage/IDEA_REPORT.en.md` | English | **§3** Recommended ideas (all Idea blocks) |
+| `idea-stage/IDEA_REPORT.zh.md` | Simplified Chinese | **§3** 推荐研究方案（同上结构；`### Idea n: title` 与英文一致） |
+
+### Edit scope (mandatory)
+
+When editing `idea-stage/IDEA_REPORT.en.md` and `idea-stage/IDEA_REPORT.zh.md`:
+
+- **Only change** Step 2 span **§3** (from `## Recommended Ideas (ranked)` / `## 推荐研究方案` through the `---` before §4).
+- **Do not change** anything else: `#` title and intro blurb, `## Table of contents` / `## 目录`, **§1–§2**, **§4–§6**, or any text outside §3.
+- **Do not** delete, reorder, or rewrite headings outside §3; **do not** replace or truncate the whole report file.
+
+**Step 2:** use `aris-constraints/md_template/IDEA_REPORT.en.md` and `aris-constraints/md_template/IDEA_REPORT.zh.md` to see §3 subsections; write only inside the §3 span in both idea-stage files. Replace `[…]` hints with content from `ideas[]`. Do not leave `[…]` placeholders in §3.
+
+For `result=success`:
+
+1. Section **§3** contract H2:
+
+   - English: `## Recommended Ideas (ranked)`
+   - Chinese: `## 推荐研究方案`
+
+2. For **each** manifest `ideas[]` entry, **both** EN and ZH reports MUST include exactly one heading line:
+
+       ### Idea {rank}: {title}
+
+   where `{rank}` is `ideas[].rank` and `{title}` is **byte-for-byte identical** to `ideas[].title` (including in the Chinese file).
+
+If files are missing, run `bash aris-constraints/all-init-project.example.sh`.

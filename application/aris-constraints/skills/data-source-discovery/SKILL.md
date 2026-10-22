@@ -15,7 +15,7 @@ This skill runs **before** idea-heavy planning when empirical work needs **real,
 
 **Success means:** at least one **primary** dataset that is **public**, **license-clear for reuse**, **free to download without purchase**, with **verified landing/download URLs** and **schema/structure checked against official docs or a listing** — not guessed from memory.
 
-If the Paper workspace defines `aris-constraints/data-source-discovery.manifest.example.desc`, **follow that contract for paths, JSON, and H2 sections** in addition to this skill.
+If the Paper workspace defines `aris-constraints/skills/data-source-discovery/data-source-discovery.desc` (co-located with this file), **follow that contract for paths, JSON, and H2 sections** in addition to this skill.
 
 ## Constants
 
@@ -112,7 +112,7 @@ Write **`min(3, viable shortlist)`** datasets into profile when possible (**goal
 
 #### 5.1 `data-source/DATA_SOURCE_PROFILE.en.md`
 
-**Mandatory:** Read `aris-constraints/md_template/DATA_SOURCE_PROFILE.en.example.md` and mirror **exactly what that file contains** from line 1 (title) through the heading tree — **do not invent a preamble**. The template has **no** instruction paragraph under `#`; your profile must not add one. After `#` title: metadata lines (`**Date:**` / `**Primary ID:**`) then `## Table of contents`. **Never** copy text from this SKILL or the manifest `.desc` into the profile body.
+**Mandatory:** Read `aris-constraints/md_template/DATA_SOURCE_PROFILE.en.md` and mirror **exactly what that file contains** from line 1 (title) through the heading tree — **do not invent a preamble**. The template has **no** instruction paragraph under `#`; your profile must not add one. After `#` title: metadata lines (`**Date:**` / `**Primary ID:**`) then `## Table of contents`. **Never** copy text from this SKILL or the manifest `.desc` into the profile body.
 
 - **`## Data requirements`** → **`## Recommended datasets`** (only two document H2).
 - **1–3 blocks (prefer 3):** **`### 2.1`** (primary) … **`### 2.3`** when shortlisted; each **`#### 2.x.1`–`2.x.4`**. Sample size / protocol in each **`### 2.x` lead**.
@@ -120,11 +120,11 @@ Write **`min(3, viable shortlist)`** datasets into profile when possible (**goal
 
 #### 5.2 `data-source/DATA_SOURCE_PROFILE.zh.md`
 
-Same rules as 5.1 using `DATA_SOURCE_PROFILE.zh.example.md` (`# 数据源画像` → **`**日期：**` / `**主推 ID：**`** → **`## 目录`**). Simplified Chinese **专业术语**; IDs/paths aligned with EN.
+Same rules as 5.1 using `DATA_SOURCE_PROFILE.zh.md` (`# 数据源画像` → **`**日期：**` / `**主推 ID：**`** → **`## 目录`**). Simplified Chinese **专业术语**; IDs/paths aligned with EN.
 
 #### 5.2b Validate before success
 
-From project root: `bash aris-constraints/data-source-discovery.validate.example.sh`. Do not set manifest `result: success` until profiles pass.
+From project root: `bash aris-constraints/skills/data-source-discovery/data-source-discovery.validate.sh`. Do not set manifest `result: success` until profiles pass.
 
 #### 5.3 `data-source/data-source-discovery.manifest.result.json`
 
