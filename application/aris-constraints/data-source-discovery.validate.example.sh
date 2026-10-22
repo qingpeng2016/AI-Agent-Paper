@@ -50,8 +50,20 @@ H4_SUFFIX_ZH = [
 ]
 MIN_DATASETS = 1
 MAX_DATASETS = 3
-FORBIDDEN_BODY_ZH = ("交付模版", "Read 本文件", "data-source-discovery.validate.example.sh")
-FORBIDDEN_BODY_EN = ("deliverable template", "Read this file", "data-source-discovery.validate.example.sh")
+FORBIDDEN_BODY_ZH = (
+    "交付模版",
+    "Read 本文件",
+    "data-source-discovery.validate.example.sh",
+    "只写 1 个时删掉",
+    "写入 `data-source/DATA_SOURCE_PROFILE",
+)
+FORBIDDEN_BODY_EN = (
+    "deliverable template",
+    "Read this file",
+    "data-source-discovery.validate.example.sh",
+    "delete unused `### 2.2",
+    "write `data-source/DATA_SOURCE_PROFILE",
+)
 LEGACY_H2_ZH = [
     "## 研究数据需求",
     "## 候选数据集",
@@ -141,6 +153,12 @@ def check_file(path, h2_list, h4_suffixes, forbidden_h2, legacy_h2, label, need_
     for needle in forbidden_body:
         if needle in body:
             fail(f"{path} contains agent-instruction text {needle!r}; remove template preamble from deliverable")
+    head = "\n".join(body.splitlines()[1:8])
+    if "/data-source-discovery" in head:
+        fail(f"{path} must not mention /data-source-discovery near top; profile is research doc only")
+    lines = [ln.strip() for ln in body.splitlines() if ln.strip()]
+    if len(lines) >= 2 and lines[1].startswith("`") and "data-source" in lines[1]:
+        fail(f"{path} line 2 looks like agent preamble, not **日期/**Date** metadata")
     blocks = dataset_blocks(body)
     if not blocks:
         fail(f"{path} missing ### 2.1 dataset block")
