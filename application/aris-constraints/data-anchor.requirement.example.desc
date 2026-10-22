@@ -1,0 +1,34 @@
+# Data anchor (Paper pipeline) — include by reference in step manifests
+
+When **`data-source/DATA_SOURCE_PROFILE.en.md`** exists (after successful **`/data-source-discovery`**), **every downstream skill in this list must treat it as mandatory context**, not optional background:
+
+| Artifact | Role |
+|----------|------|
+| `data-source/DATA_SOURCE_PROFILE.en.md` | **Canonical EN data anchor** — primary **`### 2.1`** + alternates **`2.2`/`2.3`**: cohort/modality, publication, directory structure, access/license, download steps |
+| `data-source/DATA_SOURCE_PROFILE.zh.md` | Same substance in Chinese (terminology aligned with EN) |
+| `data-source/data-source-discovery.manifest.result.json` | `primary_recommendation_id`, `datasets[]`, verification, gaps |
+
+## Agent rules (when profile exists)
+
+1. **Read** EN profile + discovery manifest **before** search, ideation, planning, novelty, review, or refinement.
+2. **Constrain all outputs** to what the locked data support: modalities, labels/covariates, sample size, access tier, verified paths/URLs. **Do not** propose methods requiring fields or data that the profile marks missing unless you explicitly flag as out-of-scope.
+3. **Cite the primary dataset** in prose (stable ID / OpenNeuro id / DOI / profile **`### 2.1`** name) in the skill’s deliverables (report §, plan blocks, proposal, review criteria).
+4. **Experiment plans** must copy **verified download URLs and directory layout** from the profile into **方法二** (and **方法一** only if acquisition is real, not re-download fiction).
+5. Record in the step **`*.manifest.result.json`**:
+
+```json
+"data_anchor": {
+  "profile_en": "data-source/DATA_SOURCE_PROFILE.en.md",
+  "discovery_manifest": "data-source/data-source-discovery.manifest.result.json",
+  "primary_dataset_id": "d1",
+  "primary_label": "OpenNeuro ds006731"
+}
+```
+
+(`primary_label` = short name from profile **`### 2.1`** or manifest `datasets[]`.)
+
+If **`data-source/DATA_SOURCE_PROFILE.en.md` is absent**, skip this block; use `RESEARCH_BRIEF.md` only.
+
+## Validate (when profile exists)
+
+Step validate scripts call **`data-anchor.validate.example.py`**: profile present → manifest must include non-empty **`data_anchor.primary_dataset_id`** and at least one **deliverable text file** must mention **`primary_dataset_id`** or **`primary_label`** (case-insensitive substring).

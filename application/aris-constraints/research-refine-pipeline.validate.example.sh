@@ -123,3 +123,5 @@ for msg in scaffold_leftovers("IDEA_REPORT.zh.md", body_zh):
 
 print("STEP5 OK")
 PY
+python3 aris-constraints/data-anchor.validate.example.py "STEP5" "idea-stage/research-refine-pipeline.manifest.result.json" \
+  refine-logs/EXPERIMENT_PLAN.md refine-logs/FINAL_PROPOSAL.md idea-stage/IDEA_REPORT.en.md

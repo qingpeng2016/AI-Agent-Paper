@@ -2,11 +2,15 @@
 
 **Single contract for Step 3.** Wrapper `novelty-check.aris.example.sh` loads **only this `.desc` file**.
 
+## Data anchor (mandatory when present)
+
+If **`data-source/DATA_SOURCE_PROFILE.en.md`** exists, novelty assessment for rank-1 must assume **that primary dataset** (not generic benchmarks). See **`aris-constraints/data-anchor.requirement.example.desc`**.
+
 ## Agent entry
 
-1. Read `RESEARCH_BRIEF.md` and `idea-stage/idea-creator.manifest.result.json`.
+1. Read `RESEARCH_BRIEF.md`, `idea-stage/idea-creator.manifest.result.json`, and if present **`data-source/DATA_SOURCE_PROFILE.en.md`**.
 2. Follow **only this `.desc` file** (including **Example JSON**).
-3. Write `idea-stage/novelty-check.manifest.result.json` and composed §4 per sections below.
+3. Write `idea-stage/novelty-check.manifest.result.json` and composed §4 per sections below. When profile exists, set **`data_anchor`** in manifest.
 
 ## Example JSON (`idea-stage/novelty-check.manifest.result.json`)
 
@@ -18,6 +22,12 @@
   "zh_report_path": "idea-stage/IDEA_REPORT.zh.md",
   "inputs": {
     "idea_creator_manifest": "idea-stage/idea-creator.manifest.result.json"
+  },
+  "data_anchor": {
+    "profile_en": "data-source/DATA_SOURCE_PROFILE.en.md",
+    "discovery_manifest": "data-source/data-source-discovery.manifest.result.json",
+    "primary_dataset_id": "d1",
+    "primary_label": "OpenNeuro ds######"
   },
   "finished_at": "2026-10-19T12:00:00Z",
   "checks": [

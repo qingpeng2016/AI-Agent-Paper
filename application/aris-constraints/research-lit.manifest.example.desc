@@ -2,11 +2,24 @@
 
 **Single contract for Step 1** (manifest JSON shape + report rules). Wrapper `bash aris-constraints/research-lit.aris.example.sh` loads **only this `.desc` file**.
 
+## Data anchor (mandatory when present)
+
+If **`data-source/DATA_SOURCE_PROFILE.en.md`** exists, read it + **`data-source/data-source-discovery.manifest.result.json`** before search. §2 literature must **fit the locked primary dataset** (modalities, cohort, gaps) and cite **`### 2.1`** / stable ID. Full rules: **`aris-constraints/data-anchor.requirement.example.desc`**.
+
 ## Agent entry
 
-1. Read `RESEARCH_BRIEF.md`.
+1. Read `RESEARCH_BRIEF.md`. If data profile exists, read **`data-source/DATA_SOURCE_PROFILE.en.md`** (and `.zh.md` if helpful).
 2. Follow **only this `.desc` file** (including **Example JSON**).
-3. Write `idea-stage/research-lit.manifest.result.json` and composed report sections per sections below.
+3. Write **`idea-stage/research-lit.manifest.result.json` only** (never `aris-constraints/research-lit.manifest.json` or other names). Edit **§2 and §6 only** inside existing `idea-stage/IDEA_REPORT.en.md` / `.zh.md` — **do not** append a second literature chapter or replace the whole file. When profile exists, set **`data_anchor`** object in manifest (see data-anchor requirement).
+
+## Delivery paths (do not swap)
+
+| Artifact | Path | Wrong |
+|----------|------|-------|
+| Manifest JSON | **`idea-stage/research-lit.manifest.result.json`** | `aris-constraints/*.json`, symlinks |
+| Composed report | **`idea-stage/IDEA_REPORT.en.md`**, **`.zh.md`** | new files under `aris-constraints/` |
+
+**Forbidden manifest keys** (not in Example JSON): `name`, `description`, `verification_status_summary` as top-level substitutes for `papers[]` / `report_path`.
 
 ## Example JSON (`idea-stage/research-lit.manifest.result.json`)
 
@@ -20,6 +33,12 @@ Replace example values; keep keys and nesting.
   "zh_report_path": "idea-stage/IDEA_REPORT.zh.md",
   "finished_at": "2026-10-19T12:00:00Z",
   "sources_used": ["arxiv", "web", "gemini"],
+  "data_anchor": {
+    "profile_en": "data-source/DATA_SOURCE_PROFILE.en.md",
+    "discovery_manifest": "data-source/data-source-discovery.manifest.result.json",
+    "primary_dataset_id": "d1",
+    "primary_label": "OpenNeuro ds######"
+  },
   "papers": [
     {
       "id": "p1",

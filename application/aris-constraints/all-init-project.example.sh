@@ -25,8 +25,10 @@ COPIED=0
 for pattern in \
   '*.aris.example.sh' \
   '*.manifest.example.desc' \
+  '*.requirement.example.desc' \
   '*.explain.example.desc' \
   '*.validate.example.sh' \
+  '*.validate.example.py' \
   'validate-idea-discovery.example.sh' \
   'all-init-project.example.sh'
 do
@@ -77,6 +79,7 @@ echo "  file: RESEARCH_BRIEF.md"
 echo "  report templates: aris-constraints/md_template/IDEA_REPORT.en.example.md, IDEA_REPORT.zh.example.md"
 echo "  experiment-plan templates: md_template/EXPERIMENT_PLAN.en|zh.example.md, EXPERIMENT_TRACKER.en|zh.example.md"
 echo "  data-source-discovery: aris-constraints/skills/data-source-discovery/SKILL.md (+ mirror project/skills/ for ARIS)"
-echo "  data profile templates: md_template/DATA_SOURCE_PROFILE.en|zh.example.md"
+  echo "  data profile templates: md_template/DATA_SOURCE_PROFILE.en|zh.example.md"
+  echo "  data anchor: data-anchor.requirement.example.desc, data-anchor.validate.example.py"
 echo "  idea-stage: IDEA_REPORT.en.md, IDEA_REPORT.zh.md (working copies from templates)"
 echo "  templates: copied $COPIED file(s) from $SCRIPT_DIR -> $DEST (md_template/* includes experiment-plan scaffolds)"

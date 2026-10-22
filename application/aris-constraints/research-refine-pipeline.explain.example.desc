@@ -22,7 +22,7 @@
 | `### N.` / `#### N.M` | Numbered section headings |
 | `[Step 5: …]` / `[第 5 步：…]` | **Replace entirely** with study-specific prose — do not ship brackets |
 
-**Where content comes from:** rank-1 block in `idea-stage/IDEA_REPORT.en.md` (§3 Idea 1), novelty/review for that idea (§4–§5), `refine-logs/FINAL_PROPOSAL.md`, `RESEARCH_BRIEF.md`, and `research-review.manifest.result.json`. Phase names stay generic; **steps inside Phases 0–4 are yours** (simulation, survey, bench, ML, theory, etc.).
+**Where content comes from:** rank-1 block in `idea-stage/IDEA_REPORT.en.md` (§3 Idea 1), novelty/review for that idea (§4–§5), `refine-logs/FINAL_PROPOSAL.md`, `RESEARCH_BRIEF.md`, and `research-review.manifest.result.json`. **When `data-source/DATA_SOURCE_PROFILE.en.md` exists, §1 data access and empirical phases must follow that profile** (`aris-constraints/data-anchor.requirement.example.desc`). Phase names stay generic; **steps inside Phases 0–4 are yours** (simulation, survey, bench, ML, theory, etc.).
 
 ### Section-by-section (what to write)
 

@@ -3,4 +3,4 @@
 # Process: upstream research-refine/SKILL.md (Phases 0–5). Paper .desc adds paths + manifest only.
 set -euo pipefail
 cd "${1:-.}"
-exec aris prompt '/research-refine "Read RESEARCH_BRIEF.md from project root. DELIVERY: Follow aris-constraints/research-refine.manifest.example.desc only — standalone /research-refine, NOT /research-refine-pipeline. Write ALL outputs under project-root refine-logs/ (never idea-stage/refine-logs/). Run skills/research-refine/SKILL.md Phases 0–5; hard cap 5 review rounds; Phase 5 before manifest success. If refine-logs/FINAL_PROPOSAL.md missing, execute the workflow — do NOT answer from aris memory or old manifest alone. aris_phase in manifest must be research-refine. Resume refine-logs/REFINE_STATE.json if in_progress." — REVIEWER_MODEL: gpt-5.4'
+exec aris prompt '/research-refine "Read RESEARCH_BRIEF.md. If data-source/DATA_SOURCE_PROFILE.en.md exists, refine rank-1 method for that dataset (data-anchor.requirement.example.desc); set data_anchor. DELIVERY: research-refine.manifest.example.desc — standalone /research-refine; outputs under refine-logs/. Phase 5 before manifest success." — REVIEWER_MODEL: gpt-5.4'

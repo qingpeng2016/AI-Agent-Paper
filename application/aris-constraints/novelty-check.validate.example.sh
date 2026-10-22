@@ -6,6 +6,7 @@ ROOT="${1:-.}"
 cd "$ROOT"
 REPORT="idea-stage/IDEA_REPORT.en.md"
 ZH_REPORT="idea-stage/IDEA_REPORT.zh.md"
+MANIFEST="idea-stage/novelty-check.manifest.result.json"
 CONTRACT_TAG="novelty-check-validate-2026-03-20"
 
 fail_en() { echo "STEP3 FAIL [$CONTRACT_TAG]: $*" >&2; exit 1; }
@@ -98,3 +99,4 @@ for msg in scaffold_leftovers("IDEA_REPORT.zh.md", body_zh):
 
 print("STEP3 OK")
 PY
+python3 aris-constraints/data-anchor.validate.example.py "STEP3" "$MANIFEST" "$REPORT" "$ZH_REPORT"

@@ -4,6 +4,10 @@
 
 Upstream skill semantics: [ARIS `skills/research-refine/SKILL.md`](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/research-refine/SKILL.md) (problem anchor → iterative method review → `FINAL_PROPOSAL`). This file pins **Paper paths, manifest JSON, and Phase 5 authoring** — **it does not replace or reorder upstream Phases 0–5.**
 
+## Data anchor (mandatory when present)
+
+If **`data-source/DATA_SOURCE_PROFILE.en.md`** exists, **`FINAL_PROPOSAL.md`** method and evaluation must **fit that primary dataset**. See **`aris-constraints/data-anchor.requirement.example.desc`**.
+
 ## Agent entry
 
 **Paths (project root = cwd):** All refine artifacts live under **`refine-logs/`** at the **repository root** — **never** `idea-stage/refine-logs/`. Manifest JSON only: **`idea-stage/research-refine.manifest.result.json`**.
@@ -16,7 +20,7 @@ Upstream skill semantics: [ARIS `skills/research-refine/SKILL.md`](https://githu
 
 **Workflow:**
 
-4. Read `RESEARCH_BRIEF.md`. If present, read rank-1 context from `idea-stage/idea-creator.manifest.result.json` and the matching block in `idea-stage/IDEA_REPORT.en.md` (`### Idea 1:` plus §4–§5 for that idea). Optionally read `idea-stage/research-review.manifest.result.json` for reviewer concerns to address in refinement.
+4. Read `RESEARCH_BRIEF.md`. If present, read **`data-source/DATA_SOURCE_PROFILE.en.md`**, rank-1 context from `idea-stage/idea-creator.manifest.result.json` and the matching block in `idea-stage/IDEA_REPORT.en.md` (`### Idea 1:` plus §4–§5 for that idea). Optionally read `idea-stage/research-review.manifest.result.json` for reviewer concerns to address in refinement.
 5. When idea-creator manifest exists, refine **rank-1 only** (`ideas[]` where `rank=1`; do not re-rank by §4 scores). When no idea manifest exists, refine from `RESEARCH_BRIEF.md` and the user prompt only.
 6. **Follow upstream `research-refine/SKILL.md` for all phase logic** (anchor, review thread, Phase 3 STOP, loop exit, checkpoint). This `.desc` adds only: **Paper manifest paths**, **rank-1 binding**, **Phase 5 must finish before `result: success`**, and **no IDEA_REPORT edits**.
 7. **Checkpoint resume:** Per upstream skill — read **`refine-logs/REFINE_STATE.json`** at project root; resume `in_progress` within 24h; on completion set `"phase": "done"`, `"status": "completed"`.
@@ -58,6 +62,12 @@ Implement **exactly** as [research-refine/SKILL.md](https://github.com/wanshuiyi
   "focus_rank": 1,
   "idea_title": "EXAMPLE: Replace with idea-creator rank-1 title when manifest exists",
   "source_brief": "RESEARCH_BRIEF.md",
+  "data_anchor": {
+    "profile_en": "data-source/DATA_SOURCE_PROFILE.en.md",
+    "discovery_manifest": "data-source/data-source-discovery.manifest.result.json",
+    "primary_dataset_id": "d1",
+    "primary_label": "OpenNeuro ds######"
+  },
   "pipeline_phases_completed": ["0", "1", "2-4", "5"],
   "deliverables": {
     "final_proposal": "refine-logs/FINAL_PROPOSAL.md",

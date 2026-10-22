@@ -119,3 +119,4 @@ for msg in scaffold_leftovers("IDEA_REPORT.zh.md", body_zh):
 
 print("STEP4 OK")
 PY
+python3 aris-constraints/data-anchor.validate.example.py "STEP4" "$MANIFEST" "$REPORT" "$ZH_REPORT"

@@ -2,11 +2,15 @@
 
 **Single contract for Step 2.** Wrapper `idea-creator.aris.example.sh` loads **only this `.desc` file**.
 
+## Data anchor (mandatory when present)
+
+If **`data-source/DATA_SOURCE_PROFILE.en.md`** exists, every ranked idea must be **feasible on that data** (modalities, labels, N, access). Do not propose methods needing unavailable fields. See **`aris-constraints/data-anchor.requirement.example.desc`**.
+
 ## Agent entry
 
-1. Read `RESEARCH_BRIEF.md` and `idea-stage/research-lit.manifest.result.json`.
+1. Read `RESEARCH_BRIEF.md`, `idea-stage/research-lit.manifest.result.json`, and if present **`data-source/DATA_SOURCE_PROFILE.en.md`** + discovery manifest.
 2. Follow **only this `.desc` file** (including **Example JSON**).
-3. Write `idea-stage/idea-creator.manifest.result.json` and composed §3 per sections below.
+3. Write `idea-stage/idea-creator.manifest.result.json` and composed §3 per sections below. When profile exists, set **`data_anchor`** in manifest.
 
 ## Example JSON (`idea-stage/idea-creator.manifest.result.json`)
 
@@ -18,7 +22,14 @@
   "zh_report_path": "idea-stage/IDEA_REPORT.zh.md",
   "inputs": {
     "research_brief": "RESEARCH_BRIEF.md",
-    "prior_research_lit_manifest": "idea-stage/research-lit.manifest.result.json"
+    "prior_research_lit_manifest": "idea-stage/research-lit.manifest.result.json",
+    "data_source_profile_en": "data-source/DATA_SOURCE_PROFILE.en.md"
+  },
+  "data_anchor": {
+    "profile_en": "data-source/DATA_SOURCE_PROFILE.en.md",
+    "discovery_manifest": "data-source/data-source-discovery.manifest.result.json",
+    "primary_dataset_id": "d1",
+    "primary_label": "OpenNeuro ds######"
   },
   "finished_at": "2026-10-19T12:00:00Z",
   "ideas_evaluated": {

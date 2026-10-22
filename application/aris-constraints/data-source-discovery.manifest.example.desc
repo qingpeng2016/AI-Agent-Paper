@@ -126,6 +126,7 @@ Same tree; **`## 数据需求`**, **`## 推荐数据集`**；**最少 1、最多
 | Skill | When |
 |-------|------|
 | `/data-source-discovery` | **First** for public-data empirical papers (after `RESEARCH_BRIEF.md`) |
-| `/research-lit` | After success; cite `primary_recommendation_id` in search focus |
-| `/experiment-plan` | Copy verified URLs/paths from **`data-source/DATA_SOURCE_PROFILE.*.md`** into **方法二** |
-| `/idea-creator` | Read **`data-source/data-source-discovery.manifest.result.json`**; ideas must not require unavailable modalities |
+| `/research-lit` | After success; **mandatory** read profile when present — see **`data-anchor.requirement.example.desc`** |
+| `/idea-creator` | Ideas must fit profile primary dataset when present |
+| `/novelty-check`, `/research-review` | Assess rank-1 on locked data when profile present |
+| `/research-refine`, `/research-refine-pipeline`, `/experiment-plan` | Plans/proposals use profile URLs, layout, cohort |

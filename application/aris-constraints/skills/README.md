@@ -19,6 +19,8 @@ mkdir -p ~/my-paper/skills
 cp -R ~/my-paper/aris-constraints/skills/* ~/my-paper/skills/
 ```
 
+**Downstream data anchor:** After discovery, Steps 1–5 and `/experiment-plan` / `/research-refine*` must read **`data-source/DATA_SOURCE_PROFILE.en.md`** when present. Shared rules: **`../data-anchor.requirement.example.desc`**; validate helper **`../data-anchor.validate.example.py`**.
+
 Run:
 
 ```bash

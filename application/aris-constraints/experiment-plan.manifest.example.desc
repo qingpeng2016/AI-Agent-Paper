@@ -4,9 +4,13 @@
 
 Upstream skill semantics: [ARIS `skills/experiment-plan/SKILL.md`](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/experiment-plan/SKILL.md) (claim → evidence → run order). This file pins **paths, manifest JSON, and required markdown sections** for Paper workspaces.
 
+## Data anchor (mandatory when present)
+
+If **`data-source/DATA_SOURCE_PROFILE.en.md`** exists, **`## Experiment Data Acquisition` / `## 实验数据获取`** must **copy verified URLs, paths, and layout from the profile** (`#### 2.1.2` / `2.1.4`); experiment blocks use **only that data**. See **`aris-constraints/data-anchor.requirement.example.desc`**.
+
 ## Agent entry
 
-1. Read `RESEARCH_BRIEF.md` and, if present, `refine-logs/FINAL_PROPOSAL.md`, `refine-logs/REVIEW_SUMMARY.md`, `refine-logs/REFINEMENT_REPORT.md`, and rank-1 context from `idea-stage/idea-creator.manifest.result.json` + `idea-stage/IDEA_REPORT.en.md` (§3 Idea 1, §4–§5 for that idea).
+1. Read `RESEARCH_BRIEF.md` and, if present, **`data-source/DATA_SOURCE_PROFILE.en.md`**, `refine-logs/FINAL_PROPOSAL.md`, `refine-logs/REVIEW_SUMMARY.md`, `refine-logs/REFINEMENT_REPORT.md`, and rank-1 context from `idea-stage/idea-creator.manifest.result.json` + `idea-stage/IDEA_REPORT.en.md` (§3 Idea 1, §4–§5 for that idea).
 2. Plan for **rank-1 only** when idea-creator manifest exists (`ideas[]` where `rank=1`; do not re-rank by §4 scores).
 3. Follow **only this `.desc` file** (Example JSON + authoring below). Apply ARIS planning limits: **≤2 primary claims**, **≤5 core experiment blocks**, **≤3 baseline families**, **3 seeds** when variance matters (unless user constraints say otherwise).
 4. **Author from md templates** (do not invent section order): copy structure from `application/aris-constraints/md_template/` — fill and write to `refine-logs/`:
@@ -39,6 +43,12 @@ Upstream skill semantics: [ARIS `skills/experiment-plan/SKILL.md`](https://githu
     "must_run_blocks": ["Block name 1", "Block name 2"],
     "highest_risk": "One sentence",
     "first_runs": ["R001 …", "R002 …", "R003 …"]
+  },
+  "data_anchor": {
+    "profile_en": "data-source/DATA_SOURCE_PROFILE.en.md",
+    "discovery_manifest": "data-source/data-source-discovery.manifest.result.json",
+    "primary_dataset_id": "d1",
+    "primary_label": "OpenNeuro ds######"
   },
   "finished_at": "2026-10-19T12:00:00Z"
 }
