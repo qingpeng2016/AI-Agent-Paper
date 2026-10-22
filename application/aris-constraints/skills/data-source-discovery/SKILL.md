@@ -22,7 +22,9 @@ If the Paper workspace defines `aris-constraints/data-source-discovery.manifest.
 - **INPUT_BRIEF = `RESEARCH_BRIEF.md`** — Required unless `$ARGUMENTS` fully specifies domain, modality, cohort, and task.
 - **OUTPUT_DIR = `data-source/`** — **All** skill outputs (manifest, profiles). Run **`mkdir -p data-source`** first if missing.
 - **DATA_STAGING = `data-source/raw/`** — Optional probe downloads (small files only unless user approves size).
-- **MAX_CANDIDATES = 8** — Shortlist breadth; **MAX_PRIMARY = 1** — One locked recommendation for downstream skills.
+- **MAX_CANDIDATES = 8** — Internal search shortlist breadth (not all appear in profile).
+- **MIN_PROFILE_DATASETS = 1** · **MAX_PROFILE_DATASETS = 3** — **`## 推荐数据集`** documents **`### 2.1`–`2.3`** only (at least **2.1**; up to three ranked entries).
+- **MAX_PRIMARY = 1** — One locked **`primary_recommendation_id`** (always **`### 2.1`** / `datasets[0]` or matching id).
 - **SOURCES** — Parse `— sources:` from the invocation. Default: `web`. Recommended for discovery: `web, gemini, openalex` when available.
 - **PROBE_DOWNLOAD = false** — When `true`, download a **minimal** subset (metadata + 1–2 subjects or &lt;50MB) to validate layout.
 - **ALLOW_GATED_SECONDARY = true** — List apply-to-access datasets only under **Secondary / not free**, never as primary.
@@ -104,22 +106,25 @@ Score fit (high/medium/low) against Phase 0. Choose **`primary_recommendation`**
 - Structure section complete with **structure_verified: true**
 - Gaps must be **survivable** for a plausible paper OR explicitly warn that `/research-lit` should narrow claims
 
-List **alternates** (max 3) with one-line why not primary.
+Write **1–3 datasets** into the profile (`### 2.1` required; `2.2` / `2.3` if useful alternates). **`datasets[]` in manifest** must match profile count (1–3). Only **`2.1`** may be `open_free_direct` primary; `2.2`/`2.3` may be lower tier with reason in lead.
 
 ### Phase 5: Write deliverables
 
 #### 5.1 `data-source/DATA_SOURCE_PROFILE.en.md`
 
-Use template structure from `aris-constraints/md_template/DATA_SOURCE_PROFILE.en.example.md` if present. Minimum H2 order:
+**Mandatory:** Read `aris-constraints/md_template/DATA_SOURCE_PROFILE.en.example.md` and **clone its heading tree** (TOC + `sec-*` anchors). Replace placeholders only.
 
-- `## Research data needs` — from brief
-- `## Candidate datasets` — summary table
-- `## Primary recommendation` — **`### 1.` / `### 2.`** per dataset (block 1 = primary). **Per dataset**, nest under **`####`**: Cohort and design; Associated publication; Directory and file structure; Access and license; Download procedure (**`##### Method 1` / `Method 2`**, not “Option 1”). **No** Gaps and mitigations or Downstream hooks sections in profile (gaps → manifest JSON; skill order → manifest **Composing** / Paper contracts).
-- **Do not** use document-level H2 for per-dataset sections nested under Primary recommendation.
+- **`## Data requirements`** → **`## Recommended datasets`** (only two document H2).
+- **1–3 blocks:** **`### 2.1`** (primary) through optional **`### 2.3`**; each block has **`#### 2.x.1`–`2.x.4`** (publication, directory structure, access/license, download). Put sample size / protocol in each **`### 2.x` lead**.
+- **Anti-patterns:** extra H2 (candidates, “detailed version”, gaps, downstream); duplicating sections after the template; `### 1.` legacy blocks.
 
 #### 5.2 `data-source/DATA_SOURCE_PROFILE.zh.md`
 
-Same substance in Simplified Chinese; **专业术语** for the field; keep IDs, DOIs, paths, and dataset slugs aligned with EN.
+Same tree as EN: **`## 数据需求`**, **`## 推荐数据集`**, **`### 2.1`**, **`#### 2.1.1 关联发表`** … **`2.1.4 下载步骤`**. Simplified Chinese **专业术语**; IDs/paths aligned with EN.
+
+#### 5.2b Validate before success
+
+From project root: `bash aris-constraints/data-source-discovery.validate.example.sh`. Do not set manifest `result: success` until profiles pass.
 
 #### 5.3 `data-source/data-source-discovery.manifest.result.json`
 

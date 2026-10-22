@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # /data-source-discovery — from project root: bash aris-constraints/data-source-discovery.validate.example.sh [root]
-# contract-id: data-source-discovery-validate-2026-10-21-data-source-dir
+# contract-id: data-source-discovery-validate-2026-10-22-profile-v2
 set -euo pipefail
 ROOT="${1:-.}"
 cd "$ROOT"
-CONTRACT_TAG="data-source-discovery-validate-2026-10-21-data-source-dir"
+CONTRACT_TAG="data-source-discovery-validate-2026-10-22-profile-v2"
 
 fail() { echo "DATA-SOURCE-DISCOVERY FAIL [$CONTRACT_TAG]: $*" >&2; exit 1; }
 
@@ -21,35 +21,44 @@ fi
 python3 <<'PY'
 import json, os, sys
 
-CONTRACT = "data-source-discovery-validate-2026-10-21-data-source-dir"
+CONTRACT = "data-source-discovery-validate-2026-10-22-profile-v2"
 ALLOW_TIER = {"open_free_direct"}
 ALLOW_LICENSE_SUBSTR = (
     "cc0", "cc-by", "public domain", "pddl", "odc-by", "odbl",
 )
 
 REQUIRED_H2_EN = [
-    "## Research data needs",
-    "## Candidate datasets",
-    "## Primary recommendation",
+    "## Data requirements",
+    "## Recommended datasets",
 ]
 REQUIRED_H2_ZH = [
+    "## 数据需求",
+    "## 推荐数据集",
+]
+# Primary block 2.1 — #### must include numbering prefix + title
+H4_SUFFIX_EN = [
+    "1 Associated publication",
+    "2 Directory structure",
+    "3 Access and license",
+    "4 Download procedure",
+]
+H4_SUFFIX_ZH = [
+    "1 关联发表",
+    "2 目录结构",
+    "3 访问许可",
+    "4 下载步骤",
+]
+MIN_DATASETS = 1
+MAX_DATASETS = 3
+LEGACY_H2_ZH = [
     "## 研究数据需求",
     "## 候选数据集",
     "## 主推荐数据集",
 ]
-REQUIRED_H4_EN = [
-    "#### Cohort and design",
-    "#### Associated publication",
-    "#### Directory and file structure",
-    "#### Access and license",
-    "#### Download procedure",
-]
-REQUIRED_H4_ZH = [
-    "#### 队列与设计",
-    "#### 关联发表",
-    "#### 目录与文件结构",
-    "#### 访问和许可",
-    "#### 下载步骤",
+LEGACY_H2_EN = [
+    "## Research data needs",
+    "## Candidate datasets",
+    "## Primary recommendation",
 ]
 FORBIDDEN_TOP_H2_EN = [
     "## Directory and file structure",
@@ -59,11 +68,25 @@ FORBIDDEN_TOP_H2_EN = [
     "## Downstream hooks",
 ]
 FORBIDDEN_TOP_H2_ZH = [
+    "## 目录结构",
+    "## 访问许可",
     "## 目录与文件结构",
+    "## 目录和文件语义",
     "## 访问和许可",
+    "## 访问、许可证和伦理",
     "## 下载步骤",
+    "## 下载程序",
     "## 缺口与应对",
+    "## 数据缺陷和缓解策略",
     "## 下游衔接",
+    "## 总结",
+]
+FORBIDDEN_TOP_H2_EN_EXTRA = [
+    "## Directory and file semantics",
+    "## Download program",
+    "## Gaps and mitigations",
+    "## Downstream integration",
+    "## Summary",
 ]
 
 def fail(msg):
@@ -94,21 +117,52 @@ def has_forbidden_top_h2(text: str, forbidden):
             return s
     return None
 
-def check_file(path, h2_list, h4_list, forbidden_h2, label):
+def has_h4_containing(text: str, needle: str) -> bool:
+    for line in text.splitlines():
+        s = line.replace("\r", "").strip().lstrip("\ufeff")
+        if s.startswith("#### ") and needle in s:
+            return True
+    return False
+
+def dataset_blocks(body: str):
+    import re
+    nums = [int(m.group(1)) for m in re.finditer(r"^### 2\.(\d+)\b", body, re.MULTILINE)]
+    return nums
+
+def check_file(path, h2_list, h4_suffixes, forbidden_h2, legacy_h2, label, need_toc):
+    import re
     if not os.path.isfile(path):
         fail(f"{label} missing: {path}")
     body = open(path, encoding="utf-8").read().strip()
     if len(body) < 200:
         fail(f"{label} too short or empty: {path}")
+    blocks = dataset_blocks(body)
+    if not blocks:
+        fail(f"{path} missing ### 2.1 dataset block")
+    if len(blocks) < 1 or len(blocks) > 3:
+        fail(f"{path} must have 1–3 dataset blocks (### 2.1–2.3), found {len(blocks)}")
+    if blocks != list(range(1, len(blocks) + 1)):
+        fail(f"{path} dataset blocks must be consecutive 2.1..2.{len(blocks)}, got {blocks}")
     bad = has_forbidden_top_h2(body, forbidden_h2)
     if bad:
-        fail(f"{path} must nest {bad!r} under ### 1./2. (use ####), not document-level H2")
+        fail(f"{path} must nest {bad!r} under ### 2.x (use #### 2.x.y), not document-level H2")
+    for leg in legacy_h2:
+        if has_heading(body, (leg,)):
+            fail(f"{path} uses legacy H2 {leg!r}; use v2 template (数据需求 / 推荐数据集)")
+    for line in body.splitlines():
+        s = line.strip()
+        if s.startswith("## ") and ("详细版" in s or "缺口" in s or "下游" in s):
+            fail(f"{path} forbidden section {s!r}")
+    if need_toc and not has_heading(body, (need_toc,)):
+        fail(f"{path} missing {need_toc!r} (copy from md_template)")
     for h in h2_list:
         if not has_heading(body, (h,)):
             fail(f"{path} missing H2 {h!r}")
-    for h in h4_list:
-        if not has_heading(body, (h,)):
-            fail(f"{path} missing H4 {h!r} (under ### 1. primary block)")
+    for n in blocks:
+        for suffix in h4_suffixes:
+            needle = f"2.{n}.{suffix}"
+            if not has_h4_containing(body, needle):
+                fail(f"{path} missing #### {needle!r} under ### 2.{n}")
 
 if not os.path.isdir("data-source"):
     fail("data-source/ directory missing")
@@ -125,6 +179,8 @@ if not summary:
 
 pid = m.get("primary_recommendation_id")
 datasets = m.get("datasets") or []
+if len(datasets) < MIN_DATASETS or len(datasets) > MAX_DATASETS:
+    fail(f"datasets[] must have {MIN_DATASETS}–{MAX_DATASETS} entries, got {len(datasets)}")
 if not pid:
     fail("primary_recommendation_id missing")
 by_id = {d.get("id"): d for d in datasets if d.get("id")}
@@ -150,8 +206,19 @@ pzh = deliverables.get("profile_zh", "data-source/DATA_SOURCE_PROFILE.zh.md")
 for p in (pen, pzh):
     if not p.startswith("data-source/"):
         fail(f"deliverable must be under data-source/: {p}")
-check_file(pen, REQUIRED_H2_EN, REQUIRED_H4_EN, FORBIDDEN_TOP_H2_EN, "profile EN")
-check_file(pzh, REQUIRED_H2_ZH, REQUIRED_H4_ZH, FORBIDDEN_TOP_H2_ZH, "profile ZH")
+forbidden_en = FORBIDDEN_TOP_H2_EN + FORBIDDEN_TOP_H2_EN_EXTRA
+check_file(
+    pen, REQUIRED_H2_EN, H4_SUFFIX_EN, forbidden_en, LEGACY_H2_EN,
+    "profile EN", "## Table of contents",
+)
+check_file(
+    pzh, REQUIRED_H2_ZH, H4_SUFFIX_ZH, FORBIDDEN_TOP_H2_ZH, LEGACY_H2_ZH,
+    "profile ZH", "## 目录",
+)
 
-print(f"DATA-SOURCE-DISCOVERY OK [{CONTRACT}] primary={pid} profiles={pen},{pzh}")
+blocks_zh = dataset_blocks(open(pzh, encoding="utf-8").read())
+if len(blocks_zh) != len(datasets):
+    fail(f"profile has {len(blocks_zh)} ### 2.x block(s) but datasets[] has {len(datasets)}; must match (1–3)")
+
+print(f"DATA-SOURCE-DISCOVERY OK [{CONTRACT}] primary={pid} datasets={len(datasets)} profiles={pen},{pzh}")
 PY

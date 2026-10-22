@@ -1,59 +1,70 @@
 # Data Source Profile
 
-**Brief anchor:** [one line from RESEARCH_BRIEF.md]  
+`/data-source-discovery` template. **Read this file** → write `data-source/DATA_SOURCE_PROFILE.en.md`. **Two document `##` only.** **Recommended datasets: min 1, max 3** (`### 2.1` required; `2.2`/`2.3` optional). Each block: **`#### 2.x.1`–`2.x.4`**. Manifest **`datasets[]` count must match profile blocks (1–3)**. If only one dataset, **delete unused `### 2.2`/`2.3` sections** from the template — no empty headings. Before success: `bash aris-constraints/data-source-discovery.validate.example.sh`.
+
 **Date:** [YYYY-MM-DD]  
-**Primary dataset ID:** [manifest datasets[].id]
+**Primary ID:** [manifest `primary_recommendation_id` → block **2.1**]
+
+## Table of contents
+
+1. [Data requirements](#sec-1)
+2. [Recommended datasets](#sec-2)
+   - [2.1 [d1 — name]](#sec-2-1)
+     - [2.1.1 Associated publication](#sec-2-1-1)
+     - [2.1.2 Directory structure](#sec-2-1-2)
+     - [2.1.3 Access and license](#sec-2-1-3)
+     - [2.1.4 Download procedure](#sec-2-1-4)
+   - [2.2 [d2 — name] (optional)](#sec-2-2)
+     - [2.2.1–2.2.4 …](#sec-2-2-1)
+   - [2.3 [d3 — name] (optional)](#sec-2-3)
+     - [2.3.1–2.3.4 …](#sec-2-3-1)
 
 ---
 
-## Research data needs
+<a id="sec-1"></a>
+
+## Data requirements
 
 | Dimension | Requirement |
 |-----------|-------------|
-| Population | [e.g. MDD vs healthy controls] |
+| Population | [e.g. MDD vs HC] |
 | Modality | [e.g. rs-fMRI, T1w] |
-| Labels / covariates | [e.g. diagnosis in participants.tsv] |
-| Analysis goal | [e.g. graph theory on resting-state FC] |
-| Minimum N (estimate) | [number or TBD with rationale] |
+| Labels / covariates | [e.g. participants.tsv] |
+| Analysis goal | [e.g. graph theory / FC] |
+| Minimum N | [number or TBD] |
+| Hard exclusions | [e.g. open free direct only] |
 
 ---
 
-## Candidate datasets
+<a id="sec-2"></a>
 
-| ID | Name | Repository | access_tier | Fit | License |
-|----|------|------------|-------------|-----|---------|
-| d1 | … | OpenNeuro | open_free_direct | high | CC0-1.0 |
+## Recommended datasets
 
----
+<a id="sec-2-1"></a>
 
-## Primary recommendation
+### 2.1 [d1 — short name] (primary)
 
-One block per dataset: **`### 1.`**, **`### 2.`**, … (`primary_recommendation_id` → block **1**). The **`####`** subsections below belong **under that dataset**, not as document-level H2.
-
-### 1. [d1 — short name]
-
-**Name:** …  
-**Stable ID / DOI:** …  
+**Repository / stable ID:** …  
 **Catalog URL:** …  
+**License:** …  
+**Sample and acquisition:** N=…; groups …; scanner/tasks …  
 **Why primary:** …
 
-#### Cohort and design
+<a id="sec-2-1-1"></a>
 
-- **N:** … (groups: …)
-- **Scanner / protocol:** … (if known)
-- **Tasks:** …
-
-#### Associated publication
+#### 2.1.1 Associated publication
 
 - Paper: … (DOI …)
 - Dataset citation: … `[Dataset]`
 
-#### Directory and file structure
+<a id="sec-2-1-2"></a>
+
+#### 2.1.2 Directory structure
 
 **Format:** [e.g. BIDS 1.x]
 
 ```text
-[directory tree — verified source: README URL or listing date]
+[directory tree — source and date]
 ```
 
 | Path pattern | Role |
@@ -62,53 +73,88 @@ One block per dataset: **`### 1.`**, **`### 2.`**, … (`primary_recommendation_
 | `sub-*_anat/*_T1w.nii.gz` | … |
 | `sub-*_func/*_task-rest_bold.nii.gz` | … |
 
-**structure_verified:** yes — [basis: doc URL / probe path / date]
+**structure_verified:** yes — [basis]
 
-#### Access and license
+<a id="sec-2-1-3"></a>
+
+#### 2.1.3 Access and license
 
 | Check | Status |
 |-------|--------|
-| License allows research reuse | … |
-| Free download (no purchase) | … |
-| URL verified | … (method, date) |
+| License allows reuse | … |
+| Free download | … |
+| URL verified | … |
 | Human subjects / de-id | … |
-| User IRB for secondary use | confirm with institution |
 
-#### Download procedure
+<a id="sec-2-1-4"></a>
 
-##### Method 1: … (easiest)
-1. …
+#### 2.1.4 Download procedure
 
-##### Method 2: … (recommended for reproducibility)
-1. …
+**Method 1 (easiest):** …
 
-**Suggested workspace layout:** `data-source/raw/<dataset_id>/` (BIDS root)
+**Method 2 (reproducible):** …
 
+**Workspace:** `data-source/raw/<dataset_id>/`  
 **Minimal M0 subset:** …
 
-### 2. [d2 — …] (optional; same **`####`** structure when filled)
+<a id="sec-2-2"></a>
 
-**Name:** …  
-**Stable ID / DOI:** …  
-**Catalog URL:** …  
-**Why listed here:** …
+### 2.2 [d2 — short name] (optional)
 
-#### Cohort and design
+**Repository / stable ID:** …  
+**Sample and acquisition:** …
 
-…
+<a id="sec-2-2-1"></a>
 
-#### Associated publication
+#### 2.2.1 Associated publication
 
 …
 
-#### Directory and file structure
+<a id="sec-2-2-2"></a>
+
+#### 2.2.2 Directory structure
 
 …
 
-#### Access and license
+<a id="sec-2-2-3"></a>
+
+#### 2.2.3 Access and license
 
 …
 
-#### Download procedure
+<a id="sec-2-2-4"></a>
+
+#### 2.2.4 Download procedure
+
+…
+
+<a id="sec-2-3"></a>
+
+### 2.3 [d3 — short name] (optional)
+
+**Repository / stable ID:** …  
+**Sample and acquisition:** …
+
+<a id="sec-2-3-1"></a>
+
+#### 2.3.1 Associated publication
+
+…
+
+<a id="sec-2-3-2"></a>
+
+#### 2.3.2 Directory structure
+
+…
+
+<a id="sec-2-3-3"></a>
+
+#### 2.3.3 Access and license
+
+…
+
+<a id="sec-2-3-4"></a>
+
+#### 2.3.4 Download procedure
 
 …

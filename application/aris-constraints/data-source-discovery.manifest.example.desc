@@ -9,11 +9,15 @@ Upstream skill semantics: Paper **`aris-constraints/skills/data-source-discovery
 1. Read `RESEARCH_BRIEF.md` and **`aris-constraints/skills/data-source-discovery/SKILL.md`** (Phases 0–5).
 2. Optional: **`aris-constraints/skills/data-source-discovery/repositories-reference.md`** for repository priorities.
 3. **`mkdir -p data-source`** if missing — **all** deliverables for this skill go under **`data-source/`** only (not `refine-logs/` or `idea-stage/`).
-4. **Author from md templates** (section order): `aris-constraints/md_template/` → write to **`data-source/`**:
-   - `DATA_SOURCE_PROFILE.en.example.md` → `data-source/DATA_SOURCE_PROFILE.en.md`
-   - `DATA_SOURCE_PROFILE.zh.example.md` → `data-source/DATA_SOURCE_PROFILE.zh.md`
+4. **Clone md templates (mandatory, v2)** — **Read** then **preserve heading levels** from:
+   - `aris-constraints/md_template/DATA_SOURCE_PROFILE.en.example.md` → `data-source/DATA_SOURCE_PROFILE.en.md`
+   - `aris-constraints/md_template/DATA_SOURCE_PROFILE.zh.example.md` → `data-source/DATA_SOURCE_PROFILE.zh.md`
+   - **Two document `##` only:** `数据需求` / `推荐数据集` (EN: Data requirements / Recommended datasets). **No** separate 候选数据集 / 主推荐 / 「详细版」重复章.
+   - **Profile lists 1–3 datasets:** **`### 2.1`** (required, primary) … optional **`### 2.2`**, **`### 2.3`**; each with **`#### 2.x.1`–`2.x.4`**. Sample N / protocol in **`### 2.x` lead**. **`datasets[]` length 1–3**, same ids as profile blocks.
+   - **Forbidden:** document-level H2 for 目录结构 / 访问许可 / 下载步骤; 缺口 / 下游衔接; appending duplicate sections after the template body.
 5. Follow **only this `.desc` file** for JSON paths and `result` gates.
 6. Write `data-source/data-source-discovery.manifest.result.json`.
+7. **Validate:** `bash aris-constraints/data-source-discovery.validate.example.sh` from project root; fix profiles until pass before `result: success`.
 
 **Not in scope:** full cohort download (unless user sets probe download), `/experiment-plan` blocks, editing IDEA_REPORT §2–§6 except optional §1 data anchor paragraph noted in SKILL.
 
@@ -93,11 +97,11 @@ Upstream skill semantics: Paper **`aris-constraints/skills/data-source-discovery
 **Delivery + verification gate** — `"success"` only when **all** below hold:
 
 - **`data-source/`** exists; manifest at **`data-source/data-source-discovery.manifest.result.json`**; valid JSON; `aris_phase` = `"data-source-discovery"`.
-- Non-empty `executive_summary`; `primary_recommendation_id` matches one entry in `datasets[]`.
+- Non-empty `executive_summary`; **`datasets[]` has 1–3 entries**; `primary_recommendation_id` matches one entry (typically **`d1`** / **`### 2.1`**).
 - **Primary dataset** has `access_tier` = **`open_free_direct`**, license in allow-list (CC0, CC-BY, CC-BY-SA, PDDL, or explicit public-domain on official page).
 - `verification.structure_verified` = **true** for primary; `structure_basis` non-empty.
 - At least one **catalog** URL verified this run (`verification.catalog_url_*` filled) when network/tools allow.
-- **Download** URL: verified with HEAD/curl/WebFetch **or** documented official CLI path (OpenNeuro/DataLad) with catalog proof — mark method in profile **下载步骤**.
+- **Download** URL: verified with HEAD/curl/WebFetch **or** documented official CLI path (OpenNeuro/DataLad) with catalog proof — mark method in profile **`#### 2.1.4 下载步骤`**.
 - Deliverables **`profile_en`** and **`profile_zh`** exist, non-empty, with contract H2s (see below).
 - **No fabricated paths/columns** — if verification incomplete after reasonable attempts, set **`result: failed`**.
 
@@ -105,29 +109,22 @@ Upstream skill semantics: Paper **`aris-constraints/skills/data-source-discovery
 
 ## Authoring: `data-source/DATA_SOURCE_PROFILE.en.md`
 
-After `# Data Source Profile`, these **H2 sections in order** (each non-empty):
+| Level | Title | Content |
+|-------|--------|---------|
+| H2 | `## Data requirements` | Brief → requirements table |
+| H2 | `## Recommended datasets` | |
+| H3 | `### 2.1 …` (primary) | ID, URL, license, **sample and acquisition** in lead |
+| H4 | `#### 2.1.1 Associated publication` | |
+| H4 | `#### 2.1.2 Directory structure` | **Directory tree** + path table; `structure_verified` |
+| H4 | `#### 2.1.3 Access and license` | |
+| H4 | `#### 2.1.4 Download procedure` | Method 1 / Method 2 (bold lines or list) |
+| H3 | `### 2.2 …` / `### 2.3 …` (optional) | Same **2.x.1–2.x.4**; **1–3 blocks total** |
 
-| H2 | Content |
-|----|---------|
-| `## Research data needs` | Table from brief |
-| `## Candidate datasets` | Summary table (all shortlisted) |
-| `## Primary recommendation` | **`### 1.`**, **`### 2.`**, … (block **1** = `primary_recommendation_id`). **Per block**, required **`####`**: Cohort and design; Associated publication; Directory and file structure; Access and license; Download procedure. **Forbidden:** same titles as top-level H2. Do **not** include Gaps and mitigations or Downstream hooks in profile. |
-
-Under **`#### Download procedure`**, use **`##### Method 1` / `Method 2`** (not “Option 1”).
+Gaps → manifest JSON only. No Downstream hooks in profile.
 
 ## Authoring: `data-source/DATA_SOURCE_PROFILE.zh.md`
 
-Same substance; document-level H2 only:
-
-| H2 |
-|----|
-| `## 研究数据需求` |
-| `## 候选数据集` |
-| `## 主推荐数据集` |
-
-Under each **`### 1.` / `### 2.`**, required **`####`**: 队列与设计；关联发表；目录与文件结构；访问和许可；下载步骤。**禁止**把这些写成文档级 H2；**不要**写「缺口与应对」或「下游衔接」（缺口 → manifest `datasets[].gaps`；下游见 **Composing** 表）。
-
-Under **`#### 下载步骤`**, use **`##### 方法1` / `方法2`** (not 「选项 1」).
+Same tree; **`## 数据需求`**, **`## 推荐数据集`**; **至少 `### 2.1`、最多 `### 2.3`**，每块 **`#### 2.x.1 关联发表`** … **`2.x.4 下载步骤`**。manifest **`datasets[]` 1–3 条**。缺口 → manifest；下游见 **Composing** 表。
 
 ## Composing with other skills
 

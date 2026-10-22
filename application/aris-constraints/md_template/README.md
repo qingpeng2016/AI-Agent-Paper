@@ -27,7 +27,7 @@ Standalone **`/research-refine`**: **`research-refine.manifest.example.desc`** �
 
 Standalone **`/experiment-plan`**: **`experiment-plan.manifest.example.desc`** — four deliverables under **`refine-logs/`** using the four `EXPERIMENT_*` templates in this folder. Recommended after **`/research-refine`** when `FINAL_PROPOSAL.md` is ready.
 
-Standalone **`/data-source-discovery`**: **`data-source-discovery.manifest.example.desc`** — all outputs under **`data-source/`** (profiles + **`data-source-discovery.manifest.result.json`**). Use **`DATA_SOURCE_PROFILE.*.example.md`**. Recommended **before** **`/research-lit`** when the paper depends on public downloadable data.
+Standalone **`/data-source-discovery`**: **`data-source-discovery.manifest.example.desc`** — all outputs under **`data-source/`** (profiles + **`data-source-discovery.manifest.result.json`**). **Clone** **`DATA_SOURCE_PROFILE.*.example.md`** (v2: **`## 数据需求` / `## 推荐数据集`**, **`### 2.1`** + **`#### 2.1.1`–`2.1.4`**, optional **`2.2`**). Validate: **`data-source-discovery.validate.example.sh`**. Recommended **before** **`/research-lit`** when the paper depends on public downloadable data.
 
 Placeholder style matches platform narrative templates (e.g. Workflow 3): **`[Fill-in instruction]`** on its own line or after a label — not sample content to keep.
 
