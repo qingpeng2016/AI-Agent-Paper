@@ -16,10 +16,18 @@ Steps 1–5: **`aris-constraints/*.manifest.example.desc`** is the single contra
 | `IDEA_REPORT.en.example.md` | `idea-stage/IDEA_REPORT.en.md` | English (contract / validate) |
 | `IDEA_REPORT.zh.example.md` | `idea-stage/IDEA_REPORT.zh.md` | Simplified Chinese |
 
-| `EXPERIMENT_PLAN.en.example.md` | `refine-logs/EXPERIMENT_PLAN.md` (Step 5) | English; **field-agnostic** scaffold like IDEA_REPORT (`[Step 5: …]`, TOC, `sec-*`, `### N.` / `#### N.M`); first content H2 `## Data access and workspace layout` |
-| `EXPERIMENT_PLAN.zh.example.md` | reference / optional Chinese plan | Same `sec-*` and numbering; 目录与契约 H2 用语见模版 |
+| `EXPERIMENT_PLAN.en.example.md` | `refine-logs/EXPERIMENT_PLAN.en.md` (`/experiment-plan`) | Claim Map, 实验数据获取, Experiment Blocks, milestones — see **`experiment-plan.manifest.example.desc`** |
+| `EXPERIMENT_PLAN.zh.example.md` | `refine-logs/EXPERIMENT_PLAN.zh.md` | 与 EN 同结构；中文专业术语 |
+| `EXPERIMENT_TRACKER.en.example.md` | `refine-logs/EXPERIMENT_TRACKER.en.md` | Run execution table + optional gates/budget |
+| `EXPERIMENT_TRACKER.zh.example.md` | `refine-logs/EXPERIMENT_TRACKER.zh.md` | 与 EN 相同 Run ID / Status |
 
-Step 5 section fill-in guide: **`research-refine-pipeline.explain.example.desc`** (contract remains `research-refine-pipeline.manifest.example.desc`).
+Step 5 (`research-refine-pipeline`) writes **`refine-logs/EXPERIMENT_PLAN.md`** (single EN file) — layout in **`research-refine-pipeline.explain.example.desc`**, not the `/experiment-plan` templates above.
+
+Standalone **`/research-refine`**: **`research-refine.manifest.example.desc`** — **`refine-logs/FINAL_PROPOSAL.md`**, **`REVIEW_SUMMARY.md`**, **`REFINEMENT_REPORT.md`**, **`REFINE_STATE.json`**.
+
+Standalone **`/experiment-plan`**: **`experiment-plan.manifest.example.desc`** — four deliverables under **`refine-logs/`** using the four `EXPERIMENT_*` templates in this folder. Recommended after **`/research-refine`** when `FINAL_PROPOSAL.md` is ready.
+
+Standalone **`/data-source-discovery`**: **`data-source-discovery.manifest.example.desc`** — all outputs under **`data-source/`** (profiles + **`data-source-discovery.manifest.result.json`**). Use **`DATA_SOURCE_PROFILE.*.example.md`**. Recommended **before** **`/research-lit`** when the paper depends on public downloadable data.
 
 Placeholder style matches platform narrative templates (e.g. Workflow 3): **`[Fill-in instruction]`** on its own line or after a label — not sample content to keep.
 

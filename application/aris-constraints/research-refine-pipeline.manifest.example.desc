@@ -6,7 +6,7 @@
 
 1. Read `RESEARCH_BRIEF.md`, **`idea-creator.manifest.result.json`** (rank-1 `title`), and **`research-review.manifest.result.json`**.
 2. Plan all Step 5 deliverables for the **rank-1 idea only** — the highest-ranked proposal in **`idea-stage/IDEA_REPORT.en.md`** (`## Recommended Ideas (ranked)`, `### Idea 1:`; same title as idea-creator rank 1). Do not re-select by §4 novelty scores or other ranks.
-3. For section shape and `[Step 5: …]` fill-in style, read **`research-refine-pipeline.explain.example.desc`** and **`md_template/EXPERIMENT_PLAN.en.example.md`** (generic scaffold — content from **this** rank-1 study, any field).
+3. For section shape and `[Step 5: …]` fill-in style, read **`research-refine-pipeline.explain.example.desc`** (Step 5 layout — **not** `md_template/EXPERIMENT_PLAN.*.example.md`, which is for standalone **`/experiment-plan`** only).
 4. Follow **only this `.desc` file** (including **Example JSON** and deliverable authoring sections).
 5. Write manifest, `refine-logs/` markdown, and composed §1 (EN + ZH) per sections below.
 
@@ -101,7 +101,7 @@ Non-empty prose; no `[…]` scaffold lines.
 
 Detailed executable plan. **Not** IDEA_REPORT §1.
 
-**Layout reference:** `aris-constraints/md_template/EXPERIMENT_PLAN.en.example.md` and `EXPERIMENT_PLAN.zh.example.md` — same pattern as `IDEA_REPORT.*.example.md`: **`## Table of contents` / `## 目录`**, `sec-*` anchors, contract **`##` H2**, numbered **`### N.`** / **`#### N.M`**, `---` between major chapters. Write **`refine-logs/EXPERIMENT_PLAN.md`** in English unless the project explicitly requires a Chinese plan file.
+**Layout reference:** **`research-refine-pipeline.explain.example.desc`** (Phases 0–11 / `sec-*` style). Write **`refine-logs/EXPERIMENT_PLAN.md`** in English unless the project explicitly requires a Chinese plan file. For Claim Map + bilingual four-file plans use **`/experiment-plan`** and `md_template/EXPERIMENT_PLAN.en.example.md` (different skill).
 
 ### Verification gate (mandatory before “writing dead”)
 

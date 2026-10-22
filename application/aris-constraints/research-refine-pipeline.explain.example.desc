@@ -8,7 +8,7 @@
 
 ## EXPERIMENT_PLAN (`refine-logs/EXPERIMENT_PLAN.md`)
 
-**Scaffolds:** `aris-constraints/md_template/EXPERIMENT_PLAN.en.example.md` (deliver in English unless the project explicitly requires Chinese), `EXPERIMENT_PLAN.zh.example.md` (parallel structure + 目录; same `sec-*` ids).
+**Scaffolds:** section layout in **this explain file** (Step 5 Phases 0–11). Do **not** use `md_template/EXPERIMENT_PLAN.*.example.md` — those templates are for standalone **`/experiment-plan`** (`experiment-plan.manifest.example.desc`).
 
 **Pattern (match `IDEA_REPORT.*.example.md`):**
 

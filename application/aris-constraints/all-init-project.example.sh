@@ -17,7 +17,7 @@ else
   ROOT="$HOME/$NAME"
 fi
 
-mkdir -p "$ROOT/idea-stage" "$ROOT/refine-logs" "$ROOT/literature" "$ROOT/aris-constraints" "$ROOT/research-wiki"
+mkdir -p "$ROOT/idea-stage" "$ROOT/refine-logs" "$ROOT/literature" "$ROOT/aris-constraints" "$ROOT/research-wiki" "$ROOT/data-source"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEST="$ROOT/aris-constraints"
@@ -38,7 +38,15 @@ do
 done
 if [[ -d "$SCRIPT_DIR/md_template" ]]; then
   mkdir -p "$DEST/md_template"
+  # Copy all md_template files (including /experiment-plan scaffolds at top level)
   cp -f "$SCRIPT_DIR"/md_template/* "$DEST/md_template/" 2>/dev/null || true
+fi
+if [[ -d "$SCRIPT_DIR/skills" ]]; then
+  mkdir -p "$DEST/skills"
+  cp -R "$SCRIPT_DIR/skills/"* "$DEST/skills/" 2>/dev/null || true
+  # Mirror for ARIS slash-command discovery (canonical copy: aris-constraints/skills/)
+  mkdir -p "$ROOT/skills"
+  cp -R "$SCRIPT_DIR/skills/"* "$ROOT/skills/" 2>/dev/null || true
 fi
 EN_REPORT_TEMPLATE="$DEST/md_template/IDEA_REPORT.en.example.md"
 ZH_REPORT_TEMPLATE="$DEST/md_template/IDEA_REPORT.zh.example.md"
@@ -64,8 +72,11 @@ NeuroImage
 EOF
 
 echo "Initialized: $ROOT"
-echo "  dirs: idea-stage refine-logs literature aris-constraints research-wiki"
+echo "  dirs: idea-stage refine-logs literature aris-constraints research-wiki data-source skills"
 echo "  file: RESEARCH_BRIEF.md"
 echo "  report templates: aris-constraints/md_template/IDEA_REPORT.en.example.md, IDEA_REPORT.zh.example.md"
+echo "  experiment-plan templates: md_template/EXPERIMENT_PLAN.en|zh.example.md, EXPERIMENT_TRACKER.en|zh.example.md"
+echo "  data-source-discovery: aris-constraints/skills/data-source-discovery/SKILL.md (+ mirror project/skills/ for ARIS)"
+echo "  data profile templates: md_template/DATA_SOURCE_PROFILE.en|zh.example.md"
 echo "  idea-stage: IDEA_REPORT.en.md, IDEA_REPORT.zh.md (working copies from templates)"
-echo "  templates: copied $COPIED file(s) from $SCRIPT_DIR -> $DEST"
+echo "  templates: copied $COPIED file(s) from $SCRIPT_DIR -> $DEST (md_template/* includes experiment-plan scaffolds)"

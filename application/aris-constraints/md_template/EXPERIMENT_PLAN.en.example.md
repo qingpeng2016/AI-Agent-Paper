@@ -1,245 +1,162 @@
-# Experiment Plan: [Short title from rank-1 idea / FINAL_PROPOSAL]
+# Experiment Plan: [Short title from rank-1 / FINAL_PROPOSAL]
 
-Template for Step 5 (rank-1 only). Fill all sections from `research-refine-pipeline.manifest.example.desc`, rank-1 content in `idea-stage/IDEA_REPORT.en.md` (§3 Idea 1, §4–§5 for that idea), `FINAL_PROPOSAL.md`, and `RESEARCH_BRIEF.md`. Output: **`refine-logs/EXPERIMENT_PLAN.md`**. Pair with `EXPERIMENT_PLAN.zh.example.md` (same `sec-*` anchors). **Do not leave bracket placeholders in finished sections** — replace with real prose, lists, and tables suited to **this** study (any field).
+**Template for standalone `/experiment-plan`** (not Step 5 `research-refine-pipeline`).  
+Fill from `experiment-plan.manifest.example.desc`, [ARIS `experiment-plan/SKILL.md`](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/experiment-plan/SKILL.md), `RESEARCH_BRIEF.md`, `refine-logs/FINAL_PROPOSAL.md` (if present), and rank-1 in `idea-stage/IDEA_REPORT.en.md`.  
+**Output:** `refine-logs/EXPERIMENT_PLAN.en.md`. Pair with `EXPERIMENT_PLAN.zh.example.md` (same blocks; Chinese prose).  
+**Do not leave bracket placeholders in finished deliverables.**
 
-## Table of contents
-
-- [1. Data access and workspace layout](#sec-1)
-  - [1.1 Dataset and official sources](#sec-1-1)
-  - [1.2 How to obtain the data](#sec-1-2)
-  - [1.3 What you receive after download](#sec-1-3)
-  - [1.4 Where to put files in this project](#sec-1-4)
-- [2. Study question and claim hierarchy](#sec-2)
-  - [2.1 Primary question](#sec-2-1)
-  - [2.2 Confirmatory claims (fixed order)](#sec-2-2)
-  - [2.3 Interpretive bounds](#sec-2-3)
-- [3. Phase 0 — Data and protocol lock](#sec-3)
-- [4. Phase 1 — Preparation and analysis-ready inputs](#sec-4)
-- [5. Phase 2 — Primary analysis pipeline](#sec-5)
-  - [5.1 Primary endpoint / main test](#sec-5-1)
-  - [5.2 Secondary and exploratory analyses](#sec-5-2)
-  - [5.3 Validation design and leakage controls](#sec-5-3)
-  - [5.4 Metrics, intervals, and multiplicity](#sec-5-4)
-- [6. Phase 3 — Confirmatory inference](#sec-6)
-- [7. Phase 4 — Robustness and sensitivity](#sec-7)
-- [8. Phase 5 — Reporting and release](#sec-8)
-- [9. Required figures and tables](#sec-9)
-- [10. Preregistered decision table](#sec-10)
-- [11. Milestones and dependencies](#sec-11)
+**Problem:** [One paragraph — reproducibility bottleneck / question]  
+**Method Thesis:** [One sentence — dominant method or analysis framework]  
+**Date:** [YYYY-MM-DD]
 
 ---
 
-## Data access and workspace layout
+## Claim Map
 
-<a id="sec-1"></a>
+**Note (optional in deliverables):** **C** = claim, **E** = experiment; **C1** = primary claim (≥1 row), **C2** = supporting claim (optional). **Linked Blocks:** E1, E2, …
 
-### 1. Data access and workspace layout
-
-<a id="sec-1-1"></a>
-
-#### 1.1 Dataset and official sources
-
-[Step 5: primary materials for this study — dataset, corpus, benchmark, or instrument; name/version; **verified** landing URL(s); DOI/portal; license/DUA; citation]
-
-<a id="sec-1-2"></a>
-
-#### 1.2 How to obtain the data
-
-[Step 5: ordered steps from verified instructions only; if not executed this run, subheading **Planned procedure (not yet executed)** — no fake credentials or timings]
-
-<a id="sec-1-3"></a>
-
-#### 1.3 What you receive after download
-
-[Step 5: layout, formats, QC checklist — only after download or quoted from official docs with link; else **TBD until first download** + what goes in `data/<slug>/README.md`]
-
-<a id="sec-1-4"></a>
-
-#### 1.4 Where to put files in this project
-
-[Step 5: paths relative to workspace root (contains `RESEARCH_BRIEF.md`), e.g. `data/<slug>/README.md`, `raw/`, derivatives; no absolute machine paths; no secrets in git]
+| Claim | Why It Matters | Minimum Convincing Evidence | Linked Blocks |
+|-------|----------------|----------------------------|---------------|
+| **C1:** [Primary claim] | [Why a reviewer should care] | [Smallest evidence that would convince] | [E1, E2, …] |
+| **C2:** [Optional supporting claim] | … | … | … |
 
 ---
 
-## Study Question and Claim Hierarchy
+## Paper Storyline
 
-<a id="sec-2"></a>
+### Main paper must prove:
+1. [Claim / result line 1]
+2. [Claim / result line 2]
 
-### 2. Study question and claim hierarchy
+### Appendix can support:
+- [Sensitivity, extra figures, optional stratifications]
 
-<a id="sec-2-1"></a>
-
-#### 2.1 Primary question
-
-[Step 5: one testable question aligned with rank-1 hypothesis and chosen validation design]
-
-<a id="sec-2-2"></a>
-
-#### 2.2 Confirmatory claims (fixed order)
-
-1. **Primary:** [Main confirmatory claim — what must hold for success]
-2. **Key secondary (if any):** [Prespecified secondary; gate order if used]
-3. **Robustness:** [What must stay stable under prespecified variations]
-4. …
-
-[Add or remove numbered claims to match the study; keep confirmatory order explicit]
-
-<a id="sec-2-3"></a>
-
-#### 2.3 Interpretive bounds
-
-[Step 5: what this design can and cannot conclude — avoid overclaiming beyond evidence type]
+### Experiments intentionally cut:
+- [Scope exclusions — not part of this paper]
 
 ---
 
-## Phase 0 — Data and Protocol Lock
+## Experiment Data Acquisition
 
-<a id="sec-3"></a>
+### Experimental acquisition
 
-### 3. Phase 0 — Data and protocol lock
+For **data you generate or coordinate** (not only public downloads). Specify subjects, protocol, and on-disk layout.
 
-[Step 5: feasibility and lock **before** outcome-guided choices]
+#### Subjects or units of study
 
-**Purpose:** [One sentence — e.g. cohort/spec lock, split freeze, preregistration trigger]
+[Cohort, n, inclusion/exclusion, groups, sites/instruments, ethics/consent if applicable]
 
-1. [Obtain materials under license; archive version, URLs, access date, checksums, codebook]
-2. [Availability/QC only — counts, exclusions, missingness; **no** tuning on primary outcomes]
-3. [Locked eligibility and analysis population]
-4. [Freeze validation splits / holdouts / cross-validation grouping as appropriate to the field]
-5. [Preregister or timestamp protocol: contrasts, features, models, multiplicity plan]
+#### Methods
 
-**Gate 0:** [Go/no-go criteria; reference §1 for URLs — do not duplicate unverified links]
+[Protocol, acquisition pipeline, QC, fields logged; link to experiment blocks E1…]
 
----
+#### Data products and layout
 
-## Phase 1 — Preparation and Analysis-Ready Inputs
+[Output layout/schema; mark **schema verified** (protocol doc or sample) with date; no unverified fields]
 
-<a id="sec-4"></a>
+### Data download
 
-### 4. Phase 1 — Preparation and analysis-ready inputs
+For **externally hosted** datasets or benchmarks.
 
-[Step 5: domain-specific prep — preprocessing, annotation, feature construction, simulation setup, etc.; all choices locked and documented]
+#### Download URLs
 
-1. [Step]
-2. …
+[**Prefer free direct-download** sources (open mirrors, public buckets, Zenodo/OpenNeuro, etc.) before gated/paid; verify reachable/downloadable; **verification status** + date]
 
-**Deliverables:** [QC report, dictionaries, versioned code, immutable ID maps, etc.]
+#### Access procedure
 
----
+[For direct links: note no extra steps; for gated access: registration/DUA/purchase steps; **Planned procedure (not yet executed)** if applicable]
 
-## Phase 2 — Primary Analysis Pipeline
+#### Data products and layout
 
-<a id="sec-5"></a>
-
-### 5. Phase 2 — Primary analysis pipeline
-
-<a id="sec-5-1"></a>
-
-#### 5.1 Primary endpoint / main test
-
-[Step 5: prespecified main comparison or estimator ladder; same validation folds for all compared conditions]
-
-<a id="sec-5-2"></a>
-
-#### 5.2 Secondary and exploratory analyses
-
-[Step 5: secondary endpoints; exploratory families labeled; complete-case / subset rules]
-
-<a id="sec-5-3"></a>
-
-#### 5.3 Validation design and leakage controls
-
-[Step 5: holdout, nested CV, temporal split, etc.; what is fit only inside training units]
-
-<a id="sec-5-4"></a>
-
-#### 5.4 Metrics, intervals, and multiplicity
-
-[Step 5: primary metrics, calibration or effect sizes as needed; uncertainty method; confirmatory vs exploratory multiplicity]
+[Post-download layout; mapping to `data/<slug>/`; **schema verified** against official docs or sample file; QC/checksums]
 
 ---
 
-## Phase 3 — Confirmatory Inference
+## Experiment Blocks
 
-<a id="sec-6"></a>
+**Ground every block in `Experiment Data Acquisition` above**—same paths, cohort, and schema fields; optional **Data dependency:** method 1/2 + path.
 
-### 6. Phase 3 — Confirmatory inference
+### Block E1: [Name]
 
-[Step 5: execute locked tests for primary (and gated secondary) claims; report all prespecified confirmatory tests]
+**Claim tested:** [C1 / C2]
 
-1. [Primary claim analysis]
-2. [Secondary gate if used]
-3. [Prespecified sensitivity tied to confirmatory interpretation]
-4. …
+**Why this block exists:** [One short paragraph]
 
----
+**Data dependency:** [Method 2 → `data/…`; or Method 1 output; columns match acquisition **Data products and layout**]
 
-## Phase 4 — Robustness and Sensitivity
+**Dataset / split / task:**
+- [Cohort, n, sites, task]
 
-<a id="sec-7"></a>
+**Compared systems:**
+1. [Primary method / multiverse / main pipeline]
+2. [Strong baselines — ≤3 families per ARIS limits]
+3. [Optional ablation or negative control]
 
-### 7. Phase 4 — Robustness and sensitivity
+**Metrics** (primary):
+- [Decisive metrics first]
 
-[Step 5: run all prespecified robustness checks regardless of primary result; multiverse or sensitivity table]
+**Setup details:**
+- [Model, covariates, seeds, multiplicity, compute order-of-magnitude]
 
-[Step 5: failure / null-result interpretation — bounded wording when evidence is weak]
+**Success criterion:**
+- [Pass/fail thresholds — pre-specified]
 
----
+**Failure interpretation:**
+- [What a negative result means]
 
-## Phase 5 — Reporting and Release
+**Table / figure target:**
+- [Main paper vs appendix targets]
 
-<a id="sec-8"></a>
-
-### 8. Phase 5 — Reporting and release
-
-[Step 5: manuscript or report outline mapped to claims; figures list; deviations; sharing per license/DUA]
-
----
-
-## Required Figures and Tables
-
-<a id="sec-9"></a>
-
-### 9. Required figures and tables
-
-1. [Flow or design schematic]
-2. [Primary result figure/table]
-3. [Validation schematic]
-4. …
-
-[Step 5: one line per required artifact; tie each to a claim or phase]
+**Priority:** **MUST-RUN** | **NICE-TO-HAVE**
 
 ---
 
-## Preregistered Decision Table
+### Block E2: [Name]
 
-<a id="sec-10"></a>
-
-### 10. Preregistered decision table
-
-| Observed pattern | Permitted conclusion |
-|---|---|
-| [Pattern A] | [Claim-level wording for primary success] |
-| [Pattern B] | [Wording under uncertainty / heterogeneity] |
-| [Pattern C] | [Wording for null or inconclusive primary] |
-| [Pattern D] | [Wording when sensitivities disagree] |
-| … | … |
-
-[Step 5: rows must match §2 claims; no post hoc rows for confirmatory interpretation]
+[Repeat E1 field set for each block — ≤5 core blocks]
 
 ---
 
-## Milestones and Dependencies
+## Run Order and Milestones
 
-<a id="sec-11"></a>
+| Milestone | Goal | Runs | Decision Gate | GPU-hrs | Wall-clock | Risk | Mitigation |
+|-----------|------|------|---------------|---------|------------|------|------------|
+| **M0** | [Sanity / data QC] | R001–… | [Gate] | … | … | … | … |
+| **M1** | [Core evidence] | … | … | … | … | … | … |
 
-### 11. Milestones and dependencies
+**Total estimated GPU-hours:** [number]  
+**Timeline:** [weeks or phases]  
+**Critical path:** [M0 → …]
 
-| Milestone | Output | Dependency / stop condition |
-|---|---|---|
-| M0: [Label] | [Artifact] | [Stop or revise if …] |
-| M1: [Label] | [Artifact] | [Dependency] |
-| M2: [Label] | [Artifact] | [Dependency] |
-| … | … | … |
+---
 
-[Step 5: align milestones with Phases 0–5; include prereg and data lock before primary analysis]
+## Compute and Data Budget
+
+**Compute:** GPU-hours, CPU, memory, storage  
+**Data preparation:** access, harmonization, exclusions  
+**Bottleneck analysis:** [dominant constraint]
+
+---
+
+## Risks and Mitigations
+
+| Risk | Severity | Consequence | Mitigation |
+|------|----------|-------------|------------|
+| [Risk 1] | … | … | … |
+
+---
+
+## Final Checklist
+
+- [ ] Main paper tables/figures covered by must-run blocks
+- [ ] Novelty / mechanism isolated (not only aggregate performance)
+- [ ] Simplicity defended (no unnecessary complexity)
+- [ ] Must-run vs nice-to-have separated
+- [ ] Preregistration-ready (metrics, thresholds, models frozen)
+- [ ] Download URLs prefer free direct access (or justify gated-only source)
+- [ ] Download URLs verified reachable/downloadable (or honestly marked credential-gated)
+- [ ] Data layouts match actual files when present (not doc-only fantasy)
+- [ ] Every experiment block cites acquisition data only (no orphan datasets)
+- [ ] Data access and compute budget realistic
+
+**Optional:** `## Key Decisions Frozen` — numbered list of locked design choices (if helpful for your study).

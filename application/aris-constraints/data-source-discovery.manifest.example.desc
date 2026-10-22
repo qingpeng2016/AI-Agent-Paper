@@ -1,0 +1,139 @@
+# data-source-discovery.manifest.result.json
+
+**Single contract for `/data-source-discovery`.** Wrapper `data-source-discovery.aris.example.sh` loads **only this `.desc` file**.
+
+Upstream skill semantics: Paper **`aris-constraints/skills/data-source-discovery/SKILL.md`** (brief → search → license/access gate → structure profile → manifest). This file pins **paths, manifest JSON, verification gates, and required markdown sections**.
+
+## Agent entry
+
+1. Read `RESEARCH_BRIEF.md` and **`aris-constraints/skills/data-source-discovery/SKILL.md`** (Phases 0–5).
+2. Optional: **`aris-constraints/skills/data-source-discovery/repositories-reference.md`** for repository priorities.
+3. **`mkdir -p data-source`** if missing — **all** deliverables for this skill go under **`data-source/`** only (not `refine-logs/` or `idea-stage/`).
+4. **Author from md templates** (section order): `aris-constraints/md_template/` → write to **`data-source/`**:
+   - `DATA_SOURCE_PROFILE.en.example.md` → `data-source/DATA_SOURCE_PROFILE.en.md`
+   - `DATA_SOURCE_PROFILE.zh.example.md` → `data-source/DATA_SOURCE_PROFILE.zh.md`
+5. Follow **only this `.desc` file** for JSON paths and `result` gates.
+6. Write `data-source/data-source-discovery.manifest.result.json`.
+
+**Not in scope:** full cohort download (unless user sets probe download), `/experiment-plan` blocks, editing IDEA_REPORT §2–§6 except optional §1 data anchor paragraph noted in SKILL.
+
+## Example JSON (`data-source/data-source-discovery.manifest.result.json`)
+
+```json
+{
+  "result": "success",
+  "aris_phase": "data-source-discovery",
+  "research_brief": "RESEARCH_BRIEF.md",
+  "executive_summary": "One paragraph: primary dataset id, license, verification, top gaps.",
+  "primary_recommendation_id": "d1",
+  "datasets": [
+    {
+      "id": "d1",
+      "name": "EXAMPLE: OpenNeuro ds######",
+      "repository": "OpenNeuro",
+      "stable_id": "ds######",
+      "doi": "10.18112/openneuro.ds######.X.X.X",
+      "catalog_urls": ["https://openneuro.org/datasets/ds######"],
+      "download_urls": ["https://..."],
+      "license": "CC0-1.0",
+      "access_tier": "open_free_direct",
+      "access_tier_notes": "Anonymous S3/GitHub; OpenNeuro terms on download.",
+      "verification": {
+        "catalog_url_checked": "2026-10-21",
+        "catalog_url_method": "WebFetch",
+        "download_url_checked": "2026-10-21",
+        "download_url_method": "curl -I",
+        "structure_verified": true,
+        "structure_basis": "Official README + dataset_description.json"
+      },
+      "cohort_summary": "N=…; groups …",
+      "fit_score": "high",
+      "gaps": ["missing HAMD in participants.tsv"],
+      "minimal_download_subset": ["participants.tsv", "sub-XXX/anat", "sub-XXX/func/task-rest"],
+      "recommended_citation": "… [Dataset]",
+      "associated_publication_doi": "10.xxxx/…"
+    }
+  ],
+  "secondary_candidates": [],
+  "deliverables": {
+    "output_dir": "data-source",
+    "manifest": "data-source/data-source-discovery.manifest.result.json",
+    "profile_en": "data-source/DATA_SOURCE_PROFILE.en.md",
+    "profile_zh": "data-source/DATA_SOURCE_PROFILE.zh.md"
+  },
+  "probe_download": {
+    "enabled": false,
+    "paths": []
+  },
+  "finished_at": "2026-10-21T12:00:00Z"
+}
+```
+
+## ARIS runtime (from `data-source-discovery.aris.example.sh`)
+
+| Option | Value |
+|--------|--------|
+| skill | `/data-source-discovery` |
+| model | Claude (via ARIS default or project config) |
+| sources | `web, gemini, openalex` (recommended) |
+| probe download | `false` unless user overrides |
+
+## Delivery paths (do not swap)
+
+| Artifact | Path | Wrong |
+|----------|------|-------|
+| **Output directory** | **`data-source/`** (create if missing) | `refine-logs/`, `idea-stage/` |
+| **Manifest JSON** | **`data-source/data-source-discovery.manifest.result.json`** | `idea-stage/`, `refine-logs/` |
+| Profile EN | `data-source/DATA_SOURCE_PROFILE.en.md` | — |
+| Profile ZH | `data-source/DATA_SOURCE_PROFILE.zh.md` | — |
+| Optional probe data | `data-source/raw/<stable_id>/` | repo root, `data/raw/` |
+
+## result
+
+**Delivery + verification gate** — `"success"` only when **all** below hold:
+
+- **`data-source/`** exists; manifest at **`data-source/data-source-discovery.manifest.result.json`**; valid JSON; `aris_phase` = `"data-source-discovery"`.
+- Non-empty `executive_summary`; `primary_recommendation_id` matches one entry in `datasets[]`.
+- **Primary dataset** has `access_tier` = **`open_free_direct`**, license in allow-list (CC0, CC-BY, CC-BY-SA, PDDL, or explicit public-domain on official page).
+- `verification.structure_verified` = **true** for primary; `structure_basis` non-empty.
+- At least one **catalog** URL verified this run (`verification.catalog_url_*` filled) when network/tools allow.
+- **Download** URL: verified with HEAD/curl/WebFetch **or** documented official CLI path (OpenNeuro/DataLad) with catalog proof — mark method in profile **下载步骤**.
+- Deliverables **`profile_en`** and **`profile_zh`** exist, non-empty, with contract H2s (see below).
+- **No fabricated paths/columns** — if verification incomplete after reasonable attempts, set **`result: failed`**.
+
+- `"failed"` — could not meet gates; still write manifest and best-effort profiles with explicit blockers.
+
+## Authoring: `data-source/DATA_SOURCE_PROFILE.en.md`
+
+After `# Data Source Profile`, these **H2 sections in order** (each non-empty):
+
+| H2 | Content |
+|----|---------|
+| `## Research data needs` | Table from brief |
+| `## Candidate datasets` | Summary table (all shortlisted) |
+| `## Primary recommendation` | **`### 1.`**, **`### 2.`**, … (block **1** = `primary_recommendation_id`). **Per block**, required **`####`**: Cohort and design; Associated publication; Directory and file structure; Access and license; Download procedure. **Forbidden:** same titles as top-level H2. Do **not** include Gaps and mitigations or Downstream hooks in profile. |
+
+Under **`#### Download procedure`**, use **`##### Method 1` / `Method 2`** (not “Option 1”).
+
+## Authoring: `data-source/DATA_SOURCE_PROFILE.zh.md`
+
+Same substance; document-level H2 only:
+
+| H2 |
+|----|
+| `## 研究数据需求` |
+| `## 候选数据集` |
+| `## 主推荐数据集` |
+
+Under each **`### 1.` / `### 2.`**, required **`####`**: 队列与设计；关联发表；目录与文件结构；访问和许可；下载步骤。**禁止**把这些写成文档级 H2；**不要**写「缺口与应对」或「下游衔接」（缺口 → manifest `datasets[].gaps`；下游见 **Composing** 表）。
+
+Under **`#### 下载步骤`**, use **`##### 方法1` / `方法2`** (not 「选项 1」).
+
+## Composing with other skills
+
+| Skill | When |
+|-------|------|
+| `/data-source-discovery` | **First** for public-data empirical papers (after `RESEARCH_BRIEF.md`) |
+| `/research-lit` | After success; cite `primary_recommendation_id` in search focus |
+| `/experiment-plan` | Copy verified URLs/paths from **`data-source/DATA_SOURCE_PROFILE.*.md`** into **方法二** |
+| `/idea-creator` | Read **`data-source/data-source-discovery.manifest.result.json`**; ideas must not require unavailable modalities |
