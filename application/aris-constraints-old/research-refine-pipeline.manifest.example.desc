@@ -2,13 +2,9 @@
 
 **Single contract for Step 5.** Wrapper `research-refine-pipeline.aris.example.sh` loads **only this `.desc` file**.
 
-## Data anchor (mandatory when present)
-
-If **`data-source/DATA_SOURCE_PROFILE.en.md`** exists, Step 5 **`refine-logs/EXPERIMENT_PLAN.md` §1 data access** and phase bodies must **use that profile** (URLs, BIDS layout, cohort). See **`aris-constraints/data-anchor.requirement.example.desc`**.
-
 ## Agent entry
 
-1. Read `RESEARCH_BRIEF.md`, **`idea-creator.manifest.result.json`** (rank-1 `title`), **`research-review.manifest.result.json`**, and if present **`data-source/DATA_SOURCE_PROFILE.en.md`**.
+1. Read `RESEARCH_BRIEF.md`, **`idea-creator.manifest.result.json`** (rank-1 `title`), and **`research-review.manifest.result.json`**.
 2. Plan all Step 5 deliverables for the **rank-1 idea only** — the highest-ranked proposal in **`idea-stage/IDEA_REPORT.en.md`** (`## Recommended Ideas (ranked)`, `### Idea 1:`; same title as idea-creator rank 1). Do not re-select by §4 novelty scores or other ranks.
 3. For section shape and `[Step 5: …]` fill-in style, read **`research-refine-pipeline.explain.example.desc`** (Step 5 layout — **not** `md_template/EXPERIMENT_PLAN.*.example.md`, which is for standalone **`/experiment-plan`** only).
 4. Follow **only this `.desc` file** (including **Example JSON** and deliverable authoring sections).
@@ -31,12 +27,6 @@ If **`data-source/DATA_SOURCE_PROFILE.en.md`** exists, Step 5 **`refine-logs/EXP
     "pipeline_summary": "refine-logs/PIPELINE_SUMMARY.md"
   },
   "executive_summary": "One paragraph: chosen direction (rank-1), main contribution, and next experimental milestones.",
-  "data_anchor": {
-    "profile_en": "data-source/DATA_SOURCE_PROFILE.en.md",
-    "discovery_manifest": "data-source/data-source-discovery.manifest.result.json",
-    "primary_dataset_id": "d1",
-    "primary_label": "OpenNeuro ds######"
-  },
   "finished_at": "2026-10-19T12:00:00Z"
 }
 ```
@@ -121,7 +111,7 @@ Every **official URL** listed under data access must be **checked in this run** 
 
 Passwords, tokens, and cohort N from outcome modeling: never fabricate; **TBD** + official contact/DUA text.
 
-When **`data-source/DATA_SOURCE_PROFILE.en.md`** exists, **primary dataset = profile `### 2.1`** (copy into §1.1–1.3). Otherwise infer from rank-1 idea / `FINAL_PROPOSAL.md` / `RESEARCH_BRIEF.md`.
+Primary dataset comes from **this project’s** rank-1 idea / `FINAL_PROPOSAL.md` / `RESEARCH_BRIEF.md`.
 
 ### First section (required)
 

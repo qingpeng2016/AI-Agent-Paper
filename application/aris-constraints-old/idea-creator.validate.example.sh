@@ -147,4 +147,3 @@ for i in ideas:
 
 print("STEP2 OK")
 PY
-python3 aris-constraints/data-anchor.validate.example.py "STEP2" "$MANIFEST" "$REPORT" "$ZH_REPORT"

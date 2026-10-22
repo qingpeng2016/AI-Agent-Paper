@@ -177,5 +177,3 @@ if os.path.isfile(ic_path):
 
 print(f"EXPERIMENT-PLAN OK [{CONTRACT}]")
 PY
-python3 aris-constraints/data-anchor.validate.example.py "EXPERIMENT-PLAN" "$MANIFEST" \
-  refine-logs/EXPERIMENT_PLAN.en.md refine-logs/EXPERIMENT_PLAN.zh.md

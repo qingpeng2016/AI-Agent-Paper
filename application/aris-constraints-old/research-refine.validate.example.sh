@@ -173,5 +173,3 @@ if os.path.isfile(ic_path):
 
 print(f"RESEARCH-REFINE OK [{CONTRACT}]")
 PY
-python3 aris-constraints/data-anchor.validate.example.py "RESEARCH-REFINE" "idea-stage/research-refine.manifest.result.json" \
-  refine-logs/FINAL_PROPOSAL.md refine-logs/REFINEMENT_REPORT.md

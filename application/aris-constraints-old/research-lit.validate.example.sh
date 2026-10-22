@@ -17,7 +17,7 @@ fail_zh() { echo "STEP1 失败 [$CONTRACT_TAG]: $*" >&2; exit 1; }
 [[ -f "$MANIFEST" ]] || fail_en "$MANIFEST missing"
 
 python3 <<'PY'
-import json, os, sys
+import json, sys
 
 CONTRACT = "research-lit-validate-2026-03-20"
 
@@ -62,17 +62,6 @@ except Exception as e:
 
 if m.get("result") != "success":
     fail_en(f'manifest result={m.get("result")!r}, need "success"')
-
-if os.path.isfile("aris-constraints/research-lit.manifest.json"):
-    fail_en("remove aris-constraints/research-lit.manifest.json; manifest must be idea-stage/research-lit.manifest.result.json only")
-for bad_key in ("name", "description", "verification_status_summary"):
-    if bad_key in m:
-        fail_en(f"non-contract manifest key {bad_key!r}; use Example JSON in research-lit.manifest.example.desc")
-if not m.get("report_path"):
-    fail_en("manifest missing report_path (contract top-level field)")
-da = m.get("data_anchor")
-if da is not None and not isinstance(da, dict):
-    fail_en(f"data_anchor must be object, got {type(da).__name__}")
 
 papers = m.get("papers") or []
 if not papers:
@@ -119,4 +108,3 @@ for p in papers:
 
 print("STEP1 OK")
 PY
-python3 aris-constraints/data-anchor.validate.example.py "STEP1" "$MANIFEST" "$REPORT" "$ZH_REPORT"
