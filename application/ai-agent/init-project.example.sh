@@ -54,13 +54,13 @@ cat > "$ROOT/RESEARCH_BRIEF.md" <<'EOF'
 # Research Brief
 
 ## 研究内容
-研究重度抑郁症（MDD）患者脑功能网络拓扑是否相对健康对照存在稳定、可重复的异常。基于静息态功能磁共振（rs-fMRI）采集 BOLD 信号，经头动校正、配准、标准化与滤波等预处理，以 AAL/功能分区或 data-driven parcellation 定义节点，构建复杂脑网络（Pearson/偏相关等功能连接），采用图论分析全局与局部拓扑（全局/局部效率、聚类系数、特征路径长度、小世界属性、模块化、枢纽与 rich-club 等），并检验与 HAMD 等临床严重程度及认知/情绪加工的相关或组间差异；关注默认模式网络、突显网络、边缘系统等子网络的拓扑改变及可解释性。
+基于 Sentinel-2 与 Landsat 地表温度产品，获取武汉市夏季典型日期的热环境空间分布；结合土地利用/本地气候分区（LCZ），采用 GIS 分区统计与空间相关分析，比较不同下垫面类型间地表温度差异，并探讨植被指数、不透水面比例、水体距离等因素对热岛格局的影响，为城市降温规划提供空间依据。
 
 ## Keywords
-major depressive disorder, resting-state fMRI, functional connectivity, graph theory
+urban heat island, land surface temperature, Sentinel-2, GIS, remote sensing, Wuhan
 
 ## Target venue
-NeuroImage
+Applied Geography
 EOF
 
 echo "Initialized: $ROOT"
