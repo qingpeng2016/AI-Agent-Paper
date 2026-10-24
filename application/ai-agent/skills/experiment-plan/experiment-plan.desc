@@ -189,4 +189,4 @@ At least one data row (e.g. `R001`, `TODO`). **EN and ZH trackers must share the
 | `/research-refine` | Optional but recommended before this skill — produces **`refine-logs/FINAL_PROPOSAL.md`** (`aris-constraints/skills/research-refine/research-refine.desc`) |
 | `/research-refine-pipeline` | Step 5 may write `EXPERIMENT_PLAN.md` (single EN file) per its own contract — not a substitute for this skill’s four-file deliverable |
 | `/experiment-plan` | This contract — four files under `refine-logs/` |
-| `/experiment-bridge` | After data at acquisition paths is available; reads plan + tracker—**cannot produce real results without that data**; prefer **`refine-logs/EXPERIMENT_PLAN.en.md`** (or legacy `EXPERIMENT_PLAN.md`) |
+| `/experiment-bridge` | After files exist under project-root **`data-source/`** (see **`data-source/DATA_SOURCE_PROFILE.*.md`**, optional **`data-source/raw/`**); reads plan + tracker—**cannot produce real results without on-disk data**; prefer **`refine-logs/EXPERIMENT_PLAN.en.md`** |

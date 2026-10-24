@@ -4,7 +4,8 @@
 > **固件**（回测、门槛 G1–G8、试验登记）由确定性 Python 实现，**不由 AI 执行**。  
 > **约定：** 每个 Skill 以 **`/slash-command`** 暴露；配套 **`SKILL.md`（角色与工具）**、**步骤契约（manifest 描述 + 校验脚本）**、**标准交付路径**，便于编排与审计。  
 > **Loop Skill：** **`/strategy-code-loop`**（写码 ↔ 审查）、**`/strategy-backtest-analysis-loop`**（回测不达标 → 新一轮假设文档 → 再走 code-loop → 回测 → 分析）。Loop 只 **按规则 invoke 原子 Skill** 并汇总 manifest；原子 Skill 仍保留单轮契约，便于调试与 CI。  
-> **交易 / 实盘 Agent 层**（部署、信号、执行、**实盘风控**）见 [`quant-platform-live-agents.md`](./quant-platform-live-agents.md)。
+> **交易 / 实盘 Agent 层**（部署、信号、执行、**实盘风控**）见 [`quant-platform-live-agents.md`](./quant-platform-live-agents.md)。  
+> **Agent 角色与 Skill 数量、映射表** 见 [`quant-platform-agent-skill-map.md`](./quant-platform-agent-skill-map.md)。
 
 **日期：** 2026-10-22  
 **关联：** 《量化研究平台架构设计：固件 + 插件 + 多 Agent 协作》（2026-10-20）
@@ -111,42 +112,19 @@
 
 ---
 
-## 4. Skill 总览（建议实现的 Agent）
+## 4. Agent 与 Skill 总览
 
-下列每一行对应一个 **`/slash-command`**。建议目录：
+原 §4 大表已拆至独立文档，避免把 **slash-command（Skill）** 与 **逻辑 Agent 角色** 混为一谈：
 
-`quant-platform/agents/<skill-name>/SKILL.md`  
-`quant-platform/contracts/<skill-name>.manifest.desc`  
-`quant-platform/contracts/<skill-name>.validate.sh`  
-`quant-platform/contracts/<skill-name>.invoke.example.sh`（可选：本地/CI 触发示例）
+**[`quant-platform-agent-skill-map.md`](./quant-platform-agent-skill-map.md)**
 
-| # | Skill 名 | 命令 | 推荐模型 | 管什么（职责） | 主要输出 | 可调 Tool API | 禁止 |
-|---|----------|------|----------|----------------|----------|---------------|------|
-| 0 | **任务协调** | `/quant-orchestrate` | 编排可用规则引擎；复杂分支可用 Claude | 读 Brief；**从 `hypotheses.json` 选定 `hypothesis_id` 开 trial**；派单与 **失败路由**（§5.1）；Token / **family 上限** | `runs/<run_id>/orchestrator.log`、`handoff.json` | 查 Trial Log、查快照、触发 skill | 写代码、改 gate、改数据中心 |
-| 1 | **市场数据锚点** | `/market-data-profile` | 以规则/脚本为主；缺口语化说明时用 Claude | **策略发现前**：在 **数据中心目录** 中绑定 `dataset_id` + `snapshot_id`；写清字段、区间、PIT、缺口 | `data/MARKET_DATA_PROFILE.md` + `data/market-data.manifest.result.json` | `datacenter.list_datasets()`、`datacenter.describe()`、`data.snapshot_info()` | 联网拉数、写数据中心、跑回测、写策略 |
-| 2 | **假设与方向挖掘** | `/strategy-hypothesis` | Claude | 写 **策略方向 MD** + `hypotheses.json`；**必读** 研究历史去重（§6）+ **`factor_library`（§6 因子库）**；新假设须引用所用因子及与历史差异 | 见 §6 + manifest | `trial_log.query`、`factor_library.query/read`、读 MARKET_DATA_PROFILE | 提交插件、跑回测、写因子库 |
-| 3 | **策略代码（单轮）** | `/strategy-code` | Claude Agent SDK | **单轮**：编写或修订 Strategy 插件 `.py` + `IMPLEMENTATION_NOTES.md`；由 **`/strategy-code-loop` 反复调用** | `strategy-code.manifest.result.json` + 插件路径 | 读假设 MD、schema、**submit_plugin_draft**、静态检查/单测 | **run_backtest**、读 gate 阈值、直连数据中心 |
-| 4 | **代码审查（单轮）** | `/strategy-review` | **与 Code 不同模型** | **单轮**：输入 = 代码 + 策略文档；输出 `approved` / `rejected` + `issues[]` | `review.manifest.result.json`（含 `inputs_reviewed`） | 静态分析、读 `.py`、读策略 MD | 改代码、改策略文档 |
-| 5 | **策略代码审查闭环** | `/strategy-code-loop` | **编排优先**（Shell/Python；可选轻量 LLM 只做失败摘要） | **Loop Skill**：按轮次调用 `/strategy-code` → `/strategy-review`，直到 **G2 通过** 或 **`max_review_rounds`**；汇总全程 manifest | `strategy-code-loop.manifest.result.json` + `runs/.../trials/<trial_id>/code-loop/` | **invoke** `/strategy-code`、`/strategy-review`；读上轮 `issues[]` | 代替子 Skill 写码/改结论、跑回测 |
-| 6 | **研究风控（单轮）** | `/strategy-risk-control` | **与 Review 不同模型/会话** | G2 通过后：**策略风险**审查（Brief `forbidden`、仓位上界、集中度、是否缺止损/降杠杆 **设计说明**）；**不**替代 G3–G8 | `STRATEGY_RISK_REVIEW.md` + manifest（`approved`/`rejected`） | `research.risk.check`、读插件/假设 MD | 跑回测、改 gate、改 L1–L5 |
-| 7 | **回测与验证执行** | `/strategy-validate-run` | **固件为主**（Agent 只触发 Tool API） | 依策略文档 + 插件元数据 **从数据中心 load** → **执行插件** → 产出 metrics / 检验项 / **gate.judge 结果**（不在此步做深度归因） | `trials/T-xxx/metrics.json` + `gate.json` + `strategy-validate-run.manifest.result.json` | `data.load`、`run_backtest`、`validate`、`trial_log` | 手算净值、改 gate、改插件、写分析 MD |
-| 8 | **回测结果分析（单轮）** | `/strategy-backtest-analysis` | Claude | **单轮**：对照 Brief + Gate + 策略文档 + 代码判断是否满足；写入 **`BACKTEST_ANALYSIS.md`**；由 **backtest-analysis-loop** 在每轮试验末调用 | `trials/T-xxx/BACKTEST_ANALYSIS.md` + manifest | 读 metrics/gate、读 Brief/假设 MD/NOTES | 改 gate/metrics、启动 loop |
-| 9 | **策略研究外环闭环** | `/strategy-backtest-analysis-loop` | **编排优先**（Shell/Python） | **Loop Skill**：不达标时按轮 **#2 → #5 → #6 风控 → #7 回测 → #8 分析** | `strategy-backtest-analysis-loop.manifest.result.json` + `runs/.../backtest-loop/round-<n>/` | invoke #2、#5、#6、#7、#8 | 跳过假设重写、代替 Gate 判定 |
-| 10 | **因子挖掘** | `/factor-mining` | Claude + 检索（**单独跑**） | 挖掘/整理因子定义，写入 **因子库** | `factor_library/…` + manifest | `factor_library.append`、检索 | 跑回测、写策略假设、改 Trial Log |
-| 11 | **策略研究报告** | `/strategy-report` | Claude + 固件模板 | **`meets_requirements: true`** 后出报告 | `reports/<trial_id>/STRATEGY_REPORT.html` + manifest | `report.render` | 改 metrics/gate |
-| 12 | **虚拟盘观察（可选）** | `/virtual-paper-watch` | 规则为主 | 虚拟盘 vs 回测偏离（轻量）；完整执行链见 live 文档 | `VIRTUAL_PAPER_WATCH.md` + manifest | `virtual_paper.metrics()` | 改虚拟盘、改回测结果 |
+| 摘要 | 数量 |
+|------|------|
+| **Skill（slash-command）** | **13**（10 原子 + 3 Loop/编排） |
+| **逻辑 Agent 角色** | **8**（每个角色由 **1–N 个 Skill** 组成；Researcher / Validator 等跨多 Skill） |
+| **默认不进主链** | Factor → 仅 **`/factor-mining`** 侧链 |
 
-**与总体架构角色的对应关系：**
-
-| 架构角色 | 上表 Skill |
-|----------|------------|
-| Orchestrator | `/quant-orchestrate` |
-| Researcher | `/strategy-hypothesis` + **`/strategy-code-loop`** + **`/strategy-backtest-analysis-loop`** |
-| Factor（独立任务） | **`/factor-mining`** → 因子库；**不**纳入 `/quant-orchestrate` 主链，除非 Brief 显式触发 |
-| Reviewer | **`/strategy-review`**（由 loop 按轮调用） |
-| Risk（研究） | **`/strategy-risk-control`**（G2 后、回测前；与 Review 分工） |
-| Validator | **`/strategy-validate-run`**（执行试验）+ **`/strategy-backtest-analysis`**（解读是否达标；Gate 仍由固件判定） |
-| Reporting | **`/strategy-report`**；上线后可选 **`/virtual-paper-watch`** |
+主链调用顺序与失败路由仍见 **§5、§5.1**；各 Skill 职责细节、Tool API、禁止项见 **§6–§7** 与映射文档 §4。
 
 ---
 

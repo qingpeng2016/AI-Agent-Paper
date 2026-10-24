@@ -12,6 +12,7 @@ Custom skills ship **inside** `aris-constraints/skills/<name>/` as **bundles** (
 | `research-refine-pipeline` | `/research-refine-pipeline` | `research-refine-pipeline/` (+ `*.explain.desc`, Step 5) |
 | `research-refine` | `/research-refine` | `research-refine/` (standalone refine) |
 | `experiment-plan` | `/experiment-plan` | `experiment-plan/` (standalone plan) |
+| `experiment-bridge` | `/experiment-bridge` | `experiment-bridge/` (Workflow 1.5; resume via `BRIDGE_STATE.json`) |
 
 Each bundle typically contains:
 
@@ -50,5 +51,6 @@ Validate after each step: `bash aris-constraints/skills/<name>/<name>.validate.s
 ```bash
 bash aris-constraints/skills/research-refine/research-refine.aris.sh
 bash aris-constraints/skills/experiment-plan/experiment-plan.aris.sh
+bash aris-constraints/skills/experiment-bridge/experiment-bridge.aris.sh
 bash aris-constraints/skills/data-source-discovery/data-source-discovery.aris.sh
 ```

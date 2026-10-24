@@ -1,0 +1,126 @@
+# experiment-bridge.manifest.result.json
+
+**Single contract for `/experiment-bridge`.** Wrapper `experiment-bridge.aris.sh` loads **only this `.desc` file**.
+
+Upstream skill semantics: [ARIS `skills/experiment-bridge/SKILL.md`](https://github.com/wanshuiyin/Auto-claude-code-research-in-sleep/blob/main/skills/experiment-bridge/SKILL.md) (Workflow 1.5: implement → optional cross-model code review → sanity → deploy via `/run-experiment` → monitor via `/monitor-experiment` → collect). This file pins **Paper paths, checkpoint/resume, manifest JSON, and success gates**.
+
+## Agent entry
+
+**Preflight (mandatory):**
+
+1. Read **`idea-stage/experiment-plan.manifest.result.json`** when present — prefer plan paths in its `deliverables` (`refine-logs/EXPERIMENT_PLAN.en.md`, trackers). If missing, require **`refine-logs/EXPERIMENT_PLAN.en.md`** or legacy **`refine-logs/EXPERIMENT_PLAN.md`** plus **`refine-logs/EXPERIMENT_TRACKER.en.md`** (or legacy tracker).
+2. **Paper data root (mandatory for empirical runs):** All **on-disk experiment inputs** live under project-root **`data-source/`** — not `data/`, not repo-root `raw/`. Read **`data-source/DATA_SOURCE_PROFILE.en.md`** (and `.zh.md` if needed) and **`data-source/data-source-discovery.manifest.result.json`** when present. **Downloaded / staged cohort files:** **`data-source/raw/<stable_id>/`** (from `/data-source-discovery` probe or user download per profile **方法二**). Experiment scripts, dataloaders, and sanity runs must **resolve paths under `data-source/`** (or subpaths documented in the plan’s **实验数据获取 / Data acquisition** section). If plan **方法二** requires files that are missing under `data-source/`, **do not** set bridge `result: success` — download or stage into `data-source/raw/` first (or fail with explicit blocker).
+3. Read **`refine-logs/FINAL_PROPOSAL.md`** when present (method context for implementation).
+4. **Resume (mandatory when checkpoint exists):** If **`refine-logs/BRIDGE_STATE.json`** exists with `"status": "in_progress"` **or** **`idea-stage/experiment-bridge.manifest.result.json`** exists with `"result": "in_progress"`, **do not restart from Phase 1**. Read both files + **`refine-logs/EXPERIMENT_TRACKER.en.md`** (or EN tracker path in plan manifest). Continue upstream phases from **`BRIDGE_STATE.current_phase`** (see phase table below). Update `BRIDGE_STATE` after each phase transition.
+5. **Fresh run:** If no in-progress checkpoint, create **`refine-logs/BRIDGE_STATE.json`** at start of Phase 1 with `"status": "in_progress"`, `"current_phase": "parse_plan"`.
+6. Follow **upstream `experiment-bridge/SKILL.md`** for phase logic (code review, sanity debug budget, `/run-experiment`, `/monitor-experiment`, `/experiment-queue` when ≥10 jobs). This `.desc` adds Paper paths, **`data-source/`** data root, **`BRIDGE_STATE`**, manifest location, and **when `result: success` is allowed**.
+7. Write **`idea-stage/experiment-bridge.manifest.result.json`** — use `"result": "in_progress"` while any must-run row on the EN tracker is not **DONE** (or upstream equivalent), or while **`BRIDGE_STATE.status`** is `in_progress` / `awaiting_deploy_approval`. **`"result": "success"` only after upstream Phase 6 handoff** (initial results collected, summary written, tracker updated).
+8. **Validate:** `bash aris-constraints/skills/experiment-bridge/experiment-bridge.validate.sh` from project root before final `"result": "success"`.
+
+**Not in scope:** edit `IDEA_REPORT` §1–§6; replace `/experiment-plan`; run without a plan/tracker on disk.
+
+## Session continuation (does upstream “stop by itself”?)
+
+Upstream **does not** end the skill after each sub-step in one turn — the agent is expected to **carry Phases 1→6 in one workflow**. Execution **can still pause** when:
+
+| Pause cause | What happens | Paper resume rule |
+|-------------|--------------|-------------------|
+| **`AUTO_DEPLOY = false`** (prompt override) | Phase 4 **checkpoint** — “Deploy now?” | Set `BRIDGE_STATE.status` = **`awaiting_deploy_approval`**, `current_phase` = **`pre_deploy`**. Next invoke (or same chat after user approves): **continue Phase 4–6**; do not re-implement from scratch unless user asks. |
+| **Long GPU jobs** | `/run-experiment` returns; training continues in screen/Modal/Vast | Loop **`/monitor-experiment`** until runs complete or 2× estimated time (upstream). If **chat/session ends** while tracker rows still **IN_PROGRESS**, next **`/experiment-bridge`** **resumes** from `BRIDGE_STATE` + monitor — **do not** duplicate deploy for runs already launched (same Run ID / same screen name). |
+| **`/experiment-queue`** | State in **`queue_state.json`** (upstream) | On resume, read **`queue_state.json`** + tracker; continue monitor/collect. |
+| **Sanity debug budget exhausted** | Upstream **hard stop** with error report | Set `BRIDGE_STATE.status` = **`failed`**, manifest `"result": "failed"`. Human fixes plan/env; **new** bridge run may reset state or set `"current_phase": "implement"` per user instruction. |
+| **Context / user closed session** | No upstream auto-save besides tracker/logs | **`BRIDGE_STATE.json` + tracker Status** are the Paper source of truth for resume. |
+
+**Orchestrator / platform:** A single user click may **not** finish all phases in one LLM turn. If the run stops mid-bridge, **re-invoke `/experiment-bridge`** (same prompt + DELIVERY) — agent must **continue**, not treat a partial manifest as success.
+
+## Phase map (`BRIDGE_STATE.current_phase`)
+
+| Value | Upstream |
+|-------|----------|
+| `parse_plan` | Phase 1 |
+| `implement` | Phase 2 |
+| `code_review` | Phase 2.5 |
+| `sanity` | Phase 3 |
+| `deploy` | Phase 4 |
+| `collect` | Phase 5–5.6 |
+| `handoff` | Phase 6 |
+| `done` | Complete — set `status`: **`completed`** |
+
+## Example JSON (`idea-stage/experiment-bridge.manifest.result.json`)
+
+```json
+{
+  "result": "in_progress",
+  "aris_phase": "experiment-bridge",
+  "experiment_plan_en": "refine-logs/EXPERIMENT_PLAN.en.md",
+  "experiment_tracker_en": "refine-logs/EXPERIMENT_TRACKER.en.md",
+  "data_root": "data-source/",
+  "data_source_profile_en": "data-source/DATA_SOURCE_PROFILE.en.md",
+  "bridge_state": "refine-logs/BRIDGE_STATE.json",
+  "current_phase": "deploy",
+  "must_run_completed": 2,
+  "must_run_total": 5,
+  "deliverables": {
+    "initial_results_md": "refine-logs/EXPERIMENT_RESULTS.md",
+    "bridge_state": "refine-logs/BRIDGE_STATE.json"
+  },
+  "finished_at": null
+}
+```
+
+On **`result": "success"`**: `current_phase` = **`handoff`** or **`done`**, `must_run_completed` equals must-run count from plan/tracker, **`refine-logs/EXPERIMENT_RESULTS.md`** exists and is non-empty, `BRIDGE_STATE.status` = **`completed`**.
+
+## Example `refine-logs/BRIDGE_STATE.json`
+
+```json
+{
+  "status": "in_progress",
+  "current_phase": "sanity",
+  "started_at": "2026-10-22T12:00:00Z",
+  "updated_at": "2026-10-22T14:30:00Z",
+  "plan_ref": "refine-logs/EXPERIMENT_PLAN.en.md",
+  "tracker_ref": "refine-logs/EXPERIMENT_TRACKER.en.md",
+  "data_root": "data-source/",
+  "data_paths": ["data-source/raw/d1/"],
+  "active_runs": [],
+  "notes": "Resume: sanity R001 failed once; one patch applied."
+}
+```
+
+`status` values: **`in_progress`** | **`awaiting_deploy_approval`** | **`completed`** | **`failed`**.
+
+## ARIS runtime (from `experiment-bridge.aris.sh`)
+
+| Option | Default | Notes |
+|--------|---------|--------|
+| skill | `/experiment-bridge` | Upstream SKILL in mirrored `skills/experiment-bridge/SKILL.md` |
+| plan | `refine-logs/EXPERIMENT_PLAN.en.md` | Or path from `$ARGUMENTS` |
+| CODE_REVIEW | upstream default `true` | Prompt may override |
+| AUTO_DEPLOY | upstream default `true` | Paper: set **`false`** to stop before GPU until human approves |
+| SANITY_FIRST | upstream default `true` | |
+
+## Delivery paths
+
+| Artifact | Path |
+|----------|------|
+| Manifest | **`idea-stage/experiment-bridge.manifest.result.json`** |
+| Checkpoint | **`refine-logs/BRIDGE_STATE.json`** |
+| Initial results summary | **`refine-logs/EXPERIMENT_RESULTS.md`** |
+| Plan / tracker | **`refine-logs/EXPERIMENT_PLAN.en.md`**, **`refine-logs/EXPERIMENT_TRACKER.en.md`** (from `/experiment-plan`) |
+| **Experiment data (Paper)** | **`data-source/`** — profiles + discovery manifest; cohort files under **`data-source/raw/`** |
+
+## result
+
+- **`in_progress`** — bridge started; phases or must-run jobs not finished.
+- **`success`** — Phase 6 complete; results MD + tracker updated; validate pass.
+- **`failed`** — unrecoverable per upstream (e.g. sanity budget exhausted) or validate fail; still write manifest + `BRIDGE_STATE`.
+
+## Composing with other skills
+
+| Skill | Relationship |
+|-------|----------------|
+| `/data-source-discovery` | **Recommended first** — anchors **`data-source/`** profiles + manifest; bridge reads paths from here and plan **方法二** |
+| `/experiment-plan` | **Required before bridge** (four-file plan + tracker under `refine-logs/`; acquisition paths must match **`data-source/`**) |
+| `/run-experiment` | Invoked **by** upstream bridge during deploy/sanity — not a separate Paper stage unless splitting manually |
+| `/monitor-experiment` | Invoked **by** bridge while jobs run |
+| `/auto-review-loop` | Downstream after bridge **`result: success`** (upstream Workflow 2) |
