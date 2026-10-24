@@ -1,5 +1,7 @@
 # Paper skills (ARIS-compatible)
 
+**全表（数据 / 工作流3写作 / 其它）：** 见 [`../PAPER_SKILLS.md`](../PAPER_SKILLS.md).
+
 Custom skills ship **inside** `aris-constraints/skills/<name>/` as **bundles** (contract + launcher + validate; Paper-only skills also include `SKILL.md`). Upstream ARIS skills (e.g. `/research-lit`) come from the ARIS install; Paper **constraints** live next to each skill name below.
 
 | Skill | Command | Bundle directory |
