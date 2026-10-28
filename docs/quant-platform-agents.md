@@ -19,8 +19,8 @@
 | 能力 | 含义 | 主要 Skill | 固件参与 |
 |------|------|------------|----------|
 | **策略挖掘** | 在 Brief 约束下提出 **可检验方向**（假设 MD），查因子库与历史 trial **去重** | `/factor-mining`（因子库）、`/strategy-hypothesis` | Trial Log 只读查询 |
-| **策略实现** | 将假设写成 **插件代码**，并通过 **G2 审查** | `/strategy-code`、`/strategy-review`、`/strategy-code-loop` | G1 注册中心静态检查 |
-| **策略回测** | 按文档从 **数据中心** 取数，**确定性**执行插件与检验项 | `/strategy-validate-run` | Engine、Validation、`gate.judge`（G3–G8） |
+| **策略实现** | 将假设写成 **插件代码**，并通过 **G2 审查** | `/strategy-code`、`/strategy-code-review`、`/strategy-code-loop` | G1 注册中心静态检查 |
+| **策略回测** | 按文档从 **数据中心** 取数，**确定性**执行插件与检验项 | `/strategy-backtest-run` | Engine、Validation、`gate.judge`（G3–G8） |
 | **策略分析** | 解读 metrics / Gate / Brief，写 **回测数据分析结果**，判断是否达标 | `/strategy-backtest-analysis` | 仅读 `gate.json`，不推翻 |
 | **策略优化** | 不达标时 **自动迭代**：内环改代码；外环 **新策略文档** 再回测 | `/strategy-code-loop`（实现层）、`/strategy-backtest-analysis-loop`（方向层） | 参数扰动等见 G6（固件 validate） |
 | **对外交付** | 汇总 trial 链与 Brief 对照的 **标准研究报告**（HTML/PDF） | `/strategy-report` | 可选固件 `report.render` 模板 |
@@ -30,9 +30,9 @@
 
 | 层 | 是什么 | Skill / 固件 |
 |----|--------|----------------|
-| **正确性审查** | 未来函数、文档与代码一致 | `/strategy-review`（G2） |
+| **正确性审查** | 未来函数、文档与代码一致 | `/strategy-code-review`（G2） |
 | **研究风控 Skill** | 风险设计是否可接受（杠杆、集中度、尾部暴露 **设计**） | **`/strategy-risk-control`** |
-| **回测门槛** | 样本外、Sharpe 等 **历史统计** | 固件 **G3–G8**（validate-run） |
+| **回测门槛** | 样本外、Sharpe 等 **历史统计** | 固件 **G3–G8**（backtest-run） |
 
 **两层优化（避免混用）：**
 
@@ -42,9 +42,9 @@
 | **方向优化** | 需换思路/family；分析 **`handoff → strategy-backtest-analysis-loop`** | **#2 → #5 → #6 风控 → #7 → #8** | **是** |
 | **参数优化** | 假设不变，仅调整插件 **`params`**（在 metadata **`param_ranges`** 内） | **`/strategy-code-loop`** → #6 风控 → #7/#8；**不**单独设「调参 Agent」 | 否（除非改假设 MD） |
 
-**参数与 G6：** 参数变更写在插件 metadata 的 `params`；固件 **`validation.validate`** 做 **`param_ranges` 扰动**（G6）。Agent **禁止**在 validate-run 之后手改 params 凑门槛；须走 code-loop 升版本并 re-review。
+**参数与 G6：** 参数变更写在插件 metadata 的 `params`；固件 **`validation.validate`** 做 **`param_ranges` 扰动**（G6）。Agent **禁止**在 backtest-run 之后手改 params 凑门槛；须走 code-loop 升版本并 re-review。
 
-**Agent 与 G1–G8（摘要）：** G1/G2 在进回测前由 Registry + review loop 保证；G3–G8 **仅** validate-run 触发的固件判定，由 backtest-analysis **解释**。**虚拟盘/实盘、Token 预算** 在 Agent 层外或 `/quant-orchestrate` 约束。
+**Agent 与 G1–G8（摘要）：** G1/G2 在进回测前由 Registry + review loop 保证；G3–G8 **仅** backtest-run 触发的固件判定，由 backtest-analysis **解释**。**虚拟盘/实盘、Token 预算** 在 Agent 层外或 `/quant-orchestrate` 约束。
 
 ---
 
@@ -120,7 +120,7 @@
 
 | 摘要 | 数量 |
 |------|------|
-| **Skill（slash-command）** | **13**（10 原子 + 3 Loop/编排） |
+| **Skill（slash-command）** | **14**（11 原子 + 3 Loop/编排）；详见 [`quant-platform-skills-and-agents.md`](./quant-platform-skills-and-agents.md) |
 | **逻辑 Agent 角色** | **8**（每个角色由 **1–N 个 Skill** 组成；Researcher / Validator 等跨多 Skill） |
 | **默认不进主链** | Factor → 仅 **`/factor-mining`** 侧链 |
 
@@ -140,7 +140,7 @@ STRATEGY_BRIEF.md
     → /quant-orchestrate            # 选定 hypothesis_id，开 trial_id
          ├→ /strategy-code-loop           # #5：内含 #3 code、#4 review
          ├→ /strategy-risk-control        # #6：研究风控；reject → 回 #5
-         ├→ /strategy-validate-run        # #7
+         ├→ /strategy-backtest-run        # #7
          ├→ /strategy-backtest-analysis   # #8
          │     ├→ meets_requirements → /strategy-report → 人工闸门（虚拟盘）→ 可选 /virtual-paper-watch
          │     └→ 不满足 → /strategy-backtest-analysis-loop
@@ -152,16 +152,16 @@ STRATEGY_BRIEF.md
 
 | 类型 | 识别依据 | 下一步（自动） | 是否计 G8 试验 |
 |------|----------|----------------|----------------|
-| **代码错误** | code-loop `max_rounds_exceeded`、Registry/G1 失败 | 终止本 trial 或转人工；**不**进 risk-control / validate-run | 否 |
+| **代码错误** | code-loop `max_rounds_exceeded`、Registry/G1 失败 | 终止本 trial 或转人工；**不**进 risk-control / backtest-run | 否 |
 | **研究风控拒绝** | `/strategy-risk-control` **`decision: rejected`** | 回 **`/strategy-code-loop`**（同 trial）；manifest 记录 `risk_issues[]` | 否 |
 | **数据问题** | 缺 snapshot 字段、质检失败、`data.load` 报错 | 标记等待数据中心；**不**换源 | 否 |
-| **策略无效** | 已回测；`meets_requirements: false` 或 gate 淘汰 | **`/strategy-backtest-analysis-loop`** 或按分析 `recommended_next` 走 **方向/实现优化**（§0） | 是（每次完整 validate-run） |
+| **策略无效** | 已回测；`meets_requirements: false` 或 gate 淘汰 | **`/strategy-backtest-analysis-loop`** 或按分析 `recommended_next` 走 **方向/实现优化**（§0） | 是（每次完整 backtest-run） |
 
 **假设选题：** `#2` 产出 1–3 条假设后，由 **`/quant-orchestrate`**（规则优先）读取 `hypotheses.json` 的 `rank` / `recommended_hypothesis_id` 绑定首个 trial；后续 trial 可换 `hypothesis_id` 仍属同一 `run_id`。
 
-**Phase 0（MVP）：** **`/strategy-code` + `/strategy-review` + `/strategy-code-loop`** + 脚本 orchestrator；假设 MD 可 **人工给定**，先跑通 G2 → 回测 → 分析。
+**Phase 0（MVP）：** **`/strategy-code` + `/strategy-code-review` + `/strategy-code-loop`** + 脚本 orchestrator；假设 MD 可 **人工给定**，先跑通 G2 → 回测 → 分析。
 
-**Phase 1（全自动主链）：** **`/market-data-profile`**、**`/strategy-hypothesis`**、**`/strategy-risk-control`**、**`/strategy-validate-run`**、**`/strategy-backtest-analysis`**、**`/strategy-backtest-analysis-loop`**、完整 **`/quant-orchestrate`**。
+**Phase 1（全自动主链）：** **`/market-data-profile`**、**`/strategy-hypothesis`**、**`/strategy-risk-control`**、**`/strategy-backtest-run`**、**`/strategy-backtest-analysis`**、**`/strategy-backtest-analysis-loop`**、完整 **`/quant-orchestrate`**。
 
 **Phase 2（增强挖掘）：** **`/factor-mining`** 与 **`factor_library/`**；`dedup_check` / `factor_refs` 的 validate 硬约束。
 
@@ -210,14 +210,14 @@ STRATEGY_BRIEF.md
   },
   "handoff": {
     "from": "strategy-code",
-    "to": "strategy-review",
+    "to": "strategy-code-review",
     "status": "ready_for_review"
   },
   "review_round": 1
 }
 ```
 
-**`/strategy-review` 的必选输入（编排器打包传入，缺一项则不得开审）：**
+**`/strategy-code-review` 的必选输入（编排器打包传入，缺一项则不得开审）：**
 
 | 输入 | 路径 / 说明 |
 |------|-------------|
@@ -233,7 +233,7 @@ STRATEGY_BRIEF.md
 
 ```json
 {
-  "step": "strategy-review",
+  "step": "strategy-code-review",
   "result": "success",
   "trial_id": "T-20261022-0042",
   "decision": "rejected",
@@ -248,14 +248,14 @@ STRATEGY_BRIEF.md
     { "type": "lookahead", "line": 18, "detail": "使用了当日收盘价决定当日仓位" }
   ],
   "handoff": {
-    "from": "strategy-review",
+    "from": "strategy-code-review",
     "to": "strategy-code-loop",
     "status": "revise_plugin"
   }
 }
 ```
 
-**`decision: approved` 时**（在 **loop 内**）：单轮 Review 的 `handoff` 仍指向 `strategy-code-loop`；由 **Loop Skill** 结束循环并产出总 manifest。**G2 通过** 以 **`/strategy-code-loop` 的 `outcome: g2_pass`** 为准；此后 **`/strategy-risk-control` → `/strategy-validate-run`**。
+**`decision: approved` 时**（在 **loop 内**）：单轮 Review 的 `handoff` 仍指向 `strategy-code-loop`；由 **Loop Skill** 结束循环并产出总 manifest。**G2 通过** 以 **`/strategy-code-loop` 的 `outcome: g2_pass`** 为准；此后 **`/strategy-risk-control` → `/strategy-backtest-run`**。
 
 **`/strategy-code-loop` 步骤 manifest 示例：**
 
@@ -295,18 +295,18 @@ STRATEGY_BRIEF.md
 }
 ```
 
-（G2 通过后固定顺序：**#6 risk-control → #7 validate-run → #8 backtest-analysis**；不达标则 **`/strategy-backtest-analysis-loop`** 从 **#2** 起再跑 **#5→#6→#7→#8**。）
+（G2 通过后固定顺序：**#6 risk-control → #7 backtest-run → #8 backtest-analysis**；不达标则 **`/strategy-backtest-analysis-loop`** 从 **#2** 起再跑 **#5→#6→#7→#8**。）
 
 **Loop Skill 约定：**
 
 | 项 | 说明 |
 |----|------|
 | **谁调用原子 Skill** | 仅 **`/strategy-code-loop`**（及本地调试）应串联多轮；`/quant-orchestrate` **不**直接交替调用 code/review。 |
-| **每轮落盘** | 每轮独立的 `strategy-code` / `strategy-review` manifest 存入 `trials/<trial_id>/code-loop/round-<n>/`，loop 总 manifest **必须**引用路径。 |
-| **失败退出** | `outcome: max_rounds_exceeded` → 协调器归类 **代码错误**，转人工或终止 trial；**不**进入 validate-run。 |
+| **每轮落盘** | 每轮独立的 `strategy-code` / `strategy-code-review` manifest 存入 `trials/<trial_id>/code-loop/round-<n>/`，loop 总 manifest **必须**引用路径。 |
+| **失败退出** | `outcome: max_rounds_exceeded` → 协调器归类 **代码错误**，转人工或终止 trial；**不**进入 backtest-run。 |
 | **契约** | Loop 本身也有 `contracts/strategy-code-loop.validate.sh`：校验轮次连续、最后一轮 `approved` 才允许 `g2_pass`。 |
 
-### `/strategy-validate-run` 执行链（文档 → 数据 → 代码 → 结果）
+### `/strategy-backtest-run` 执行链（文档 → 数据 → 代码 → 结果）
 
 本步是 **唯一** 在 G2 之后把「策略文档 + 插件代码」落到 **可复现实验** 的环节；**加载数据与执行回测均为固件确定性逻辑**，Agent 只通过 Tool API **触发**；**是否满足需求** 由下一步 **`/strategy-backtest-analysis`** 完成。
 
@@ -339,13 +339,13 @@ STRATEGY_BRIEF.md
 | 加载行情 | **固件 Data + 数据中心** | 只读已发布 snapshot；禁止 Agent 换源或自拼 CSV。 |
 | 运行策略代码 | **固件 Engine** | 加载 Registry 已通过的插件版本；**不是** Agent 在 REPL 里 exec 策略。 |
 | 指标与 Gate | **固件** | Agent manifest 必须 **引用** `gate.judge` 输出，不得编造 sharpe、通过率等。 |
-| 报告解读 | **`/strategy-backtest-analysis`** | 本步 **不** 在 validate-run 做深度解读；分析 Skill 写 `BACKTEST_ANALYSIS.md`。 |
+| 报告解读 | **`/strategy-backtest-analysis`** | 本步 **不** 在 backtest-run 做深度解读；分析 Skill 写 `BACKTEST_ANALYSIS.md`。 |
 
-**`/strategy-validate-run` manifest 示例：**
+**`/strategy-backtest-run` manifest 示例：**
 
 ```json
 {
-  "step": "strategy-validate-run",
+  "step": "strategy-backtest-run",
   "result": "success",
   "trial_id": "T-20261022-0042",
   "run_inputs": {
@@ -377,7 +377,7 @@ STRATEGY_BRIEF.md
     "rules_version": "gates-2026-10-01"
   },
   "handoff": {
-    "from": "strategy-validate-run",
+    "from": "strategy-backtest-run",
     "to": "strategy-backtest-analysis",
     "status": "run_complete"
   }
@@ -439,7 +439,7 @@ STRATEGY_BRIEF.md
       "hypothesis_manifest": "runs/R-20261022-001/backtest-loop/round-2/strategy-hypothesis.manifest.result.json",
       "strategy_hypothesis_md": "runs/R-20261022-001/backtest-loop/round-2/STRATEGY_HYPOTHESIS.md",
       "code_loop_manifest": "runs/.../round-2/strategy-code-loop.manifest.result.json",
-      "validate_run_manifest": "trials/T-20261022-0048/strategy-validate-run.manifest.result.json",
+      "validate_run_manifest": "trials/T-20261022-0048/strategy-backtest-run.manifest.result.json",
       "analysis_manifest": "trials/T-20261022-0048/strategy-backtest-analysis.manifest.result.json",
       "meets_requirements": false
     },
@@ -499,7 +499,7 @@ STRATEGY_BRIEF.md
 |------------|--------------|----------------|
 | **`/strategy-hypothesis`** | `runs/<run_id>/STRATEGY_HYPOTHESIS.md`、`hypotheses.json`；外环 `backtest-loop/round-<n>/` 下同文件名 | 假设表述、`family`、信号直觉、freq |
 | **`/strategy-code`** | `plugins/strategies/<name>_v*.py`；`runs/.../trials/<trial_id>/IMPLEMENTATION_NOTES.md` | 插件 `name` / `family`、实现要点 |
-| **`/strategy-validate-run`** | `trials/<trial_id>/metrics.json`、`gate.json`、manifest | 回测区间、snapshot、是否已跑通 |
+| **`/strategy-backtest-run`** | `trials/<trial_id>/metrics.json`、`gate.json`、manifest | 回测区间、snapshot、是否已跑通 |
 | **`/strategy-backtest-analysis`** | `trials/<trial_id>/BACKTEST_ANALYSIS.md`、manifest | 达标与否、失败 Gate、根因标签 |
 | **固件 Trial Log** | 只追加索引（`trial_id`、`family`、plugin 版本、snapshot、gate 结果） | **权威检索入口**：`trial_log.query(family=…, market=…, brief=…)` |
 | **`/factor-mining`** | `factor_library/<factor_id>.md`、`index.json` | 因子口径、方向影响、拥挤度；假设选题时 **只读** |
@@ -578,12 +578,12 @@ STRATEGY_BRIEF.md
 
 | 规则 | 说明 |
 |------|------|
-| **入口** | 每个 `trial_id` 由 **`/strategy-code-loop`** 启动一次；内部按轮调用 `/strategy-code` → `/strategy-review`。 |
+| **入口** | 每个 `trial_id` 由 **`/strategy-code-loop`** 启动一次；内部按轮调用 `/strategy-code` → `/strategy-code-review`。 |
 | **必须写代码** | 每轮 `/strategy-code` 都要交付可加载的 **Strategy 插件 `.py`**（首稿或修订版），并 **递增 `plugin.version`**。 |
 | **退出条件** | Loop 仅在最后一轮 Review 为 **`decision: approved`** 时以 **`outcome: g2_pass`** 结束；编排器再进入 **`/strategy-risk-control`**。 |
 | **退回路径** | `rejected` 时 Review **只出 issue 清单**；**下一轮** 由 loop 再次 invoke `/strategy-code`（传入 `issues[]`），不设独立修复 Agent。 |
 | **轮次上限** | Loop 参数 **`max_review_rounds`**（建议默认 **3**），由 loop manifest 记录；超限 → `max_rounds_exceeded`。 |
-| **试验次数** | 闭环内改码重审 **不计** 策略族 G8 试验次数；**进入 `/strategy-validate-run` 后的回测** 按固件规则登记。 |
+| **试验次数** | 闭环内改码重审 **不计** 策略族 G8 试验次数；**进入 `/strategy-backtest-run` 后的回测** 按固件规则登记。 |
 | **上下文隔离** | Review 会话 **不得** 包含 Research 的思维链；Research 修订时 **可以** 看到 Review 的 `issues[]`，**不得** 看到 Review 内部推理。 |
 | **审查输入** | 每一轮须同时提交 **代码 + 策略文档**（见上表）；仅 diff 代码而不提供对应 MD 路径视为契约违规。 |
 
@@ -594,7 +594,7 @@ STRATEGY_BRIEF.md
 | 规则 | 说明 |
 |------|------|
 | **触发** | 分析 manifest 的 `handoff.to === strategy-backtest-analysis-loop`；编排器传入 **`trigger_analysis`**（上一轮 `BACKTEST_ANALYSIS.md` 路径）及 **family 剩余额度**。 |
-| **每轮顺序（固定）** | ① **#2 假设** → ② **#5 code-loop** → ③ **#6 `/strategy-risk-control`** → ④ **#7 validate-run** → ⑤ **#8 backtest-analysis**。 |
+| **每轮顺序（固定）** | ① **#2 假设** → ② **#5 code-loop** → ③ **#6 `/strategy-risk-control`** → ④ **#7 backtest-run** → ⑤ **#8 backtest-analysis**。 |
 | **退出** | 本轮分析 **`meets_requirements: true`** → loop `outcome: requirements_met`；或 **`strategy_rounds_used >= max_strategy_rounds`** / **family 上限** → `outcome: exhausted`。 |
 | **策略文档版本** | **round-1** 可在 `runs/<run_id>/` 根下；**round ≥ 2** 必须在 `runs/<run_id>/backtest-loop/round-<n>/`，且 manifest 标注 **`strategy_round`**，避免覆盖首轮文档。 |
 | **试验登记** | 每轮外环通常 **新 `trial_id`**（一次完整回测计一次试验，供 G8 累计）；**code-loop 内**改码重审仍不计。 |
@@ -643,7 +643,7 @@ STRATEGY_BRIEF.md
 
 - **When：** `/quant-orchestrate` 已为 `trial_id` 绑定 `hypothesis_id` 与 `review_inputs` 所需文档路径。  
 - **Success：** `outcome` 为 `g2_pass` 或 `max_rounds_exceeded`；`rounds[]` 完整；`g2_pass` 时 `final_plugin` 与最后一轮 code manifest 一致。  
-- **Behavior：** 第 1 轮 invoke `/strategy-code`（无 prior issues）→ invoke `/strategy-review`；若 `rejected` 且未达上限，携带 `issues[]` 进入下一轮 `/strategy-code` …  
+- **Behavior：** 第 1 轮 invoke `/strategy-code`（无 prior issues）→ invoke `/strategy-code-review`；若 `rejected` 且未达上限，携带 `issues[]` 进入下一轮 `/strategy-code` …  
 - **Forbidden：** 跳过子 Skill manifest、伪造 `approved`、在 loop 内调用 `run_backtest`。
 
 ### `/strategy-code`
@@ -651,9 +651,9 @@ STRATEGY_BRIEF.md
 - **When：** **`/strategy-code-loop` 按轮 invoke**；或工程师 **单轮调试**（不代替 loop 做 G2 签收）。  
 - **Success：** 交付 **完整 Strategy 插件 Python 源码**（继承平台基类、实现 `generate_positions`、声明元数据）；通过注册中心 **接口静态检查**；插件元数据 `hypothesis` **一句话** 须与 MD 该节一致；更新 **`IMPLEMENTATION_NOTES.md`**（首稿或修订说明，含对 issues 的逐条回应）；manifest 中 **`review_inputs`** 须指向 **代码路径 + 两份策略文档路径**。  
 - **Forbidden：** `run_backtest`、`read gates.yaml` 阈值、直连数据中心；在未改 `STRATEGY_HYPOTHESIS.md` 的前提下 **擅自改写经济逻辑**（仅允许为消除 issue 做等价实现修正）。  
-- **参数：** 调整 **`params`** 须在插件声明的 **`param_ranges`** 内；改参后 **升版本** 并 re-review；G6 由后续 validate-run 的固件检验，**不在此 Skill 手算 Sharpe**。
+- **参数：** 调整 **`params`** 须在插件声明的 **`param_ranges`** 内；改参后 **升版本** 并 re-review；G6 由后续 backtest-run 的固件检验，**不在此 Skill 手算 Sharpe**。
 
-### `/strategy-review`
+### `/strategy-code-review`
 
 - **When：** **`/strategy-code-loop` 在本轮 code 成功后 invoke**；传入完整 **`review_inputs`**；**无** Code 思维链。  
 - **Success：** manifest 中 **`inputs_reviewed`** 与传入路径一致；**`decision`** 为 `approved` 或 `rejected`；若 `rejected`，**必须** 含 typed `issues[]`（lookahead、leakage、logic_mismatch、**doc_code_mismatch**、**hypothesis_drift**、interface 等）。  
@@ -664,10 +664,10 @@ STRATEGY_BRIEF.md
 - **When：** **`/strategy-code-loop` 已 `outcome: g2_pass`**；输入与 review 相同（插件 + 假设 MD 小节 + `IMPLEMENTATION_NOTES`）+ **`STRATEGY_BRIEF.md`**。  
 - **Success：** **`runs/.../trials/<trial_id>/STRATEGY_RISK_REVIEW.md`**；manifest **`decision`**: `approved` | `rejected` + `risk_issues[]`（如 `leverage_forbidden`、`concentration`、`missing_risk_controls`、`tail_exposure`）。  
 - **Behavior：** 调用固件 **`research.risk.check`**（规则 + 可选历史 stress 摘要）；**不**跑完整回测、**不**读 G3–G8 阈值。  
-- **Forbidden：** `run_backtest`、修改 gate/L1–L5、替代 `/strategy-review` 做正确性审查。  
+- **Forbidden：** `run_backtest`、修改 gate/L1–L5、替代 `/strategy-code-review` 做正确性审查。  
 - **Reject：** `handoff.to` = **`strategy-code-loop`**（与 review reject 类似，issue 类型为 risk_*）。
 
-### `/strategy-validate-run`
+### `/strategy-backtest-run`
 
 - **When：** **`/strategy-risk-control` 已 `decision: approved`**；编排器传入 **策略文档路径 + `final_plugin` + `market_data_anchor`**。  
 - **Success：** 已按 **`run_inputs`** 对齐文档；`data.load` 使用的 **snapshot / symbols / fields / 区间** 写入 manifest；固件完成 **engine.run + validation + gate.judge**；Trial Log **只追加**；`metrics.json` / `gate.json` 存在且与 manifest 一致；`handoff.to` = **`strategy-backtest-analysis`**。  
@@ -675,7 +675,7 @@ STRATEGY_BRIEF.md
 
 ### `/strategy-backtest-analysis`
 
-- **When：** **`/strategy-validate-run` 已 `run_complete`**；metrics 与 gate 文件可读取。  
+- **When：** **`/strategy-backtest-run` 已 `run_complete`**；metrics 与 gate 文件可读取。  
 - **Success（必交付 MD）：**  
   - **`trials/<trial_id>/BACKTEST_ANALYSIS.md`** — **回测数据分析结果**（见下表结构）。  
   - manifest 中 **`meets_requirements`**、**`gate_passed`**（须与 `gate.json` 一致）、**`recommended_next`**（见下表）。  
@@ -723,6 +723,13 @@ STRATEGY_BRIEF.md
 - **Success：** **`VIRTUAL_PAPER_WATCH.md`**：回测基线 vs 虚拟盘 rolling metrics；超 **`config/virtual_paper.yaml`** 偏离阈 → manifest **`alert: true`**。  
 - **Forbidden：** 自动停策略、改 gate；仅 **告警 + 记录**，下架由人决策。
 
+### `/strategy-live-rolling-backtest-compare`（上线后，可选）
+
+- **When：** 实盘已挂载某 **`strategy_version_id`**；后端持续跑 **同版本语义** 下的 **滚动/实时回测**（与 live 并行）。  
+- **Success：** **`LIVE_VS_ROLLING_BACKTEST.md`** + manifest；若 **偏差超阈** 且 **滚动回测优于实盘** → 写入 **`deployment_review_pending`**（待人工审核：**部署最新策略代码** 替换当前实盘挂载）。  
+- **Behavior：** 经 Tool API 读 **`live.metrics()`** 与 **`rolling_backtest.metrics()`**（同版本键）；规则见 **`config/live_rolling_compare.yaml`**。  
+- **Forbidden：** **自动** 换插件、下单、停实盘；审批与发布由 **后端 + 人** 完成（见 [`quant-platform-skills-and-agents.md`](./quant-platform-skills-and-agents.md) §1 要点表）。
+
 ### `/quant-orchestrate`
 
 - **When：** 任务启动、任意子 Skill **`handoff.to === quant-orchestrate`**、或 watch 告警。  
@@ -756,7 +763,7 @@ stateDiagram-v2
 | `data_anchor` | `/market-data-profile` |
 | `hypothesis` | `/strategy-hypothesis` |
 | `code_loop` | `/strategy-code-loop` |
-| `validate` | `/strategy-validate-run` |
+| `validate` | `/strategy-backtest-run` |
 | `analysis` | `/strategy-backtest-analysis` |
 | `outer_loop` | `/strategy-backtest-analysis-loop` |
 | `report` | `/strategy-report` |
@@ -791,7 +798,7 @@ stateDiagram-v2
 | `/factor-mining` | 维护因子库中 **方向/策略影响** 描述；与 Brief 目标无直接判定关系 |
 | `/strategy-code` | 插件元数据 `hypothesis` 与 MD 对齐；**不**在代码里 target 未来收益 |
 | `/strategy-risk-control` | 对照 Brief **forbidden** 与风险设计；**不**用 Sharpe 判通过 |
-| `/strategy-validate-run` | 只负责 **跑出** metrics / gate；不在此步做需求达标结论 |
+| `/strategy-backtest-run` | 只负责 **跑出** metrics / gate；不在此步做需求达标结论 |
 | `/strategy-backtest-analysis` | 对照 Brief + Gate + 策略文档 + 代码，写 **是否满足** 与 **未满足原因** |
 | `/strategy-report` | 仅 **已达标** trial；Brief 目标在报告中 **对照展示**，不重新判定 |
 | **Gate（固件）** | 团队校准后写入 `config/gates.yaml`；Brief 目标 **不等同** Gate 阈值；分析 Skill **引用** gate.json，不推翻 |
@@ -812,10 +819,10 @@ quant-platform/
 │   ├── market-data-profile/
 │   ├── strategy-hypothesis/
 │   ├── strategy-code/
-│   ├── strategy-review/
+│   ├── strategy-code-review/
 │   ├── strategy-code-loop/
 │   ├── strategy-risk-control/
-│   ├── strategy-validate-run/
+│   ├── strategy-backtest-run/
 │   ├── strategy-backtest-analysis/
 │   ├── strategy-backtest-analysis-loop/
 │   ├── factor-mining/
@@ -841,7 +848,7 @@ quant-platform/
 │       └── code-loop/               # loop 每轮 manifest + 可选 round 日志
 │           └── round-1/ …
 ├── trials/<trial_id>/               # 与 run 解耦的 trial 工件根（便于 Trial Log 索引）
-│   ├── metrics.json、gate.json      # #7 validate-run
+│   ├── metrics.json、gate.json      # #7 backtest-run
 │   └── BACKTEST_ANALYSIS.md         # #8 backtest-analysis
 ├── data/MARKET_DATA_PROFILE.md
 └── plugins/strategies/              # #3 插件；Trial Log 索引 plugin 版本
@@ -880,13 +887,13 @@ Agent 层验收标准：
 | `datacenter.list_datasets` | market-data-profile | 列数据集 |
 | `datacenter.describe` | market-data-profile, factor-mining | schema / 字段 |
 | `data.snapshot_info` | market-data-profile | 快照元数据 |
-| `data.load` | strategy-validate-run | 按 snapshot PIT 取数 |
+| `data.load` | strategy-backtest-run | 按 snapshot PIT 取数 |
 | `submit_plugin_draft` / `submit_plugin_revision` | strategy-code | 注册中心 G1 前置 |
 | `registry.check_interface` | strategy-code（静态检查） | G1 |
 | `research.risk.check` | strategy-risk-control | 研究风控规则（非 G3–G8） |
-| `run_backtest` | strategy-validate-run | engine + validation + gate |
+| `run_backtest` | strategy-backtest-run | engine + validation + gate |
 | `validate` | （含于 run_backtest 或独立） | 检验项、G6 扰动 |
-| `trial_log.query` / `trial_log.log` | orchestrate, hypothesis；validate-run 写入 | 历史检索 / 追加 |
+| `trial_log.query` / `trial_log.log` | orchestrate, hypothesis；backtest-run 写入 | 历史检索 / 追加 |
 | `trials.read_summary` | strategy-hypothesis | trial 摘要路径 |
 | `runs.list` / `runs.read_artifact` | strategy-hypothesis | 跨 run 读 MD/JSON |
 | `factor_library.query` / `read` / `append` | hypothesis 只读；factor-mining 写 | 因子库 |

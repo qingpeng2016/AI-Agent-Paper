@@ -96,7 +96,7 @@
 | **`REVIEW_STATE.json`** / **`status: completed`** | 断点续跑；跑完标记 completed |
 | **`threadId` / `codex-reply`** | 同 reviewer **跨轮记忆**（外裹 `/loop` 会重置） |
 | **Do not wrap `/loop` or Cron** | 内环已循环；外再套 **无新信号、白烧 token** |
-| **invoke `/strategy-code` ↔ `/strategy-review`** | 编排型 loop：**只调原子 skill**，自己汇总 manifest |
+| **invoke `/strategy-code` ↔ `/strategy-code-review`** | 编排型 loop：**只调原子 skill**，自己汇总 manifest |
 
 **上游名字含 `loop` 的 skill：** `/auto-review-loop`、`/auto-paper-improvement-loop`、`/dse-loop`（及 llm/minimax 变体）。**Pipeline/bridge/queue** 串多步但不一定叫 loop。
 

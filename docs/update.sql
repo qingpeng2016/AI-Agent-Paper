@@ -1,0 +1,1 @@
+update `mojo_strategy_liquidation`.`liquidation_platform_config` set sign_key = "7de88780f84447b54bbe725d2ed73479b9e159fe6cc237c7904f0004385161";
