@@ -1,5 +1,7 @@
 # 量化平台 — Skill 与 Agent 对照
 
+**层次总图：** [`quant-platform-layered-architecture.md`](./quant-platform-layered-architecture.md)（固件 + 插件 + 7 Agent + 调度接口 + 人工闸门）
+
 ## 1. Skill 清单（共 14）
 
 | 序号 | 命令 | 类型 | 职责（管什么） | 主要输出 | 链路上位置 |

@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 920" font-family="PingFang SC, Microsoft YaHei, Helvetica, Arial, sans-serif">
+  <defs>
+    <style>
+      .title { font-size: 22px; font-weight: 700; fill: #111; }
+      .subtitle { font-size: 13px; fill: #444; }
+      .layer-label { font-size: 12px; font-weight: 600; fill: #333; }
+      .box-agent { fill: #d8d8d8; stroke: #888; stroke-width: 1.2; }
+      .box-firmware { fill: #ececec; stroke: #aaa; stroke-width: 1.2; }
+      .box-gate { fill: #2d6a4f; stroke: #1b4332; stroke-width: 1.2; }
+      .box-plugin { fill: #f5f5f5; stroke: #bbb; stroke-width: 1.2; }
+      .box-l0 { fill: #f0f4f8; stroke: #94a3b8; stroke-width: 1.2; }
+      .bar { fill: #1d3557; stroke: #0d1b2a; stroke-width: 1.2; }
+      .txt { font-size: 11px; fill: #222; text-anchor: middle; }
+      .txt-sm { font-size: 10px; fill: #333; text-anchor: middle; }
+      .txt-w { font-size: 11px; fill: #fff; text-anchor: middle; font-weight: 600; }
+      .txt-w-sm { font-size: 10px; fill: #e0e0e0; text-anchor: middle; }
+      .txt-gate { font-size: 11px; fill: #fff; text-anchor: middle; font-weight: 600; }
+      .arrow { stroke: #666; stroke-width: 1.5; fill: none; marker-end: url(#arr); }
+    </style>
+    <marker id="arr" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 Z" fill="#666"/>
+    </marker>
+  </defs>
+  <text x="600" y="36" class="title" text-anchor="middle">量化策略工厂 — 固件 + 插件 + 7 AI Agent</text>
+  <text x="600" y="58" class="subtitle" text-anchor="middle">Agent 仅经 Skill 契约与 Tool API 调用下层；回测与 G1–G8 不由 LLM 签字</text>
+  <text x="24" y="88" class="layer-label">L0 · 入口与人工闸门（平台）</text>
+  <rect x="40" y="98" width="160" height="52" rx="4" class="box-l0"/>
+  <text x="120" y="120" class="txt-sm">STRATEGY_BRIEF</text>
+  <text x="120" y="136" class="txt-sm">研究任务入口</text>
+  <path d="M200 124 L230 124" class="arrow"/>
+  <rect x="230" y="98" width="200" height="52" rx="4" class="box-l0"/>
+  <text x="330" y="118" class="txt-sm">候选门禁</text>
+  <text x="330" y="134" class="txt-sm">审查通过 + 结果校验</text>
+  <path d="M430 124 L460 124" class="arrow"/>
+  <rect x="460" y="98" width="180" height="52" rx="4" class="box-l0"/>
+  <text x="550" y="118" class="txt-sm">模拟盘 / 实盘审批</text>
+  <text x="550" y="134" class="txt-sm">版本 + run 绑定</text>
+  <path d="M640 124 L670 124" class="arrow"/>
+  <rect x="670" y="98" width="250" height="52" rx="4" class="box-l0"/>
+  <text x="795" y="118" class="txt-sm">live vs 滚动回测</text>
+  <text x="795" y="134" class="txt-sm">待人工部署 · 不自动换版</text>
+  <path d="M600 150 L600 168" class="arrow"/>
+  <text x="24" y="182" class="layer-label">L1 · Agent 层（逻辑角色）</text>
+  <rect x="28" y="192" width="148" height="64" rx="4" class="box-agent"/>
+  <text x="102" y="216" class="txt">① 任务协调</text>
+  <text x="102" y="234" class="txt-sm">Orchestrator</text>
+  <rect x="188" y="192" width="148" height="64" rx="4" class="box-agent"/>
+  <text x="262" y="216" class="txt">② 数据锚点</text>
+  <text x="262" y="234" class="txt-sm">snapshot 绑定</text>
+  <rect x="348" y="192" width="148" height="64" rx="4" class="box-agent"/>
+  <text x="422" y="216" class="txt">③ 策略研究</text>
+  <text x="422" y="234" class="txt-sm">Researcher</text>
+  <rect x="508" y="192" width="148" height="64" rx="4" class="box-agent"/>
+  <text x="582" y="216" class="txt">④ 代码审查</text>
+  <text x="582" y="234" class="txt-sm">Reviewer 异模型</text>
+  <rect x="668" y="192" width="148" height="64" rx="4" class="box-agent"/>
+  <text x="742" y="216" class="txt">⑤ 验证分析</text>
+  <text x="742" y="234" class="txt-sm">Validator</text>
+  <rect x="828" y="192" width="148" height="64" rx="4" class="box-agent"/>
+  <text x="902" y="216" class="txt">⑥ 因子与风控</text>
+  <text x="902" y="234" class="txt-sm">Factor + Risk</text>
+  <rect x="988" y="192" width="168" height="64" rx="4" class="box-agent"/>
+  <text x="1072" y="216" class="txt">⑦ 交付与运行对齐</text>
+  <text x="1072" y="234" class="txt-sm">Report / 上盘观测</text>
+  <path d="M600 256 L600 278" class="arrow"/>
+  <text x="24" y="292" class="layer-label">L2 · 调度接口（不可绕过）</text>
+  <rect x="40" y="300" width="1120" height="72" rx="6" class="bar"/>
+  <text x="600" y="328" class="txt-w">Slash Skill ×14  ·  manifest / validate.sh / handoff.json</text>
+  <text x="600" y="352" class="txt-w-sm">Tool API：datacenter · registry · backtest · trial_log · report · live_metrics</text>
+  <path d="M600 372 L600 394" class="arrow"/>
+  <text x="24" y="408" class="layer-label">L3 · 固件层（确定性 · 不含 AI）</text>
+  <rect x="28" y="418" width="118" height="58" rx="4" class="box-firmware"/>
+  <text x="87" y="442" class="txt-sm">数据层</text>
+  <text x="87" y="458" class="txt-sm">只读 snapshot</text>
+  <rect x="156" y="418" width="118" height="58" rx="4" class="box-firmware"/>
+  <text x="215" y="442" class="txt-sm">回测引擎</text>
+  <text x="215" y="458" class="txt-sm">Engine</text>
+  <rect x="284" y="418" width="118" height="58" rx="4" class="box-firmware"/>
+  <text x="343" y="442" class="txt-sm">检验模块</text>
+  <text x="343" y="458" class="txt-sm">Validation</text>
+  <rect x="412" y="418" width="130" height="58" rx="4" class="box-gate"/>
+  <text x="477" y="440" class="txt-gate">门槛判定</text>
+  <text x="477" y="458" class="txt-gate">G1–G8 gate.judge</text>
+  <rect x="552" y="418" width="118" height="58" rx="4" class="box-firmware"/>
+  <text x="611" y="442" class="txt-sm">注册中心</text>
+  <text x="611" y="458" class="txt-sm">Registry G1</text>
+  <rect x="680" y="418" width="118" height="58" rx="4" class="box-firmware"/>
+  <text x="739" y="442" class="txt-sm">试验登记</text>
+  <text x="739" y="458" class="txt-sm">Trial Log</text>
+  <rect x="808" y="418" width="118" height="58" rx="4" class="box-firmware"/>
+  <text x="867" y="442" class="txt-sm">报告渲染</text>
+  <text x="867" y="458" class="txt-sm">report.render</text>
+  <rect x="936" y="418" width="118" height="58" rx="4" class="box-firmware"/>
+  <text x="995" y="442" class="txt-sm">研究风控规则</text>
+  <text x="995" y="458" class="txt-sm">risk.check</text>
+  <rect x="1064" y="418" width="118" height="58" rx="4" class="box-firmware"/>
+  <text x="1123" y="442" class="txt-sm">结果校验</text>
+  <text x="1123" y="458" class="txt-sm">metrics diff</text>
+  <path d="M600 476 L600 498" class="arrow"/>
+  <text x="24" y="512" class="layer-label">L4 · 插件层（放入即接入）</text>
+  <rect x="20" y="522" width="220" height="56" rx="4" class="box-plugin"/>
+  <text x="130" y="546" class="txt">策略插件</text>
+  <text x="130" y="562" class="txt-sm">plugins/strategies</text>
+  <rect x="252" y="522" width="220" height="56" rx="4" class="box-plugin"/>
+  <text x="362" y="546" class="txt">数据源插件</text>
+  <text x="362" y="562" class="txt-sm">数据中心 / 多源接入</text>
+  <rect x="484" y="522" width="220" height="56" rx="4" class="box-plugin"/>
+  <text x="594" y="546" class="txt">市场规则插件</text>
+  <text x="594" y="562" class="txt-sm">T+1 · 合约 · 费用</text>
+  <rect x="716" y="522" width="220" height="56" rx="4" class="box-plugin"/>
+  <text x="826" y="546" class="txt">检验插件</text>
+  <text x="826" y="562" class="txt-sm">样本外 · 扰动 G6</text>
+  <rect x="948" y="522" width="232" height="56" rx="4" class="box-plugin"/>
+  <text x="1064" y="546" class="txt">各大交易所插件</text>
+  <text x="1064" y="562" class="txt-sm">Binance · OKX · 等</text>
+  <rect x="40" y="600" width="1120" height="300" rx="6" fill="#fafafa" stroke="#ddd"/>
+  <text x="600" y="628" font-size="14" font-weight="600" fill="#333" text-anchor="middle">主链（挖掘一条策略）</text>
+  <text x="80" y="660" font-size="11" fill="#444">
+    <tspan x="80" dy="0">Brief → /market-data-profile → /strategy-hypothesis → /quant-orchestrate</tspan>
+    <tspan x="80" dy="22">→ /strategy-code-loop → /strategy-risk-control → /strategy-backtest-run → /strategy-backtest-analysis</tspan>
+    <tspan x="80" dy="22">→ 达标：/strategy-report → L0 人工上盘（经各大交易所插件接实盘）</tspan>
+  </text>
+  <rect x="80" y="740" width="520" height="72" rx="4" fill="#eef2ff" stroke="#6366f1"/>
+  <text x="340" y="768" font-size="12" font-weight="600" fill="#3730a3" text-anchor="middle">内环 /strategy-code-loop</text>
+  <rect x="620" y="740" width="520" height="72" rx="4" fill="#fef3c7" stroke="#d97706"/>
+  <text x="880" y="768" font-size="12" font-weight="600" fill="#92400e" text-anchor="middle">外环 /strategy-backtest-analysis-loop</text>
+</svg>
